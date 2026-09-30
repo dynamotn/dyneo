@@ -58,6 +58,24 @@ return {
         args = { ':a;N;$!ba;s/\\n\\n\\+/\\n\\n/g' },
       }
 
+      -- `jupytext` converts, it does not format, so conform has no definition
+      -- for it. `--pipe` is what makes it useful here: it runs a real
+      -- formatter over the code cells and writes the notebook back with its
+      -- outputs, execution counts and markdown cells untouched. A notebook
+      -- then gets the same `ruff format` a `.py` buffer does.
+      opts.formatters.jupytext = {
+        command = 'jupytext',
+        args = {
+          '--from',
+          'ipynb',
+          '--to',
+          'ipynb',
+          '--pipe',
+          'ruff format -',
+          '-',
+        },
+      }
+
       local languages = require('config.languages')
       -- `pairs` walks the languages in whatever order it likes, and several of
       -- them meet on the same key: two entries may share a filetype, and one
