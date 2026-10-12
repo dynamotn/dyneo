@@ -82,6 +82,51 @@ M.codelldb_adapter = function()
   }
 end
 
+--- A frontend's config file and the port its dev server listens on by default
+---@type {[1]: string, [2]: integer}[]
+M.DEV_SERVERS = {
+  { '^angular%.json$', 4200 },
+  { '^vite%.config%.[cm]?[jt]s$', 5173 },
+  { '^vue%.config%.[cm]?js$', 8080 },
+  { '^next%.config%.[cm]?[jt]s$', 3000 },
+  { '^nuxt%.config%.[cm]?[jt]s$', 3000 },
+  { '^astro%.config%.[cm]?[jt]s$', 4321 },
+  { '^gatsby%-config%.[cm]?[jt]s$', 8000 },
+  { '^webpack%.config%.[cm]?[jt]s$', 8080 },
+}
+
+--- Port of a filetype's usual dev server, when no config file is found
+---@type table<string, integer>
+M.DEV_PORTS = { vue = 5173, svelte = 5173, astro = 4321, htmlangular = 4200 }
+
+--- URL of the dev server serving `bufnr`: the port of the nearest config
+--- file above it, else of its filetype, else 3000
+---@param bufnr? integer
+---@return string
+M.dev_server_url = function(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local name = vim.api.nvim_buf_get_name(bufnr)
+  local port
+  if name ~= '' then
+    vim.fs.find(function(file)
+      for _, server in ipairs(M.DEV_SERVERS) do
+        if file:match(server[1]) then
+          port = port or server[2]
+          return true
+        end
+      end
+      return false
+    end, {
+      upward = true,
+      path = vim.fs.dirname(name),
+      stop = vim.uv.os_homedir(),
+      limit = 1,
+    })
+  end
+  port = port or M.DEV_PORTS[vim.bo[bufnr].filetype] or 3000
+  return ('http://localhost:%d'):format(port)
+end
+
 --- Launch and attach configurations for a program debugged through `codelldb`
 ---@param build_dir string Where the prompt for the executable starts, under the
 --- working directory: the build tool's output directory, or `''`.

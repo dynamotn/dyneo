@@ -15,6 +15,8 @@ local condition = vim.list_contains(DyNeo.enabled_languages, 'typescript')
   or vim.list_contains(DyNeo.enabled_languages, 'tsx')
   or vim.list_contains(DyNeo.enabled_languages, 'angular')
   or vim.list_contains(DyNeo.enabled_languages, 'vue')
+  or vim.list_contains(DyNeo.enabled_languages, 'svelte')
+  or vim.list_contains(DyNeo.enabled_languages, 'astro')
 return condition
     and {
       {
@@ -274,6 +276,38 @@ return condition
                 },
               },
             }, dap.configurations[filetype] or {})
+          end
+
+          -- Components run only in the browser, scripts in Node too
+          local browser_filetypes = vim
+            .iter({
+              js_filetypes,
+              languages.vue.filetypes,
+              languages.svelte.filetypes,
+              languages.astro.filetypes,
+              languages.angular.filetypes,
+            })
+            :flatten()
+            :totable()
+          vscode.type_to_filetypes['chrome'] = browser_filetypes
+          vscode.type_to_filetypes['pwa-chrome'] = browser_filetypes
+          for _, filetype in ipairs(browser_filetypes) do
+            dap.configurations[filetype] =
+              vim.list_extend(dap.configurations[filetype] or {}, {
+                {
+                  type = 'pwa-chrome',
+                  request = 'launch',
+                  name = 'Launch Chrome',
+                  url = function()
+                    return vim.fn.input(
+                      'URL: ',
+                      require('util.dap').dev_server_url()
+                    )
+                  end,
+                  webRoot = '${workspaceFolder}',
+                  sourceMaps = true,
+                },
+              })
           end
         end,
       },

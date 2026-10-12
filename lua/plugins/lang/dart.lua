@@ -20,7 +20,10 @@ return vim.list_contains(DyNeo.enabled_languages, 'dart')
           { '<localleader>d', '<cmd>FlutterDevices<cr>', desc = 'Flutter Devices', ft = language.filetypes },
           { '<localleader>q', '<cmd>FlutterQuit<cr>', desc = 'Flutter Quit', ft = language.filetypes },
         },
-        opts = {},
+        opts = {
+          -- `:FlutterRun` through nvim-dap, so breakpoints hold
+          debugger = { enabled = true },
+        },
       },
       {
         -- `flutter-tools` starts `dartls` with its own settings, so keep
