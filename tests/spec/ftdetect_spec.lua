@@ -17,6 +17,7 @@ describe('ftdetect', function()
     { '/p/x.rofi', 'rasi' },
     { '/p/x.wofi', 'rasi' },
     { '/p/foo-1.0.ebuild', 'sh.ebuild' },
+    { '/p/eclass/cmake.eclass', 'sh.eclass' },
     { '/p/query.promql', 'promql' },
     { '/p/ledger.bean', 'beancount' },
     { '/p/lua.snippets', 'snippets' },

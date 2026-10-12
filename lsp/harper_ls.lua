@@ -10,6 +10,7 @@ local language_ids = {
   bats = 'shellscript',
   sh = 'shellscript',
   ['sh.ebuild'] = 'shellscript',
+  ['sh.eclass'] = 'shellscript',
   ['sh.install'] = 'shellscript',
   ['sh.PKGBUILD'] = 'shellscript',
   zsh = 'shellscript',

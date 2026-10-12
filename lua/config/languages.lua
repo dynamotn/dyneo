@@ -144,6 +144,7 @@ local reuse_filetypes = {
       'sh',
       'bats',
       'sh.ebuild',
+      'sh.eclass',
       'sh.install',
       'sh.PKGBUILD',
     },
@@ -604,7 +605,10 @@ return {
     ext = 'sh',
     lsp_servers = {
       'bashls',
-      { 'termuxls', filetypes = { 'sh.ebuild', 'sh.install', 'sh.PKGBUILD' } },
+      {
+        'termuxls',
+        filetypes = { 'sh.ebuild', 'sh.eclass', 'sh.install', 'sh.PKGBUILD' },
+      },
       'harper_ls',
     },
     linters = { 'dyshellint' },
