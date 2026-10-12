@@ -825,12 +825,13 @@ The mappings live under `<leader>D`.
 8.1 Data files                                              *dyneo-data-files*
 
 `<leader>Dd` (|:DyData|) sums up the data file of the buffer, or the one
-named, in a tab of its own: how many rows, the columns and their types, and
-the first 50 rows.  `<leader>Ds` gives the statistics of every column
-instead: minimum, maximum, distinct values, mean, quartiles and how many are
-missing.  DuckDB reads Parquet, CSV, TSV, JSON and JSON lines, compressed
-with gzip or zstd or not (`:MasonInstall duckdb`).  A pattern such as
-`:DyData data/*.parquet` reads every file it matches as one table.
+named, in a tab of its own: the columns and their types, the first 50 rows,
+and how many rows there are.  `<leader>Ds` gives the statistics of every
+column in place of the rows: minimum, maximum, distinct values, mean,
+quartiles and how many are missing.  DuckDB reads Parquet, CSV, TSV, JSON
+and JSON lines, compressed with gzip or zstd or not (`:MasonInstall
+duckdb`).  A pattern such as `:DyData data/*.parquet` reads every file it
+matches as one table, so a file whose name holds `*`, `?` or `[` is not read.
 
 A CSV, TSV or pipe-separated `.psv` file lines its columns up as a table
 with `<localleader>v` (csvview.nvim), split on the delimiter its filetype
@@ -854,15 +855,18 @@ there are more than 50.  A script stops at its first error, which is then
 the last thing shown.  Of DuckDB's dot commands only those shaping the
 output run (`.mode`, `.maxrows`, `.print`, ...): a script holding `.shell`,
 `.system`, `.read` or `.output` is refused, so a `.sql` file from someone
-else's repository cannot run a shell command.  For the same reason the
-configuration is locked: `SET` in a script fails, and no community
-extension loads.
+else's repository cannot run a shell command.  Plain SQL reaches files too,
+so a run may read and write under the working directory only (a summary,
+under the directory of its file), reads no environment variable and loads
+no extension; the configuration is locked, so `SET` in a script fails.  The
+SQL of a buffer runs once agreed to, the first time in that buffer; a query
+typed after `:DyData sql` is your own and runs at once.
 
 Everything runs in the background.  A new run stops the one still going,
 and so does closing its window or leaving Neovim.  A run stops after a
 minute and its output is cut at 1 MiB, saying so; the row count of a large
-CSV reads the whole file and may take that long.  DuckDB never downloads an
-extension on its own, so a format that needs one fails rather than reaching
+CSV reads the whole file and may take that long, so it comes last.  DuckDB
+loads no extension, so a format that needs one fails rather than reaching
 the network.  What a run prints is rows of the data, which may be personal:
 its window is kept from AI (|dyneo-ai-guard|).
 
