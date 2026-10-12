@@ -130,28 +130,27 @@ M.DEV_SERVERS = {
 M.DEV_PORTS = { vue = 5173, svelte = 5173, astro = 4321, htmlangular = 4200 }
 
 --- URL of the dev server serving `bufnr`: the port of the nearest config
---- file above it, else of its filetype, else 3000
+--- file above it, else of its filetype, else 3000. A directory holding
+--- several config files goes by the first of `DEV_SERVERS` among them, not
+--- by whichever the disk lists first.
 ---@param bufnr? integer
 ---@return string
 M.dev_server_url = function(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   local name = vim.api.nvim_buf_get_name(bufnr)
   local port
-  if name ~= '' then
-    vim.fs.find(function(file)
-      for _, server in ipairs(M.DEV_SERVERS) do
-        if file:match(server[1]) then
-          port = port or server[2]
-          return true
-        end
+  local home = vim.uv.os_homedir()
+  local dir = name ~= '' and vim.fs.dirname(name) or nil
+  while dir and not port and dir ~= home do
+    local best
+    for file in vim.fs.dir(dir) do
+      for i, server in ipairs(M.DEV_SERVERS) do
+        if (not best or i < best) and file:match(server[1]) then best = i end
       end
-      return false
-    end, {
-      upward = true,
-      path = vim.fs.dirname(name),
-      stop = vim.uv.os_homedir(),
-      limit = 1,
-    })
+    end
+    port = best and M.DEV_SERVERS[best][2]
+    local parent = vim.fs.dirname(dir)
+    dir = parent ~= dir and parent or nil
   end
   port = port or M.DEV_PORTS[vim.bo[bufnr].filetype] or 3000
   return ('http://localhost:%d'):format(port)

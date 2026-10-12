@@ -157,6 +157,28 @@ describe('util.dap', function()
       )
     end)
 
+    it('goes by the first rule matching in the nearest directory', function()
+      touch('webpack.config.js')
+      touch('next.config.js')
+      -- List webpack's first, as a disk may
+      local dir_of = vim.fs.dir
+      local restore = h.stub(vim.fs, 'dir', function(path, ...)
+        local names = {}
+        for file in dir_of(path, ...) do
+          table.insert(names, file)
+        end
+        table.sort(names, function(a, b) return a > b end)
+        local i = 0
+        return function()
+          i = i + 1
+          return names[i], names[i] and 'file'
+        end
+      end)
+      local url = dap_util.dev_server_url(buffer('src/page.tsx', 'tsx'))
+      restore()
+      assert.equals('http://localhost:3000', url)
+    end)
+
     it('lets the config file win over the filetype', function()
       touch('vue.config.js')
       assert.equals(
