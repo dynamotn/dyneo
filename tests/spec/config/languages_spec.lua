@@ -126,6 +126,12 @@ describe('config.languages', function()
           assert.are.equal('table', type(parser.install_info))
           assert.are.equal('string', type(parser.install_info.url))
           assert.is_truthy(parser.install_info.url:match('^https?://'))
+          -- A commit, so a push to the grammar never lands unreviewed
+          assert.is_truthy(
+            (parser.install_info.revision or ''):match('^%x+$'),
+            'revision'
+          )
+          assert.are.equal(40, #parser.install_info.revision)
         else
           assert.are.equal('string', type(parser))
           assert.is_truthy(parser:match('^[%w_]+$'))

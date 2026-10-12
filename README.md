@@ -78,8 +78,8 @@ below follow the sections of `:help dyneo`.
   lockfiles too. `:DySbom osv` · `:DySbom lock`
 - **Scanner findings** — a SARIF report (semgrep, CodeQL, trivy…) in the
   quickfix list; semgrep on a project's own rules, offline. `:DySarif`
-- **Detection rules and binaries** — YARA server, Sigma schema, hex editing.
-  `:DyHex`
+- **Detection rules and binaries** — YARA grammar and server, Sigma schema,
+  hex editing. `:DyHex`
 - **AI guard** — `.env`, keys and token-shaped text kept from every AI;
   masked on screen; every handover logged. `:DyAiGuardCheck` ·
   `:DyAiGuardLog`

@@ -29,6 +29,7 @@ vim.filetype.add({
     rofi = 'rasi',
     wofi = 'rasi',
     ebuild = 'sh.ebuild',
+    eclass = 'sh.eclass',
     -- Neovim's own check for a PHP `.install` file (Drupal) comes first
     install = function(_, bufnr)
       local first = bufnr and vim.api.nvim_buf_get_lines(bufnr, 0, 1, false)[1]
