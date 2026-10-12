@@ -61,7 +61,7 @@ return vim.list_contains(DyNeo.enabled_languages, 'lua')
         },
       },
       {
-        -- Test adapter, finding a project's `tests/minimal_init.lua` itself
+        -- Test adapter, given the `minimal_init` of the test file's project
         'nvim-neotest/neotest',
         dependencies = {
           'nvim-neotest/neotest-plenary',
@@ -69,7 +69,7 @@ return vim.list_contains(DyNeo.enabled_languages, 'lua')
         },
         opts = {
           adapters = {
-            ['neotest-plenary'] = {},
+            ['util.neotest_plenary'] = {},
           },
         },
       },
