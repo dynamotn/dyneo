@@ -162,7 +162,7 @@ below follow the sections of `:help dyneo`.
 
 <details>
 <summary><b>42 languages · 13 frameworks · 38 tools</b> —
-129 filetypes in all</summary>
+131 filetypes in all</summary>
 
 **Languages** — Arduino, AWK, Bash, C/C++, C#, Clojure, CSS/Less, Cucumber,
 Dart, Elixir, Erlang, Fish, GDScript, GDShader, Gleam, Go, GraphQL, Haskell,
@@ -175,9 +175,9 @@ Rails, Rust, Svelte, Symfony, Templ, Vue
 
 **Tools & markup** — Ansible, Beancount, Bicep, CMake, CSV/TSV, CUE, D2, DBML,
 Dockerfile, Git, GoTemplate/Helm, Groovy, HTTP, Hurl, Hyprlang, Jinja, jq,
-JSON/JSONL, Jsonnet, Just, KDL, Make, Markdown, Mermaid, Nginx, Nix, Prisma,
-PromQL, Protobuf, Rego, SystemD, Terraform, Terragrunt, TOML, Treesitter, XML,
-YAML, Yuck
+JSON/JSONL, Jsonnet, Just, KDL, Make, Markdown, Mermaid, Nextflow, Nginx, Nix,
+Prisma, PromQL, Protobuf, Rego, Snakemake, SystemD, Terraform, Terragrunt, TOML,
+Treesitter, XML, YAML, Yuck
 
 </details>
 

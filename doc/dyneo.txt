@@ -817,6 +817,10 @@ with `<localleader>v` (csvview.nvim), split on the delimiter its filetype
 names rather than one guessed from its first lines.  A `.jsonl` or `.ndjson`
 file, one JSON value per line, is highlighted and left unformatted.
 
+The pipelines that make data are read too: a Snakemake `Snakefile` or `.smk`
+file through its own grammar, and a Nextflow `.nf` file or `nextflow.config`
+through Groovy's, which Nextflow is written in.
+
 Opening a `.parquet` file shows that summary in place of its bytes.  The
 buffer is no copy of the file and cannot be written over it.
 

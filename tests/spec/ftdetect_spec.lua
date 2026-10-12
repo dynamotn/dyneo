@@ -25,6 +25,7 @@ describe('ftdetect', function()
     { '/p/notebook.ipynb', 'ipynb' },
     { '/p/table.psv', 'psv' },
     { '/p/events.ndjson', 'jsonl' },
+    { '/p/main.nf', 'nextflow' },
     { '/p/page.j2', 'jinja' },
     { '/p/page.jinja', 'jinja' },
     { '/p/page.jinja2', 'jinja' },
@@ -36,6 +37,7 @@ describe('ftdetect', function()
     { '/p/docker-compose.yml', 'yaml.docker-compose' },
     { '/p/compose.yaml', 'yaml.docker-compose' },
     { '/p/PKGBUILD', 'sh.PKGBUILD' },
+    { '/p/nextflow.config', 'nextflow' },
     -- pattern
     { '/p/host_vars/web.yaml', 'yaml.ansible' },
     { '/p/group_vars/all.yml', 'yaml.ansible' },

@@ -1186,6 +1186,10 @@ return {
     formatters = { { 'scalafmt', mason = { package = 'scalafmt' } } },
     autopairs = block_comment_autopairs,
   },
+  snakemake = {
+    filetypes = { 'snakemake' },
+    parser = 'snakemake',
+  },
   solidity = {
     filetypes = { 'solidity' },
     parser = 'solidity',
@@ -1846,6 +1850,14 @@ return {
     filetypes = { 'mermaid' },
     parser = 'mermaid',
     endwise = true,
+  },
+  -- Groovy with processes and channels: there is no grammar of Nextflow's
+  -- own, and the Groovy one reads its pipelines and its `nextflow.config`
+  -- but for the commas of a declaration such as `tuple val(x), path(y)`
+  nextflow = {
+    filetypes = { 'nextflow' },
+    parser = 'groovy',
+    ext = 'nf',
   },
   nginx = {
     filetypes = { 'nginx' },

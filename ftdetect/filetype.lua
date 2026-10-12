@@ -44,6 +44,7 @@ vim.filetype.add({
     -- Neovim knows `.tsv` and `.jsonl` already, not these two spellings
     psv = 'psv',
     ndjson = 'jsonl',
+    nf = 'nextflow',
     j2 = 'jinja',
     jinja = 'jinja',
     jinja2 = 'jinja',
@@ -59,6 +60,7 @@ vim.filetype.add({
     ['compose.yml'] = 'yaml.docker-compose',
     ['compose.yaml'] = 'yaml.docker-compose',
     ['PKGBUILD'] = 'sh.PKGBUILD',
+    ['nextflow.config'] = 'nextflow',
   },
   pattern = {
     -- An `ignore` file kept in a repository's `.git` directory. A `filename`
