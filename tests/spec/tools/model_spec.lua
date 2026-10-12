@@ -144,6 +144,37 @@ describe('tools.model', function()
       assert.is_nil(header, name)
       assert.is_string(err, name)
     end
+    local nested = le(9, 4) .. le(1, 8)
+    local crafted = {
+      ['v1.gguf'] = 'GGUF' .. le(1, 4) .. GGUF:sub(9),
+      -- A tensor of 9 dimensions, beyond any GGML has
+      ['dims.gguf'] = 'GGUF'
+        .. le(3, 4)
+        .. le(1, 8)
+        .. le(0, 8)
+        .. str('t')
+        .. le(9, 4)
+        .. ('\1\0\0\0\0\0\0\0'):rep(9)
+        .. le(0, 4)
+        .. le(0, 8),
+      -- Arrays of arrays, five deep
+      ['deep.gguf'] = 'GGUF'
+        .. le(3, 4)
+        .. le(0, 8)
+        .. le(1, 8)
+        .. str('k')
+        .. le(9, 4)
+        .. nested:rep(4)
+        .. le(4, 4)
+        .. le(1, 8)
+        .. le(7, 4),
+      ['list.safetensors'] = le(5, 8) .. '[1,2]',
+    }
+    for name, bytes in pairs(crafted) do
+      local header, err = model.header(file(name, bytes))
+      assert.is_nil(header, name)
+      assert.is_string(err, name)
+    end
     -- A header longer than the cap is not read whole
     model.MAX_HEADER = 64
     assert.matches('over', select(2, model.header(file('m.gguf', GGUF))))
@@ -167,6 +198,18 @@ describe('tools.model', function()
       fd:close()
     end
   )
+
+  it('keeps a name holding a line break on one line', function()
+    local json = vim.json.encode({
+      ['a\nb'] = { dtype = 'F\n32', shape = { 2 } },
+      __metadata__ = { ['k\ney'] = 'v' },
+    })
+    local path = file('n.safetensors', le(#json, 8) .. json)
+    vim.cmd.edit(path)
+    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    assert.is_true(vim.list_contains(lines, '  k ey = v'))
+    assert.matches('^  a b ', lines[#lines])
+  end)
 
   it('shows why a model it opens does not read', function()
     vim.cmd.edit(file('cut.gguf', GGUF:sub(1, 30)))

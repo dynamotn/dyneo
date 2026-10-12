@@ -863,12 +863,13 @@ The mappings live under `<leader>D`.
 8.1 Data files                                              *dyneo-data-files*
 
 `<leader>Dd` (|:DyData|) sums up the data file of the buffer, or the one
-named, in a tab of its own: how many rows, the columns and their types, and
-the first 50 rows.  `<leader>Ds` gives the statistics of every column
-instead: minimum, maximum, distinct values, mean, quartiles and how many are
-missing.  DuckDB reads Parquet, CSV, TSV, JSON and JSON lines, compressed
-with gzip or zstd or not (`:MasonInstall duckdb`).  A pattern such as
-`:DyData data/*.parquet` reads every file it matches as one table.
+named, in a tab of its own: the columns and their types, the first 50 rows,
+and how many rows there are.  `<leader>Ds` gives the statistics of every
+column in place of the rows: minimum, maximum, distinct values, mean,
+quartiles and how many are missing.  DuckDB reads Parquet, CSV, TSV, JSON
+and JSON lines, compressed with gzip or zstd or not (`:MasonInstall
+duckdb`).  A pattern such as `:DyData data/*.parquet` reads every file it
+matches as one table, so a file whose name holds `*`, `?` or `[` is not read.
 
 A CSV, TSV or pipe-separated `.psv` file lines its columns up as a table
 with `<localleader>v` (csvview.nvim), split on the delimiter its filetype
@@ -892,15 +893,18 @@ there are more than 50.  A script stops at its first error, which is then
 the last thing shown.  Of DuckDB's dot commands only those shaping the
 output run (`.mode`, `.maxrows`, `.print`, ...): a script holding `.shell`,
 `.system`, `.read` or `.output` is refused, so a `.sql` file from someone
-else's repository cannot run a shell command.  For the same reason the
-configuration is locked: `SET` in a script fails, and no community
-extension loads.
+else's repository cannot run a shell command.  Plain SQL reaches files too,
+so a run may read and write under the working directory only (a summary,
+under the directory of its file), reads no environment variable and loads
+no extension; the configuration is locked, so `SET` in a script fails.  The
+SQL of a buffer runs once agreed to, the first time in that buffer; a query
+typed after `:DyData sql` is your own and runs at once.
 
 Everything runs in the background.  A new run stops the one still going,
 and so does closing its window or leaving Neovim.  A run stops after a
 minute and its output is cut at 1 MiB, saying so; the row count of a large
-CSV reads the whole file and may take that long.  DuckDB never downloads an
-extension on its own, so a format that needs one fails rather than reaching
+CSV reads the whole file and may take that long, so it comes last.  DuckDB
+loads no extension, so a format that needs one fails rather than reaching
 the network.  What a run prints is rows of the data, which may be personal:
 its window is kept from AI (|dyneo-ai-guard|).
 
@@ -928,7 +932,10 @@ for the rest.
 Inside a dbt project, a folder holding `dbt_project.yml`, `<leader>oo` offers
 `dbt compile`, `dbt run`, `dbt test` and `dbt show` for the model of the
 buffer, named after its file, run from the project root when `dbt` is on
-`$PATH`.  sqlfluff reads the project's `.sqlfluff` there too: one saying
+`$PATH`.  A model is a file under `models/`: a macro, an analysis or a
+package under `dbt_packages/` gets none of them.
+
+sqlfluff reads the project's `.sqlfluff` in a dbt project too: one saying
 `templater = dbt` lints a model as dbt compiles it, and without one the
 `{{ ref() }}` and `{{ source() }}` of a model still parse.
 
@@ -948,7 +955,9 @@ among those of poetry, pipenv, pyenv, hatch, pixi and conda, and a `.venv` in
 the project, where uv puts its own.  It sets `$VIRTUAL_ENV` and `$PATH` and
 restarts the Python servers, so completion, the debugger, the REPL and the
 tasks all use it, and it comes back by itself the next time a file of the
-project opens.
+project opens.  A script declaring its own dependencies (PEP 723, a
+`# /// script` block) gets them through `uv sync --script` once you agree,
+the first time it opens: that installs what the file asks for.
 
 `<localleader>r` opens a REPL beside the script (iron.nvim): IPython when the
 environment has it, `python3` otherwise, taken from `$PATH` as it starts,
@@ -962,14 +971,16 @@ so an activated virtual environment is the one used.  Then:
 
 The REPL loads with the first of these keys, not with the file.
 
-A Quarto (`.qmd`) or R Markdown (`.Rmd`) document runs its chunks the same
-way (quarto-nvim): `<localleader>c` sends the `{python}` or `{r}` chunk under
-the cursor to the REPL of its language, without its fences, `<localleader>a`
-the chunks above it and `<localleader>A` all of them, `<localleader>s` the
-line or the selection.  The language server of each chunk's language
+A Quarto (`.qmd`) document runs its chunks the same way (quarto-nvim):
+`<localleader>c` sends the `{python}` or `{r}` chunk under the cursor to the
+REPL of its language, without its fences, `<localleader>a` the chunks above
+it and `<localleader>A` all of them, `<localleader>s` the line or the
+selection.  The language server of each chunk's language
 answers inside it, through otter, so it runs where otter is enabled
 (|DyNeo.enabled_plugins|).  `<localleader>p` previews the document with
-`quarto preview`.
+`quarto preview`.  An R Markdown (`.Rmd`) document has the language servers
+of its chunks too, and runs them with R.nvim's own keys where R is
+installed; R.nvim leaves `.qmd` documents to quarto-nvim.
 
 8.4 Model files                                                  *dyneo-model*
 

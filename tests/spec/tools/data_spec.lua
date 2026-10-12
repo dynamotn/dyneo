@@ -1,7 +1,8 @@
 local h = require('helpers')
 
 describe('tools.data', function()
-  local data, dir, cleanup, path, cwd, notes, restore_notify
+  local data, dir, cleanup, path, cwd, notes, restore_notify, restore_confirm
+  local asked
 
   before_each(function()
     h.unload('tools.data')
@@ -20,11 +21,18 @@ describe('tools.data', function()
       'notify',
       function(msg) table.insert(notes, msg) end
     )
+    -- Running the SQL of a buffer is agreed to unless a spec says otherwise
+    asked = 0
+    restore_confirm = h.stub(vim.fn, 'confirm', function()
+      asked = asked + 1
+      return 1
+    end)
   end)
   after_each(function()
     vim.cmd.cd(cwd)
     vim.env.PATH = path
     restore_notify()
+    restore_confirm()
     vim.cmd('silent! %bwipeout!')
     cleanup()
   end)
@@ -66,12 +74,25 @@ describe('tools.data', function()
     local script = data.summary_script('/d/x.parquet')
     assert.same({
       'SET autoinstall_known_extensions = false;',
+      'SET autoload_known_extensions = false;',
       'SET allow_community_extensions = false;',
+      -- Nothing outside the file's own directory, nor the environment
+      "SET allowed_directories = ['/d/'];",
+      'SET enable_external_access = false;',
       'SET lock_configuration = true;',
+      -- No colour escapes in the buffer
+      '.highlight off',
       -- `box` prints every row whatever `.maxrows` says
       '.mode duckbox',
-    }, vim.list_slice(script, 1, 4))
+    }, vim.list_slice(script, 1, 8))
     local text = table.concat(script, '\n')
+    -- The count reads a CSV whole: what is quick comes first
+    assert.is_true(text:find('DESCRIBE') < text:find('count%(%*%)'))
+    assert.is_true(text:find('LIMIT 50') < text:find('count%(%*%)'))
+    assert.matches(
+      "allowed_directories = %['/d/data/'%]",
+      table.concat(data.summary_script('/d/data/*.csv'), '\n')
+    )
     assert.matches(
       "count%(%*%) AS rows FROM read_parquet%('/d/x.parquet'%)",
       text
@@ -236,6 +257,65 @@ describe('tools.data', function()
     assert.is_nil(data.jobs[bufnr])
     vim.wait(1500)
     assert.is_nil(vim.uv.fs_stat(dir .. '/finished'))
+  end)
+
+  it('stops a run when its result window is closed', function()
+    duckdb({ 'sleep 1', 'touch "' .. dir .. '/finished"' })
+    vim.cmd.cd(dir)
+    data.sql('SELECT 1;')
+    local result = data.result_buf
+    assert.is_true(
+      vim.wait(
+        5000,
+        function() return vim.uv.fs_stat(dir .. '/args') ~= nil end,
+        20
+      )
+    )
+    vim.api.nvim_win_close(vim.fn.win_findbuf(result)[1], true)
+    assert.is_nil(data.jobs[result])
+    vim.wait(1500)
+    assert.is_nil(vim.uv.fs_stat(dir .. '/finished'))
+    assert.same({ data.STOPPED }, lines(result))
+  end)
+
+  it('runs the SQL of a buffer only once agreed to', function()
+    duckdb()
+    vim.cmd.cd(dir)
+    restore_confirm()
+    restore_confirm = h.stub(vim.fn, 'confirm', function()
+      asked = asked + 1
+      return 2
+    end)
+    local source = h.buffer({ lines = { 'SELECT 1;' }, filetype = 'sql' })
+    vim.api.nvim_set_current_buf(source)
+    vim.cmd('DyData sql')
+    vim.wait(300)
+    assert.is_nil(vim.uv.fs_stat(dir .. '/args'))
+    -- A query typed on the command line is the user's own
+    data.sql('SELECT 2;')
+    assert.is_true(
+      vim.wait(
+        5000,
+        function() return vim.uv.fs_stat(dir .. '/args') ~= nil end,
+        20
+      )
+    )
+    assert.equal(1, asked)
+    local script = table.concat(vim.fn.readfile(dir .. '/script'), '\n')
+    assert.matches('enable_external_access = false', script)
+    assert.matches(
+      vim.pesc(("allowed_directories = ['%s/']"):format(dir)),
+      script
+    )
+  end)
+
+  it('refuses a file DuckDB would read as a pattern', function()
+    duckdb()
+    h.write(dir .. '/report[2024].csv', { 'a', '1' })
+    data.summary(dir .. '/report[2024].csv')
+    assert.matches('as a pattern', notes[#notes])
+    assert.is_nil(vim.uv.fs_stat(dir .. '/args'))
+    assert.matches('line break', data.unreadable('/d/a\n.shell id\n.csv'))
   end)
 
   it('leaves a Parquet file another plugin reads alone', function()

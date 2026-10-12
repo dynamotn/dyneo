@@ -11,15 +11,18 @@ return vim.list_contains(DyNeo.enabled_languages, 'quarto')
         enabled = DyNeo.used_full_plugins or DyNeo.enabled_plugins.otter,
         ft = language.filetypes,
         cmd = { 'QuartoPreview', 'QuartoActivate' },
-        dependencies = { 'jmbuhr/otter.nvim' },
+        -- The chunks run in iron, whether or not Python is enabled
+        dependencies = { 'jmbuhr/otter.nvim', 'Vigemus/iron.nvim' },
+        -- On `quarto` only: quarto-nvim activates its runner there alone, and
+        -- an R Markdown file's chunks are R.nvim's to run
         -- stylua: ignore
         keys = {
-          { '<localleader>c', function() require('quarto.runner').run_cell() end, ft = language.filetypes, desc = 'Run Chunk' },
-          { '<localleader>a', function() require('quarto.runner').run_above() end, ft = language.filetypes, desc = 'Run Chunks Above' },
-          { '<localleader>A', function() require('quarto.runner').run_all() end, ft = language.filetypes, desc = 'Run All Chunks' },
-          { '<localleader>s', function() require('quarto.runner').run_line() end, ft = language.filetypes, desc = 'Run Line' },
-          { '<localleader>s', function() require('quarto.runner').run_range() end, mode = 'x', ft = language.filetypes, desc = 'Run Selection' },
-          { '<localleader>p', '<cmd>QuartoPreview<cr>', ft = language.filetypes, desc = 'Preview Document' },
+          { '<localleader>c', function() require('quarto.runner').run_cell() end, ft = 'quarto', desc = 'Run Chunk' },
+          { '<localleader>a', function() require('quarto.runner').run_above() end, ft = 'quarto', desc = 'Run Chunks Above' },
+          { '<localleader>A', function() require('quarto.runner').run_all() end, ft = 'quarto', desc = 'Run All Chunks' },
+          { '<localleader>s', function() require('quarto.runner').run_line() end, ft = 'quarto', desc = 'Run Line' },
+          { '<localleader>s', function() require('quarto.runner').run_range() end, mode = 'x', ft = 'quarto', desc = 'Run Selection' },
+          { '<localleader>p', '<cmd>QuartoPreview<cr>', ft = 'quarto', desc = 'Preview Document' },
         },
         opts = { codeRunner = { default_method = 'iron' } },
       },

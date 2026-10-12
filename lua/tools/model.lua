@@ -19,6 +19,10 @@ M.CHUNK = 1024 * 1024
 --- Longest metadata string shown, and most array items listed
 M.MAX_TEXT = 120
 M.MAX_ITEMS = 8
+--- Dimensions a tensor may have: GGML uses four
+M.MAX_DIMS = 8
+--- How deep GGUF arrays may nest
+M.MAX_DEPTH = 4
 
 --- Names of the GGML tensor types GGUF stores, by number
 M.GGML_TYPES = {
@@ -224,11 +228,38 @@ local GGUF_SCALARS = {
   [12] = { 8, float, 'f64' },
 }
 
+--- Read past one GGUF metadata value of type `kind` without showing it:
+--- a crafted file of a million nested arrays costs a walk, not a million
+--- strings
+---@param r table
+---@param kind integer
+---@param depth integer
+local function skip_value(r, kind, depth)
+  local scalar = GGUF_SCALARS[kind]
+  if scalar then return r.skip(scalar[1]) end
+  if kind == 7 then return r.skip(1) end
+  if kind == 8 then return r.skip(r.u64()) end
+  if kind == 9 then
+    if depth >= M.MAX_DEPTH then error('arrays nested too deep', 0) end
+    local item, count = r.u32(), r.u64()
+    if GGUF_SCALARS[item] or item == 7 then
+      return r.skip((item == 7 and 1 or GGUF_SCALARS[item][1]) * count)
+    end
+    for _ = 1, count do
+      skip_value(r, item, depth + 1)
+    end
+    return
+  end
+  error(('unknown metadata type %d'):format(kind), 0)
+end
+
 --- One GGUF metadata value of type `kind`, as shown
 ---@param r table
 ---@param kind integer
+---@param depth? integer How deep in arrays it is
 ---@return string
-local function gguf_value(r, kind)
+local function gguf_value(r, kind, depth)
+  depth = depth or 0
   local scalar = GGUF_SCALARS[kind]
   if scalar then
     local value = scalar[2](r.read(scalar[1]), 1, scalar[1])
@@ -238,11 +269,12 @@ local function gguf_value(r, kind)
   if kind == 7 then return r.read(1):byte() ~= 0 and 'true' or 'false' end
   if kind == 8 then return short(r.read(r.u64())) end
   if kind == 9 then
+    if depth >= M.MAX_DEPTH then error('arrays nested too deep', 0) end
     local item, count = r.u32(), r.u64()
     local shown = {}
     for index = 1, count do
       if index <= M.MAX_ITEMS then
-        table.insert(shown, gguf_value(r, item))
+        table.insert(shown, gguf_value(r, item, depth + 1))
       elseif item == 8 then
         r.skip(r.u64())
       elseif GGUF_SCALARS[item] or item == 7 then
@@ -251,7 +283,7 @@ local function gguf_value(r, kind)
         r.skip(width * (count - index + 1))
         break
       else
-        gguf_value(r, item)
+        skip_value(r, item, depth + 1)
       end
     end
     if count <= M.MAX_ITEMS then
@@ -270,6 +302,10 @@ end
 ---@return DyModelHeader
 local function gguf(r)
   local version = r.u32()
+  -- Version 1 counts in 32 bits, and a later one may lay the header out anew
+  if version < 2 or version > 3 then
+    error(('GGUF version %d is not read'):format(version), 0)
+  end
   local tensor_count, kv_count = r.u64(), r.u64()
   local header =
     { format = ('GGUF v%d'):format(version), metadata = {}, tensors = {} }
@@ -280,7 +316,11 @@ local function gguf(r)
   for _ = 1, tensor_count do
     local name = r.read(r.u64())
     local shape = {}
-    for _ = 1, r.u32() do
+    local dims = r.u32()
+    if dims > M.MAX_DIMS then
+      error(('a tensor of %d dimensions'):format(dims), 0)
+    end
+    for _ = 1, dims do
       table.insert(shape, r.u64())
     end
     local kind = r.u32()
@@ -299,7 +339,7 @@ end
 ---@return DyModelHeader
 local function safetensors(r)
   local ok, json = pcall(vim.json.decode, r.read(r.u64()))
-  if not ok or type(json) ~= 'table' then
+  if not ok or type(json) ~= 'table' or (vim.islist(json) and #json > 0) then
     error('the header is no JSON object', 0)
   end
   local header = { format = 'safetensors', metadata = {}, tensors = {} }
@@ -363,10 +403,10 @@ function M.lines(path, header)
     params = params + n
     if not dtypes[tensor.dtype] then table.insert(order, tensor.dtype) end
     dtypes[tensor.dtype] = (dtypes[tensor.dtype] or 0) + 1
-    width = math.max(width, math.min(#tensor.name, 60))
+    width = math.max(width, math.min(#short(tensor.name), 60))
   end
   local by_type = vim.tbl_map(
-    function(dtype) return ('%s %d'):format(dtype, dtypes[dtype]) end,
+    function(dtype) return ('%s %d'):format(short(dtype), dtypes[dtype]) end,
     order
   )
   local lines = {
@@ -384,7 +424,8 @@ function M.lines(path, header)
   if #header.metadata > 0 then
     vim.list_extend(lines, { '', 'Metadata' })
     for _, kv in ipairs(header.metadata) do
-      table.insert(lines, ('  %s = %s'):format(kv[1], kv[2]))
+      -- Names come from the file too: a line break in one would split the line
+      table.insert(lines, ('  %s = %s'):format(short(kv[1]), kv[2]))
     end
   end
   vim.list_extend(lines, { '', 'Tensors' })
@@ -396,8 +437,8 @@ function M.lines(path, header)
     table.insert(
       lines,
       ('  %-' .. width .. 's  %-7s %s'):format(
-        tensor.name,
-        tensor.dtype,
+        short(tensor.name),
+        short(tensor.dtype),
         table.concat(dims, ' × ')
       )
     )

@@ -9,11 +9,14 @@
 --- back over the file.
 ---
 --- `:DyData sql` runs the lines given, or the selection, as a DuckDB script
---- from the working directory, so a `.sql` file next to the data reads it by
---- its relative path. The CLI's own dot commands run too, and some reach
---- past SQL -- `.shell`, `.system`, `.read` another file, `.output` over one
---- -- so a script holding any but those in `M.DOT_COMMANDS` is refused:
---- a `.sql` file from someone else's repository runs no shell command.
+--- from Neovim's working directory, so a relative path in it is read from
+--- there. The CLI's own dot commands run too, and some reach past SQL --
+--- `.shell`, `.system`, `.read` another file, `.output` over one -- so a
+--- script holding any but those in `M.DOT_COMMANDS` is refused. Plain SQL
+--- reaches files as well (`COPY ... TO`, `read_text`, `ATTACH`), so every
+--- run may only touch the directory it is about, and the lines of a file are
+--- run only once agreed to: a `.sql` file from someone else's repository
+--- neither runs a shell command nor reads `~/.ssh` behind the user's back.
 ---
 --- One run at a time per window: a new one stops the last, and so does
 --- closing the window or leaving Neovim. Every run has a deadline, and its
@@ -88,21 +91,38 @@ function M.source(path)
   return ('%s(%s)'):format(reader, M.quote(path))
 end
 
---- The lines every script starts with: tables that show their first and
---- last `maxrows` rows, no extension fetched on its own, none but DuckDB's
---- signed ones loaded -- a community one such as `shellfs` would run shell
---- commands from SQL -- and the configuration locked, so a script cannot
---- turn either back on
+--- The lines every script starts with: plain tables that show their first
+--- and last `maxrows` rows; no extension fetched or loaded on its own, none but
+--- DuckDB's signed ones at all -- a community one such as `shellfs` would
+--- run shell commands from SQL; no file, environment variable or network
+--- reached outside `dir`; and the configuration locked, so a script cannot
+--- turn any of it back on
 ---@param maxrows integer
+---@param dir string The one directory a run may read and write
 ---@return string[]
-local function prelude(maxrows)
+function M.prelude(maxrows, dir)
+  if dir:sub(-1) ~= '/' then dir = dir .. '/' end
   return {
     'SET autoinstall_known_extensions = false;',
+    'SET autoload_known_extensions = false;',
     'SET allow_community_extensions = false;',
+    ('SET allowed_directories = [%s];'):format(M.quote(dir)),
+    'SET enable_external_access = false;',
     'SET lock_configuration = true;',
+    -- Colours are printed into a pipe too, and would show as escapes
+    '.highlight off',
     '.mode duckbox',
     ('.maxrows %d'):format(maxrows),
   }
+end
+
+--- The directory a summary of `path` may read: the file's own, or the one a
+--- pattern starts in
+---@param path string
+---@return string
+local function data_dir(path)
+  local fixed = path:match('^[^*?[]*') or path
+  return fixed:sub(-1) == '/' and fixed or vim.fs.dirname(fixed)
 end
 
 --- The DuckDB script summing up `path`: rows, columns, first rows, and the
@@ -115,11 +135,8 @@ function M.summary_script(path, stats)
   if not source then return nil end
   -- Every column is listed, however many: only the rows are limited, by
   -- the query
-  local script = prelude(100000)
+  local script = M.prelude(100000, data_dir(path))
   vim.list_extend(script, {
-    '.print Rows',
-    ('SELECT count(*) AS rows FROM %s;'):format(source),
-    '.print',
     '.print Columns',
     ('DESCRIBE SELECT * FROM %s;'):format(source),
     '.print',
@@ -135,6 +152,13 @@ function M.summary_script(path, stats)
       ('SELECT * FROM %s LIMIT %d;'):format(source, M.ROWS),
     })
   end
+  -- Last: a CSV is read whole to count its rows, which may take until the
+  -- deadline, and what came before is shown by then
+  vim.list_extend(script, {
+    '.print',
+    '.print Rows',
+    ('SELECT count(*) AS rows FROM %s;'):format(source),
+  })
   return script
 end
 
@@ -200,9 +224,12 @@ vim.api.nvim_create_autocmd('VimLeavePre', {
   desc = 'Stop every DuckDB run on leaving',
 })
 
---- Buffers whose unloading stops their run
+--- Buffers whose hiding stops their run
 ---@type table<integer, true>
 local watched = {}
+
+--- What a buffer says when it was hidden before its run was done
+M.STOPPED = 'Stopped: the window closed before duckdb was done'
 
 --- Run `script` and put what it prints in `bufnr`, stopping any run still
 --- going for that buffer
@@ -215,13 +242,21 @@ function M.run_into(bufnr, script, opts)
   M.stop(bufnr)
   if not watched[bufnr] then
     watched[bufnr] = true
-    vim.api.nvim_create_autocmd('BufUnload', {
+    -- Hidden, not only unloaded: the result window keeps its buffer
+    vim.api.nvim_create_autocmd({ 'BufHidden', 'BufUnload' }, {
       group = group,
       buffer = bufnr,
-      once = true,
-      callback = function()
-        watched[bufnr] = nil
+      callback = function(args)
+        if args.event == 'BufUnload' then watched[bufnr] = nil end
+        if not M.jobs[bufnr] then return end
         M.stop(bufnr)
+        if args.event == 'BufHidden' then
+          vim.schedule(function()
+            if vim.api.nvim_buf_is_valid(bufnr) then
+              scratch.set(bufnr, { M.STOPPED })
+            end
+          end)
+        end
       end,
       desc = 'Stop the DuckDB run of the buffer',
     })
@@ -256,6 +291,18 @@ end
 ---@return boolean
 local function is_glob(path) return path:find('[*?[]') ~= nil end
 
+--- Why DuckDB cannot be handed `path` as it is, if it cannot: a file whose
+--- name holds `*`, `?` or `[` would be read as a pattern, and a line break
+--- would start a new line of the script
+---@param path string
+---@return string?
+function M.unreadable(path)
+  if path:find('[\r\n]') then return 'its name holds a line break' end
+  if is_glob(path) and vim.uv.fs_stat(path) then
+    return 'DuckDB would read its name as a pattern'
+  end
+end
+
 --- The file `arg` names, or the file of the current buffer. A pattern is
 --- left for DuckDB to match, where `expand` would list the files.
 ---@param arg? string
@@ -283,6 +330,13 @@ function M.summary(path, stats)
   if not script then
     return notify(
       ('DuckDB reads none of %s'):format(vim.fn.fnamemodify(path, ':t')),
+      vim.log.levels.WARN
+    )
+  end
+  local why = M.unreadable(path)
+  if why then
+    return notify(
+      ('%s cannot be read: %s'):format(vim.fn.fnamemodify(path, ':~'), why),
       vim.log.levels.WARN
     )
   end
@@ -318,6 +372,10 @@ function M.read(bufnr)
   for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
     vim.wo[win].wrap = false
   end
+  local why = M.unreadable(path)
+  if why then
+    return require('util.scratch').set(bufnr, { 'Not read: ' .. why })
+  end
   local script = M.summary_script(path)
   if not script then return end
   M.run_into(bufnr, script, { title = vim.fs.basename(path) })
@@ -352,6 +410,28 @@ local function result_buffer()
   return bufnr
 end
 
+--- Whether the SQL of `bufnr` may run: asked once per buffer, since it may
+--- come from someone else's repository. The verdict is pinned before the
+--- prompt, which keeps handling events and could ask again.
+---@param bufnr integer
+---@return boolean
+function M.allowed(bufnr)
+  local verdict = vim.b[bufnr].dy_data_allowed
+  if verdict ~= nil then return verdict end
+  vim.b[bufnr].dy_data_allowed = false
+  local name = vim.api.nvim_buf_get_name(bufnr)
+  local answer = vim.fn.confirm(
+    ('Run the SQL of %s through DuckDB?\nIt may read and write files under %s.'):format(
+      name == '' and 'this buffer' or vim.fn.fnamemodify(name, ':~:.'),
+      vim.fn.fnamemodify(vim.fn.getcwd(), ':~')
+    ),
+    '&Run\n&Cancel',
+    2
+  )
+  vim.b[bufnr].dy_data_allowed = answer == 1 or nil
+  return answer == 1
+end
+
 --- Run SQL through DuckDB: `query` when given, otherwise lines `line1` to
 --- `line2` of the current buffer
 ---@param query? string
@@ -377,9 +457,13 @@ function M.sql(query, line1, line2)
       vim.log.levels.ERROR
     )
   end
+  -- A query typed on the command line is the user's own; lines of a buffer
+  -- may not be
+  if not (query and query ~= '') and not M.allowed(0) then return end
   -- A query over a large table shows its first and last rows, not all
-  local script = vim.list_extend(prelude(M.ROWS), lines)
-  M.run_into(result_buffer(), script, { cwd = vim.fn.getcwd() })
+  local cwd = vim.fn.getcwd()
+  local script = vim.list_extend(M.prelude(M.ROWS, cwd), lines)
+  M.run_into(result_buffer(), script, { cwd = cwd })
 end
 
 --- `:DyData`
