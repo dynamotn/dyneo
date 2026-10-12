@@ -27,7 +27,7 @@ fi
 workdir="$(mktemp -d)"
 trap 'rm -rf "${workdir}"' EXIT
 mkdir -p "${workdir}/config"
-ln -s "${repo}" "${workdir}/config/nvim"
+ln -s "${repo}" "${workdir}/config/${NVIM_APPNAME:-nvim}"
 
 output="${workdir}/output.txt"
 set +e

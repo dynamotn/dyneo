@@ -246,6 +246,24 @@ Run at least the specs for what changed plus `check-startup.sh` for any Lua
 change, and say which ran. A broken startup is the user's real editor broken:
 in `mode: symlink` the tree is what Neovim loads.
 
+Both channels are in daily use, so run these checks on each of them. The
+channel follows the Neovim that starts (`latest` on 0.13, `stable` on 0.12):
+the plain commands above test `latest`; for `stable`, run the same commands
+under the released Neovim from mise, with its own data directory (as the
+user's `nvims` does), so its plugins and lockfile never touch `latest`'s:
+
+```sh
+export NVIM_APPNAME=nvim-stable   # in fish: set -lx NVIM_APPNAME nvim-stable
+mise exec neovim@stable -- scripts/test.sh [path]
+mise exec neovim@stable -- scripts/check-startup.sh
+mise exec neovim@stable -- nvim --clean --headless -l scripts/validate-tools.lua
+mise exec neovim@stable -- scripts/keymaps-doc.sh && git diff --exit-code doc/
+```
+
+`doc/dyneo-keymaps.txt` is committed as `latest` generates it; a diff after
+the `stable` run is a mapping that differs between channels, to fix rather
+than commit. Report the result of each channel separately.
+
 ## Commits
 
 - Conventional Commits, enforced by `.gitlint`: `type(scope): subject`, with

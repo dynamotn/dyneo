@@ -12,7 +12,7 @@ repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 workdir="$(mktemp -d)"
 trap 'rm -rf "${workdir}"' EXIT
 mkdir -p "${workdir}/config"
-ln -s "${repo}" "${workdir}/config/nvim"
+ln -s "${repo}" "${workdir}/config/${NVIM_APPNAME:-nvim}"
 
 # Only keymaps-doc.lua quits Neovim: an error before it gets there would leave
 # the hook waiting for ever
