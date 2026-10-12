@@ -19,6 +19,7 @@ return {
           { '<leader>g', group = 'git' },
           { '<leader>gh', group = 'hunks' },
           { '<leader>i', group = 'infra' },
+          { '<leader>D', group = 'data' },
           { '<leader>k', group = 'security' },
           { '<leader>pj', group = 'jira' },
           { '<leader>pr', group = 'decision records' },

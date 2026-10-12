@@ -54,18 +54,21 @@ CONTENTS                                                      *dyneo-contents*
        7.5 OpenAPI requests .................................. |dyneo-openapi|
        7.6 Cron schedules ....................................... |dyneo-cron|
        7.7 Querying JSON and YAML .............................. |dyneo-query|
-    8. Project and writing .................................. |dyneo-features|
-       8.1 Project overview .................................. |dyneo-project|
-       8.2 Decision records ...................................... |dyneo-adr|
-       8.3 Spelling ............................................ |dyneo-spell|
-       8.4 Diagrams .......................................... |dyneo-diagram|
-       8.5 Integrations ................................. |dyneo-integrations|
-       8.6 AI actions ............................................ |dyneo-ai|
-    9. Mappings ............................................. |dyneo-mappings|
-   10. Commands ............................................. |dyneo-commands|
-   11. Layout ................................................. |dyneo-layout|
-   12. Development ....................................... |dyneo-development|
-   13. Troubleshooting ............................... |dyneo-troubleshooting|
+    8. Data and machine learning ................................ |dyneo-data|
+       8.1 Data files ..................................... |dyneo-data-files|
+       8.2 SQL and databases ..................................... |dyneo-sql|
+    9. Project and writing .................................. |dyneo-features|
+       9.1 Project overview .................................. |dyneo-project|
+       9.2 Decision records ...................................... |dyneo-adr|
+       9.3 Spelling ............................................ |dyneo-spell|
+       9.4 Diagrams .......................................... |dyneo-diagram|
+       9.5 Integrations ................................. |dyneo-integrations|
+       9.6 AI actions ............................................ |dyneo-ai|
+   10. Mappings ............................................. |dyneo-mappings|
+   11. Commands ............................................. |dyneo-commands|
+   12. Layout ................................................. |dyneo-layout|
+   13. Development ....................................... |dyneo-development|
+   14. Troubleshooting ............................... |dyneo-troubleshooting|
 
 ------------------------------------------------------------------------------
 1. REQUIREMENTS                                           *dyneo-requirements*
@@ -791,12 +794,78 @@ is stopped, and a result over 1 MiB is cut and says so.  The result of a
 buffer held back from AI is held back too.
 
 ------------------------------------------------------------------------------
-8. PROJECT AND WRITING                                        *dyneo-features*
+8. DATA AND MACHINE LEARNING                                      *dyneo-data*
+
+Data in files and in databases: reading it, querying it, running it
+through a REPL or a warehouse, and looking inside the models it trains.
+The mappings live under `<leader>D`.
+
+8.1 Data files                                              *dyneo-data-files*
+
+`<leader>Dd` (|:DyData|) sums up the data file of the buffer, or the one
+named, in a tab of its own: how many rows, the columns and their types, and
+the first 50 rows.  `<leader>Ds` gives the statistics of every column
+instead: minimum, maximum, distinct values, mean, quartiles and how many are
+missing.  DuckDB reads Parquet, CSV, TSV, JSON and JSON lines, compressed
+with gzip or zstd or not (`:MasonInstall duckdb`).  A pattern such as
+`:DyData data/*.parquet` reads every file it matches as one table.
+
+Opening a `.parquet` file shows that summary in place of its bytes.  The
+buffer is no copy of the file and cannot be written over it.
+
+`<leader>Dq` runs the SQL of the buffer, or of the selection, through DuckDB
+from the working directory, so a query reads a file by its relative path:
+>sql
+    SELECT city, avg(price) FROM 'data/sales/*.parquet' GROUP BY ALL;
+<
+The result opens in a split at the bottom, its first and last rows when
+there are more than 50.  A script stops at its first error, which is then
+the last thing shown.  Of DuckDB's dot commands only those shaping the
+output run (`.mode`, `.maxrows`, `.print`, ...): a script holding `.shell`,
+`.system`, `.read` or `.output` is refused, so a `.sql` file from someone
+else's repository cannot run a shell command.  For the same reason the
+configuration is locked: `SET` in a script fails, and no community
+extension loads.
+
+Everything runs in the background.  A new run stops the one still going,
+and so does closing its window or leaving Neovim.  A run stops after a
+minute and its output is cut at 1 MiB, saying so; the row count of a large
+CSV reads the whole file and may take that long.  DuckDB never downloads an
+extension on its own, so a format that needs one fails rather than reaching
+the network.  What a run prints is rows of the data, which may be personal:
+its window is kept from AI (|dyneo-ai-guard|).
+
+8.2 SQL and databases                                              *dyneo-sql*
+
+`<leader>Db` opens the database UI (vim-dadbod-ui) in the right panel.  It
+lists the connections added with `:DBUIAddConnection`, named in `g:dbs`, or
+given by `$DBUI_URL` and the `DB_UI_<name>` variables of the environment; a
+URL typed into `:DBUIAddConnection` is kept in plain text under
+`stdpath('data')/dadbod_ui`, so one holding a password is better given
+through the environment.  Queries saved from the UI live there too.
+
+In a SQL buffer, once the UI has loaded, `<leader>S` runs the query, or the
+selection, on the connection of the buffer, `<leader>W` saves it and
+`<leader>E` edits its bind parameters.  Nothing runs on save.  The result
+opens in the bottom panel, and `q` closes it.  `:DB {url} {query}` runs one
+query without the UI.
+
+Completion offers the tables and columns of the connection, and the SQL
+keywords, in `sql`, `mysql` and `plsql` buffers.  `sqlfluff` lints and
+formats them: with the project's `.sqlfluff` when there is one, otherwise
+in the dialect of the filetype -- `mysql`, `oracle` for `plsql`, and `ansi`
+for the rest.
+
+A database answers through a connection; a data file answers through
+DuckDB, with no server at all (|dyneo-data-files|).
+
+------------------------------------------------------------------------------
+9. PROJECT AND WRITING                                        *dyneo-features*
 
 The project as a whole, its decisions, and the prose and pictures written
 in it.
 
-8.1 Project overview                                           *dyneo-project*
+9.1 Project overview                                           *dyneo-project*
 
 `<leader>pp`, or |:DyProject|, opens one page on the state of the project
 of the current buffer: the branch, how far ahead and behind its upstream,
@@ -808,7 +877,7 @@ cannot.  `<CR>` opens the file, the page or the issue of the line, `r` asks
 everything again, `q` closes it.  `<leader>pR` (|:DyRoot|) lists the roots
 found for the buffer.
 
-8.2 Decision records                                               *dyneo-adr*
+9.2 Decision records                                               *dyneo-adr*
 
 |:DyAdr| keeps the architecture decisions of a project as adr-tools does: one
 Markdown file per decision, numbered `0001-<title>.md` and on, in the
@@ -824,7 +893,7 @@ supersedes.
     `<leader>prs`      Set the status of the record open
     `<leader>prS`      Write a record replacing the one open
 
-8.3 Spelling                                                     *dyneo-spell*
+9.3 Spelling                                                     *dyneo-spell*
 
 |:DySpell|, or `<leader>zm`, rebuilds a spell file with |:mkspell| from the
 word lists under |DyNeo.dictionaries_path| and `spell/`: Vietnamese,
@@ -836,14 +905,14 @@ under the cursor, or a Visual selection for anything with an apostrophe or a
 dot in it -- `<cword>` stops at both -- is added to a list with `<leader>zt`
 (technical) or `<leader>zp` (proper nouns).
 
-8.4 Diagrams                                                   *dyneo-diagram*
+9.4 Diagrams                                                   *dyneo-diagram*
 
 D2 diagrams render inline on kitty-graphics terminals, zellij included.
 `<leader>cp` previews the diagram under the cursor; Markdown and Typst get
 their own preview on the same key.  The diagram of what a directory
 declares is drawn by |dyneo-architecture|.
 
-8.5 Integrations                                          *dyneo-integrations*
+9.5 Integrations                                          *dyneo-integrations*
 
 Obsidian            Vaults from |DyNeo.obsidian|.
 chezmoi             Templates edited with the target language injected, not
@@ -873,7 +942,7 @@ into the diagnostics nvim-lint leaves them out of, so `nvim-rulebook` can
 build an ignore comment for `markdownlint`, `ansible-lint`, `swiftlint` and
 friends.
 
-8.6 AI actions                                                    *dyneo-ai*
+9.6 AI actions                                                    *dyneo-ai*
 
 Avante, Claude Code and the CLIs of sidekick each have their own keys, under
 `<leader>av`, `<leader>ac` and `<leader>a`.  |:DyAi| sits above them: a
@@ -995,7 +1064,7 @@ again.  Claude Code and the CLIs still read files themselves when started
 inside the project: the guard covers what Neovim hands them.
 
 ------------------------------------------------------------------------------
-9. MAPPINGS                                                   *dyneo-mappings*
+10. MAPPINGS                                                  *dyneo-mappings*
 
 The leader key is `<Space>`.  Press it and wait: which-key lists every mapping
 under it, and `<Space>sk` searches all of them.  Custom mappings live in
@@ -1042,6 +1111,12 @@ Infrastructure and operations (|dyneo-infra|, |dyneo-ops|) ~
     `<leader>iq`       n      Try a jq or yq expression on this buffer
     `<leader>ic`       n      Switch the Kubernetes context
     `<leader>in`       n      Switch the Kubernetes namespace
+
+Data and machine learning (|dyneo-data|) ~
+    `<leader>Dd`       n      Sum up this data file
+    `<leader>Ds`       n      Statistics of every column of this data file
+    `<leader>Dq`       nx     Run the SQL of the buffer or selection in DuckDB
+    `<leader>Db`       n      Database UI (dadbod) of the SQL connections
 
 Project and forges (|dyneo-features|) ~
     `<leader>pp`       n      Project overview
@@ -1099,7 +1174,7 @@ Command-line abbreviations, which only fire as a whole command line, so a
     `:ww`                           save as root, |:DySudoWrite|
 
 ------------------------------------------------------------------------------
-10. COMMANDS                                                  *dyneo-commands*
+11. COMMANDS                                                  *dyneo-commands*
 
 Every command this configuration defines starts with `Dy`, so `:Dy<Tab>`
 lists them all.  They are grouped like the sections above.
@@ -1293,6 +1368,15 @@ Operations ~
 :DyQuery [{expr}]       Try {expr}, `.` unless given, against this JSON or
                         YAML buffer as it is typed.  See |dyneo-query|.
 
+Data and machine learning ~
+                                                                     *:DyData*
+:DyData [{file}]        Sum up {file}, or the file of the buffer: rows,
+                        columns and the first rows.
+:DyData stats [{file}]  The statistics of every column instead.
+:[range]DyData sql [{query}]
+                        Run {query}, or the lines of [range], or the whole
+                        buffer, through DuckDB.  See |dyneo-data-files|.
+
 Project ~
                                                                   *:DyProject*
 :DyProject              The state of the project on one page.  See
@@ -1353,7 +1437,7 @@ The plugins' own commands are unchanged: `:Lazy`, `:Mason`, `:ConformInfo`,
 and the rest.
 
 ------------------------------------------------------------------------------
-11. LAYOUT                                                      *dyneo-layout*
+12. LAYOUT                                                      *dyneo-layout*
 
 `init.lua`            Globals, per-machine overrides, the version gate,
                     lazy.nvim
@@ -1382,7 +1466,7 @@ and the rest.
 `doc/`                This file, and |dyneo-keymaps|
 
 ------------------------------------------------------------------------------
-12. DEVELOPMENT                                            *dyneo-development*
+13. DEVELOPMENT                                            *dyneo-development*
 
 58 spec files under `tests/spec` run with plenary-busted in a headless Neovim
 that loads only the module each spec requires: >sh
@@ -1419,7 +1503,7 @@ After editing this help file, regenerate its tags with: >vim
     :helptags doc
 <
 ------------------------------------------------------------------------------
-13. TROUBLESHOOTING                                    *dyneo-troubleshooting*
+14. TROUBLESHOOTING                                    *dyneo-troubleshooting*
 
 Neovim says it is too old ~
     The version gate in `init.lua` wants 0.13 on the `latest` channel and 0.12

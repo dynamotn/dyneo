@@ -8,6 +8,7 @@
 :DyCiLint	dyneo.txt	/*:DyCiLint*
 :DyCiStatus	dyneo.txt	/*:DyCiStatus*
 :DyCron	dyneo.txt	/*:DyCron*
+:DyData	dyneo.txt	/*:DyData*
 :DyEncryptedDiff	dyneo.txt	/*:DyEncryptedDiff*
 :DyEncryptedKeys	dyneo.txt	/*:DyEncryptedKeys*
 :DyEncryptedRotate	dyneo.txt	/*:DyEncryptedRotate*
@@ -71,6 +72,8 @@ dyneo-commands	dyneo.txt	/*dyneo-commands*
 dyneo-configuration	dyneo.txt	/*dyneo-configuration*
 dyneo-contents	dyneo.txt	/*dyneo-contents*
 dyneo-cron	dyneo.txt	/*dyneo-cron*
+dyneo-data	dyneo.txt	/*dyneo-data*
+dyneo-data-files	dyneo.txt	/*dyneo-data-files*
 dyneo-development	dyneo.txt	/*dyneo-development*
 dyneo-diagram	dyneo.txt	/*dyneo-diagram*
 dyneo-encrypted	dyneo.txt	/*dyneo-encrypted*
@@ -103,6 +106,7 @@ dyneo-sbom	dyneo.txt	/*dyneo-sbom*
 dyneo-schema	dyneo.txt	/*dyneo-schema*
 dyneo-security	dyneo.txt	/*dyneo-security*
 dyneo-spell	dyneo.txt	/*dyneo-spell*
+dyneo-sql	dyneo.txt	/*dyneo-sql*
 dyneo-statusline	dyneo.txt	/*dyneo-statusline*
 dyneo-tfplan	dyneo.txt	/*dyneo-tfplan*
 dyneo-tfstate	dyneo.txt	/*dyneo-tfstate*

@@ -124,6 +124,13 @@ below follow the sections of `:help dyneo`.
 - **Tasks** — run, build and test the current file or project in ~50
   languages. `<leader>oo`
 
+### 📊 Data and ML — `<leader>D`
+
+- **Data files** — Parquet, CSV and JSON summed up and queried with SQL
+  through DuckDB; a Parquet file opens as its summary. `:DyData`
+- **Databases** — connections browsed and queried with dadbod, tables and
+  columns completed, SQL linted and formatted by sqlfluff. `<leader>Db`
+
 ### 🔍 Project and writing — `<leader>p`
 
 - **Project overview** — the branch, diagnostics, tasks, reviews, pipeline

@@ -32,7 +32,6 @@ one of the same keys in those buffers.
 `<leader>;`            n      Pick Winbar Symbol
 `<leader><space>`      n      Find Files (Root Dir)
 `<leader>?`            n      Buffer Keymaps (which-key)
-`<leader>D`            n      Toggle DBUI
 `<leader>E`            n      Explorer Snacks (cwd)
 `<leader>H`            n      Harpoon File
 `<leader>K`            n      Keywordprg
@@ -184,6 +183,14 @@ one of the same keys in those buffers.
 `<leader>cym`          n      Insert YAML Schema Modeline  (LSP: yamlls)
 `<leader>cyr`          n      Reset YAML Schema  (LSP: yamlls)
 `<leader>cys`          n      Select YAML Schema  (LSP: yamlls)
+
+==============================================================================
+<leader>D  data
+
+`<leader>Db`           n      Toggle DBUI
+`<leader>Dd`           n      Sum Up Data File
+`<leader>Dq`           nx     Run SQL in DuckDB
+`<leader>Ds`           n      Column Statistics
 
 ==============================================================================
 <leader>d  debug

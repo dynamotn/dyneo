@@ -359,6 +359,12 @@ map("n", "<leader>iq", "<cmd>DyQuery<cr>", { desc = "Query JSON/YAML (jq, yq)" }
 map("n", "<leader>ic", "<cmd>DyKube context<cr>", { desc = "Switch Kube Context" })
 map("n", "<leader>in", "<cmd>DyKube namespace<cr>", { desc = "Switch Kube Namespace" })
 
+-- data files and SQL over them, through DuckDB (`tools.data`)
+map("n", "<leader>Dd", "<cmd>DyData<cr>", { desc = "Sum Up Data File" })
+map("n", "<leader>Ds", "<cmd>DyData stats<cr>", { desc = "Column Statistics" })
+map("n", "<leader>Dq", "<cmd>DyData sql<cr>", { desc = "Run SQL in DuckDB" })
+map("x", "<leader>Dq", ":DyData sql<cr>", { desc = "Run SQL in DuckDB" })
+
 -- supply chain and the AI guard (`tools.lazy-quarantine`, `tools.sbom`,
 -- `tools.images`, `util.ai_guard`)
 map("n", "<leader>kq", "<cmd>DyQuarantine<cr>", { desc = "Held Back Updates" })

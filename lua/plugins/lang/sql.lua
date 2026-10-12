@@ -17,7 +17,7 @@ return vim.list_contains(DyNeo.enabled_languages, 'sql')
         cmd = { 'DBUI', 'DBUIToggle', 'DBUIAddConnection', 'DBUIFindBuffer' },
         dependencies = 'vim-dadbod',
         keys = {
-          { '<leader>D', '<cmd>DBUIToggle<CR>', desc = 'Toggle DBUI' },
+          { '<leader>Db', '<cmd>DBUIToggle<CR>', desc = 'Toggle DBUI' },
         },
         init = function()
           local data_path = vim.fn.stdpath('data')

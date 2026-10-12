@@ -469,6 +469,7 @@ local function requirements()
     openssl = '`:DyInspect` on a certificate',
     oasdiff = '`:DyOpenApiDiff` (`:MasonInstall oasdiff`)',
     crane = '`:DyImagePin` (or `skopeo`)',
+    duckdb = '`:DyData` and opening a Parquet file (`:MasonInstall duckdb`)',
     tofu = '`:DyTfPlan` and `:DyTfState` (or `terraform`)',
     claude = '`:DyAi commit` (`DyNeo.ai.commit_command`) and claudecode.nvim',
     ['claude-agent-acp'] = "Avante's default `claude-code` provider",
