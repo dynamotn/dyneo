@@ -57,6 +57,7 @@ CONTENTS                                                      *dyneo-contents*
     8. Data and machine learning ................................ |dyneo-data|
        8.1 Data files ..................................... |dyneo-data-files|
        8.2 SQL and databases ..................................... |dyneo-sql|
+       8.3 Cells and the REPL ................................... |dyneo-repl|
     9. Project and writing .................................. |dyneo-features|
        9.1 Project overview .................................. |dyneo-project|
        9.2 Decision records ...................................... |dyneo-adr|
@@ -859,6 +860,26 @@ for the rest.
 A database answers through a connection; a data file answers through
 DuckDB, with no server at all (|dyneo-data-files|).
 
+8.3 Cells and the REPL                                            *dyneo-repl*
+
+A Python script splits into cells at each `# %%` line, the way Jupytext,
+VS Code and Spyder write them; a `.ipynb` notebook converts to one with
+`jupytext --to py:percent`.  `]j` and `[j` move to the next and previous
+cell, `ij` selects the code of a cell and `aj` the whole of it, marker
+included, line by line.
+
+`<localleader>r` opens a REPL beside the script (iron.nvim): IPython when the
+environment has it, `python3` otherwise, taken from `$PATH` as it starts,
+so an activated virtual environment is the one used.  Then:
+
+    `<localleader>c`   send the cell under the cursor and move to the next
+    `<localleader>s`   send the line, or the selection
+    `<localleader>f`   send the whole file
+    `<localleader>i`   interrupt what runs
+    `<localleader>q`   leave the REPL
+
+The REPL loads with the first of these keys, not with the file.
+
 ------------------------------------------------------------------------------
 9. PROJECT AND WRITING                                        *dyneo-features*
 
@@ -1117,6 +1138,9 @@ Data and machine learning (|dyneo-data|) ~
     `<leader>Ds`       n      Statistics of every column of this data file
     `<leader>Dq`       nx     Run the SQL of the buffer or selection in DuckDB
     `<leader>Db`       n      Database UI (dadbod) of the SQL connections
+    `]j` `[j`          nxo    Next and previous `# %%` cell of a Python script
+    `ij` `aj`          xo     The cell: its code, or all of it
+    `<localleader>c`   n      Send the cell to the REPL and move to the next
 
 Project and forges (|dyneo-features|) ~
     `<leader>pp`       n      Project overview

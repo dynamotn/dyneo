@@ -130,6 +130,8 @@ below follow the sections of `:help dyneo`.
   through DuckDB; a Parquet file opens as its summary. `:DyData`
 - **Databases** — connections browsed and queried with dadbod, tables and
   columns completed, SQL linted and formatted by sqlfluff. `<leader>Db`
+- **Cells & REPL** — `# %%` cells of a Python script moved through,
+  selected and sent to IPython. `]j` `ij` `<localleader>c`
 
 ### 🔍 Project and writing — `<leader>p`
 

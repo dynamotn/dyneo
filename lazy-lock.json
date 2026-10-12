@@ -60,6 +60,7 @@
   "helpview.nvim": { "branch": "main", "commit": "06006b471890f19efeb199ffab5da49a2d624619" },
   "im-switch.nvim": { "branch": "main", "commit": "f6484ac510c4f82676e76f0cdc4e457ece8e7620" },
   "img-clip.nvim": { "branch": "main", "commit": "99848daf801789dbebe2192b475eb887d375002c" },
+  "iron.nvim": { "branch": "master", "commit": "0168b419bc7df70cd2d97c2ec8158b6b002450b2" },
   "jupynvim": { "branch": "main", "commit": "17117a2cc86d9a86119e392cb9963404087ef311" },
   "kulala.nvim": { "branch": "main", "commit": "1517fd8779b5d83ef7064709a3a7d03e72a899bf" },
   "laravel.nvim": { "branch": "main", "commit": "587db9f2f272d141ed8aa45b122828262d800d89" },
