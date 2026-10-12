@@ -561,6 +561,12 @@ local function extract_positionals(node)
   return positionals
 end
 
+--- Whether line 1 of the current buffer is a shebang
+---@return boolean
+local function has_shebang()
+  return (vim.api.nvim_buf_get_lines(0, 0, 1, false)[1] or ''):sub(1, 2) == '#!'
+end
+
 --- Neogen's `sh` configuration, made over in the dybatpho house style.
 --- @param shell? string The interpreter of the file banner's shebang; none
 ---   for a file sourced by a tool (`PKGBUILD`, an ebuild), not run
@@ -592,19 +598,32 @@ local function sh(shell)
     return {}
   end
 
+  -- The banner rows render only with a result, which `banner` always is; the
+  -- shebang comes along only when line 1 is not one already, so it never
+  -- changes the interpreter of a script.
+  config.data.file.program['0'].extract = function()
+    return {
+      banner = { '' },
+      shebang = shell and not has_shebang() and { shell } or nil,
+    }
+  end
+
   config.template = {
     use_default_comment = false,
-    --- @diagnostic disable-next-line: assign-type-mismatch
-    position = nil,
+    -- The banner goes after a shebang, which only counts on line 1
+    position = function(_, kind)
+      if kind == 'file' and has_shebang() then return 1, 0 end
+    end,
     annotation_convention = 'sh_docs',
 
     -- The dybatpho house style: banner comments, and arguments named by
     -- `dybatpho::expect_args`.
     sh_docs = {
-      { nil, '# @file $1', { no_results = true, type = { 'file' } } },
-      { nil, '# @brief $1', { no_results = true, type = { 'file' } } },
-      { nil, '# @description $1', { no_results = true, type = { 'file' } } },
-      { nil, '', { no_results = true, type = { 'file' } } },
+      { 'shebang', '#!/usr/bin/env %s', { type = { 'file' } } },
+      { nil, '# @file $1', { type = { 'file' } } },
+      { nil, '# @brief $1', { type = { 'file' } } },
+      { nil, '# @description $1', { type = { 'file' } } },
+      { nil, '', { type = { 'file' } } },
 
       -- A row without `no_results` is only rendered when the extractor found
       -- something, so the banners of the two cases cannot be shared: each block
@@ -652,14 +671,6 @@ local function sh(shell)
       { nil, '#######################################', { type = { 'func' } } },
     },
   }
-  if shell then
-    table.insert(config.template.sh_docs, 1, {
-      nil,
-      '#!/usr/bin/env ' .. shell,
-      { no_results = true, type = { 'file' } },
-    })
-  end
-
   return config
 end
 

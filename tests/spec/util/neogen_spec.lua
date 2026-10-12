@@ -7,10 +7,13 @@ local neogen = vim.fs.joinpath(data, 'lazy', 'neogen')
 local has_neogen = vim.uv.fs_stat(neogen) ~= nil
 if has_neogen then vim.opt.rtp:append(neogen) end
 vim.opt.rtp:append(vim.fs.joinpath(data, 'site'))
+-- As `config.languages` registers it
+vim.treesitter.language.register('bash', { 'sh', 'bats' })
 
----@param lang string
+---@param ft string
 ---@return boolean
-local function has_parser(lang)
+local function has_parser(ft)
+  local lang = vim.treesitter.language.get_lang(ft) or ft
   return (pcall(vim.treesitter.language.inspect, lang))
 end
 
@@ -76,16 +79,27 @@ describe('util.neogen', function()
     end
   end)
 
+  ---@param ft string
+  ---@return table<string, string[]>
+  local function file_data(ft)
+    return languages[ft].data.file.program['0'].extract()
+  end
+
   it('gives every shell filetype the template, with its own shebang', function()
-    ---@param ft string
-    ---@return string
-    local function first_line(ft) return languages[ft].template.sh_docs[1][2] end
-    assert.are.equal('#!/usr/bin/env bash', first_line('sh'))
-    assert.are.equal('#!/usr/bin/env bats', first_line('bats'))
-    assert.are.equal('#!/usr/bin/env zsh', first_line('zsh'))
+    vim.api.nvim_set_current_buf(h.buffer({ lines = { 'echo hi' } }))
+    assert.are.same({ 'bash' }, file_data('sh').shebang)
+    assert.are.same({ 'bats' }, file_data('bats').shebang)
+    assert.are.same({ 'zsh' }, file_data('zsh').shebang)
     -- Sourced by makepkg, not run
-    assert.are.equal('# @file $1', first_line('sh.PKGBUILD'))
-    assert.are.equal('# @file $1', first_line('sh.ebuild'))
+    assert.is_nil(file_data('sh.PKGBUILD').shebang)
+    assert.is_nil(file_data('sh.ebuild').shebang)
+    assert.is_nil(languages.sh.template.position(nil, 'file'))
+  end)
+
+  it('keeps the shebang of a script, with the banner below it', function()
+    vim.api.nvim_set_current_buf(h.buffer({ lines = { '#!/bin/sh', 'x=1' } }))
+    assert.are.same({ banner = { '' } }, file_data('sh'))
+    assert.are.same({ 1, 0 }, { languages.sh.template.position(nil, 'file') })
   end)
 
   it(
@@ -356,6 +370,54 @@ describe('util.neogen', function()
       '}',
     },
   }
+
+  vim.list_extend(cases, {
+    {
+      'sh',
+      'writes a shebang above the banner of a script with none',
+      lines = { 'x=1' },
+      cursor = { 1, 0 },
+      expect = {
+        '#!/usr/bin/env bash',
+        '# @file ',
+        '# @brief ',
+        '# @description ',
+        '',
+        'x=1',
+      },
+    },
+    {
+      'sh',
+      'keeps the shebang of a script, with the banner below it',
+      lines = { '#!/bin/sh', '', 'x=1' },
+      cursor = { 3, 0 },
+      expect = {
+        '#!/bin/sh',
+        '# @file ',
+        '# @brief ',
+        '# @description ',
+        '',
+        '',
+        'x=1',
+      },
+    },
+    {
+      'bats',
+      'writes the banner of a test file below its shebang',
+      lines = { '#!/usr/bin/env bats', '@test "x" {', '  run foo', '}' },
+      cursor = { 3, 2 },
+      expect = {
+        '#!/usr/bin/env bats',
+        '# @file ',
+        '# @brief ',
+        '# @description ',
+        '',
+        '@test "x" {',
+        '  run foo',
+        '}',
+      },
+    },
+  })
 
   for _, case in ipairs(cases) do
     local ft, name = case[1], case[2]
