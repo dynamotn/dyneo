@@ -284,7 +284,8 @@ local function swift()
           end
         elseif kind == '->' then
           data['return'] = { '' }
-        elseif kind == 'throws' then
+        -- `throws(MyError)`, a typed throw, is a clause of its own
+        elseif kind == 'throws' or kind == 'throws_clause' then
           data.throws = { '' }
         end
       end

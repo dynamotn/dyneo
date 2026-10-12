@@ -275,6 +275,18 @@ describe('util.neogen', function()
       },
     },
     {
+      'swift',
+      'documents what a typed throw throws',
+      lines = { 'func f() throws(MyError) {}' },
+      cursor = { 1, 5 },
+      expect = {
+        '/// ',
+        '///',
+        '/// - Throws: ',
+        'func f() throws(MyError) {}',
+      },
+    },
+    {
       'zig',
       'documents the function around a local, which takes none',
       lines = {
