@@ -180,4 +180,61 @@ describe('util.dap', function()
       )
     end)
   end)
+
+  describe('guard_launch_json', function()
+    local dir, cleanup, cwd, restores, asked, verdict, fake
+
+    before_each(function()
+      dir, cleanup = h.tmpdir()
+      cwd = vim.fn.getcwd()
+      vim.cmd.cd(dir)
+      asked, verdict = 0, nil
+      restores = {
+        h.stub(vim.secure, 'read', function(path)
+          asked = asked + 1
+          assert.equals(dir .. '/.vscode/launch.json', path)
+          return verdict
+        end),
+      }
+      fake = {
+        providers = {
+          configs = {
+            ['dap.launch.json'] = function()
+              return { { name = 'from launch.json' } }
+            end,
+          },
+        },
+      }
+      h.unload('util.dap')
+      require('util.dap').guard_launch_json(fake)
+    end)
+    after_each(function()
+      for i = #restores, 1, -1 do
+        restores[i]()
+      end
+      vim.cmd.cd(cwd)
+      cleanup()
+      h.unload('util.dap')
+    end)
+
+    local function configs() return fake.providers.configs['dap.launch.json'](0) end
+
+    it('asks nothing when there is no launch.json', function()
+      assert.same({}, configs())
+      assert.equals(0, asked)
+    end)
+
+    it('reads a trusted launch.json', function()
+      h.write(dir .. '/.vscode/launch.json', { '{}' })
+      verdict = '{}'
+      assert.same({ { name = 'from launch.json' } }, configs())
+    end)
+
+    it('gives nothing from an untrusted one and asks once', function()
+      h.write(dir .. '/.vscode/launch.json', { '{}' })
+      assert.same({}, configs())
+      assert.same({}, configs())
+      assert.equals(1, asked)
+    end)
+  end)
 end)

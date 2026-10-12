@@ -82,6 +82,36 @@ M.codelldb_adapter = function()
   }
 end
 
+---@type table<string, false> `launch.json` files refused this session, and
+--- the one being asked about
+local refused_launch_json = {}
+
+--- Have nvim-dap read `.vscode/launch.json` only once `vim.secure.read`
+--- trusts it
+---
+--- The file comes with whatever repository is open, and an entry of it runs
+--- a program of its choosing when picked (`runtimeExecutable`, a `mix_task`),
+--- under a name that can pass for one of ours. Trust goes by contents, so a
+--- changed file is asked about again; a refusal holds for the session.
+---@param dap table The `dap` module
+M.guard_launch_json = function(dap)
+  local configs = dap.providers.configs
+  local read = configs['dap.launch.json']
+  if not read then return end
+  configs['dap.launch.json'] = function(bufnr)
+    local path = vim.fn.getcwd() .. '/.vscode/launch.json'
+    if refused_launch_json[path] == false or not vim.uv.fs_stat(path) then
+      return {}
+    end
+    -- `vim.secure.read` handles events while its prompt waits, so a second
+    -- call arriving then finds this one's question pending, not unasked
+    refused_launch_json[path] = false
+    if vim.secure.read(path) == nil then return {} end
+    refused_launch_json[path] = nil
+    return read(bufnr)
+  end
+end
+
 --- A frontend's config file and the port its dev server listens on by default
 ---@type {[1]: string, [2]: integer}[]
 M.DEV_SERVERS = {

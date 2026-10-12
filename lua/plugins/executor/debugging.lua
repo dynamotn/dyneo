@@ -77,6 +77,7 @@ return {
 
       -- Read `.vscode/launch.json` with its comments and trailing commas
       require('dap.ext.vscode').json_decode = require('util.jsonc').decode
+      require('util.dap').guard_launch_json(require('dap'))
     end,
   },
   {

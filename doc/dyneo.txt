@@ -40,6 +40,7 @@ CONTENTS                                                      *dyneo-contents*
        5.5 Scanner findings ................................ |dyneo-findings|
        5.6 Detection rules ................................ |dyneo-detection|
        5.7 Binary files .......................................... |dyneo-hex|
+       5.8 Debug launch files ............................ |dyneo-launch-json|
     6. Infrastructure .......................................... |dyneo-infra|
        6.1 YAML and JSON schemas .............................. |dyneo-schema|
        6.2 Kubernetes ........................................... |dyneo-kube|
@@ -538,6 +539,15 @@ columns back as bytes over the file.  The offsets and the text column are
 ignored, so deleting a line deletes its bytes, and a line that is not hex
 pairs writes nothing.  It needs no `xxd`.  A buffer with unwritten edits, a
 sensitive file (|dyneo-ai-guard|) and a file over 16 MiB are refused.
+
+5.8 Debug launch files                                     *dyneo-launch-json*
+
+nvim-dap offers the entries of `.vscode/launch.json` in the working directory
+next to the configured ones, and picking one runs whatever program it names.
+The file comes with the repository, so it is read only once
+|vim.secure.read()| trusts it: Neovim asks the first time, and again after
+the file changes.  A refusal holds for the rest of the session; |:trust| it
+and restart to change your mind.
 
 ------------------------------------------------------------------------------
 6. INFRASTRUCTURE                                                *dyneo-infra*

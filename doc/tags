@@ -94,6 +94,7 @@ dyneo-keymaps	dyneo-keymaps.txt	/*dyneo-keymaps*
 dyneo-keymaps.txt	dyneo-keymaps.txt	/*dyneo-keymaps.txt*
 dyneo-kube	dyneo.txt	/*dyneo-kube*
 dyneo-languages	dyneo.txt	/*dyneo-languages*
+dyneo-launch-json	dyneo.txt	/*dyneo-launch-json*
 dyneo-layout	dyneo.txt	/*dyneo-layout*
 dyneo-lazy-install	dyneo.txt	/*dyneo-lazy-install*
 dyneo-logs	dyneo.txt	/*dyneo-logs*
