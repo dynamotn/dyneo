@@ -1,5 +1,4 @@
 DyNeo.dark_mode = {{ .darkMode }}
-DyNeo.is_gentoo = {{ eq .osid "linux-gentoo" }}
 DyNeo.enabled_plugins.obsidian = {{ or (eq .kind "pc" "laptop") (eq .chezmoi.os "android") }}
 DyNeo.enabled_plugins.leetcode = {{ eq .kind "pc" "laptop" }}
 DyNeo.enabled_plugins.firenvim = {{ eq .kind "pc" "laptop" }}

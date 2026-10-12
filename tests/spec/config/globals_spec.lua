@@ -9,7 +9,6 @@ describe('config.globals', function()
       { enabled = false, day_start = 6, night_start = 18 },
       DyNeo.day_night
     )
-    assert.is_false(DyNeo.is_gentoo)
     assert.is_false(DyNeo.used_full_plugins)
     assert.are.equal(
       vim.fn.has('nvim-0.13') == 1 and 'latest' or 'stable',

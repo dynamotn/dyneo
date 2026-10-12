@@ -25,9 +25,6 @@ DyNeo.day_night = {
   night_start = 18,
 }
 
----@type boolean Flag to install Gentoo syntax
-DyNeo.is_gentoo = false
-
 ---@type boolean Flag to install all plugins, useful for update `lazy-lock.json`
 DyNeo.used_full_plugins = false
 

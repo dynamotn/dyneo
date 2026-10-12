@@ -178,10 +178,6 @@ defaulted in `lua/config/globals.lua`.
 `DyNeo.used_full_plugins`      (default `false`)
         Install every plugin, to refresh the lockfile.
 
-                                                             *DyNeo.is_gentoo*
-`DyNeo.is_gentoo`              (default `false`)
-        Add the Gentoo ebuild syntax.
-
                                                               *DyNeo.obsidian*
 `DyNeo.obsidian.paths`         (default `{ personal = '~/Documents/Notes' }`)
         Vault name to folder.  `DyNeo.obsidian.vaults()` and

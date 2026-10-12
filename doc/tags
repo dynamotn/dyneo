@@ -48,7 +48,6 @@ DyNeo.dictionaries_path	dyneo.txt	/*DyNeo.dictionaries_path*
 DyNeo.enabled_languages	dyneo.txt	/*DyNeo.enabled_languages*
 DyNeo.enabled_plugins	dyneo.txt	/*DyNeo.enabled_plugins*
 DyNeo.firenvim_site_settings	dyneo.txt	/*DyNeo.firenvim_site_settings*
-DyNeo.is_gentoo	dyneo.txt	/*DyNeo.is_gentoo*
 DyNeo.obsidian	dyneo.txt	/*DyNeo.obsidian*
 DyNeo.plugin_channel	dyneo.txt	/*DyNeo.plugin_channel*
 DyNeo.quarantine_window	dyneo.txt	/*DyNeo.quarantine_window*
