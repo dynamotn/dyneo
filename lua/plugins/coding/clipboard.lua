@@ -8,6 +8,9 @@ return {
     opts = {
       system_clipboard = {
         sync_with_ring = not vim.env.SSH_CONNECTION,
+        -- Read off `clipboard` otherwise, which `config.lazy` keeps empty
+        -- until after yanky has loaded: that would be `*`, the selection
+        clipboard_register = '+',
       },
       highlight = { timer = 150 },
     },
