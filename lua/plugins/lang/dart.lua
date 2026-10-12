@@ -20,7 +20,12 @@ return vim.list_contains(DyNeo.enabled_languages, 'dart')
           { '<localleader>d', '<cmd>FlutterDevices<cr>', desc = 'Flutter Devices', ft = language.filetypes },
           { '<localleader>q', '<cmd>FlutterQuit<cr>', desc = 'Flutter Quit', ft = language.filetypes },
         },
-        opts = {},
+        opts = {
+          -- `:FlutterRun` goes through nvim-dap, so breakpoints hold. The
+          -- adapter is the SDK's own `flutter debug-adapter` (or `dart
+          -- debug_adapter`), registered by flutter-tools with its configurations.
+          debugger = { enabled = true },
+        },
       },
       {
         -- `flutter-tools` starts `dartls` with its own settings, so keep

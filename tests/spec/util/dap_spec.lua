@@ -99,4 +99,85 @@ describe('util.dap', function()
       assert.equals(vim.fn.getcwd() .. '/build', prompt)
     end)
   end)
+
+  describe('dev_server_url', function()
+    local dir, cleanup, buffers
+    before_each(function()
+      dir, cleanup = h.tmpdir()
+      buffers = {}
+    end)
+    after_each(function()
+      for _, bufnr in ipairs(buffers) do
+        vim.api.nvim_buf_delete(bufnr, { force = true })
+      end
+      cleanup()
+    end)
+
+    ---@param path string relative to `dir`
+    ---@param filetype? string
+    local function buffer(path, filetype)
+      local bufnr = h.buffer({ name = dir .. '/' .. path, filetype = filetype })
+      table.insert(buffers, bufnr)
+      return bufnr
+    end
+
+    local function touch(path)
+      vim.fn.mkdir(vim.fs.dirname(dir .. '/' .. path), 'p')
+      vim.fn.writefile({}, dir .. '/' .. path)
+    end
+
+    it('takes the port from the nearest config file', function()
+      touch('angular.json')
+      touch('apps/web/vite.config.mts')
+      assert.equals(
+        'http://localhost:5173',
+        dap_util.dev_server_url(buffer('apps/web/src/main.ts', 'typescript'))
+      )
+      assert.equals(
+        'http://localhost:4200',
+        dap_util.dev_server_url(buffer('src/app.ts', 'typescript'))
+      )
+    end)
+
+    it('knows Astro, Gatsby and webpack', function()
+      touch('site/astro.config.mjs')
+      touch('blog/gatsby-config.ts')
+      touch('app/webpack.config.cjs')
+      assert.equals(
+        'http://localhost:4321',
+        dap_util.dev_server_url(buffer('site/src/index.ts', 'typescript'))
+      )
+      assert.equals(
+        'http://localhost:8000',
+        dap_util.dev_server_url(buffer('blog/src/page.tsx', 'typescriptreact'))
+      )
+      assert.equals(
+        'http://localhost:8080',
+        dap_util.dev_server_url(buffer('app/src/main.js', 'javascript'))
+      )
+    end)
+
+    it('lets the config file win over the filetype', function()
+      touch('vue.config.js')
+      assert.equals(
+        'http://localhost:8080',
+        dap_util.dev_server_url(buffer('src/App.vue', 'vue'))
+      )
+    end)
+
+    it('falls back on the filetype, then on port 3000', function()
+      assert.equals(
+        'http://localhost:4200',
+        dap_util.dev_server_url(buffer('a.html', 'htmlangular'))
+      )
+      assert.equals(
+        'http://localhost:4321',
+        dap_util.dev_server_url(buffer('c.astro', 'astro'))
+      )
+      assert.equals(
+        'http://localhost:3000',
+        dap_util.dev_server_url(buffer('b.ts', 'typescript'))
+      )
+    end)
+  end)
 end)

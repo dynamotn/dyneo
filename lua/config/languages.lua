@@ -569,6 +569,8 @@ return {
       },
     },
     formatters = { 'biome', html_beautify_formatter },
+    -- js-debug drives Chrome (`pwa-chrome`), see `plugins.lang.typescript`
+    dap = { 'js' },
   },
   arduino = { -- See `cpp`
     filetypes = { 'arduino' },
@@ -590,6 +592,8 @@ return {
     -- formatting is left to the language server.
     lsp_servers = { 'astro', 'tailwindcss', 'harper_ls' },
     linters = js_linters,
+    -- js-debug drives Chrome (`pwa-chrome`), see `plugins.lang.typescript`
+    dap = { 'js' },
   },
   bash = {
     filetypes = reuse_filetypes.bash.filetypes,
@@ -727,6 +731,9 @@ return {
     -- dytoy installs.
     linters = { { 'credo', command = 'mix', mason = { package = 'elixir' } } },
     formatters = { { 'mix', command = 'mix', mason = { package = 'elixir' } } },
+    -- `elixir-ls` ships `elixir-ls-debugger`; `plugins.lang.elixir` registers
+    -- it as `mix_task`, the adapter type its configurations name
+    dap = { 'elixir' },
     test = { 'neotest-elixir' },
     neogen = 'exdoc',
     endwise = true,
@@ -1306,6 +1313,8 @@ return {
     -- so formatting is left to the language server.
     lsp_servers = { 'svelte', 'tailwindcss', 'harper_ls' },
     linters = js_linters,
+    -- js-debug drives Chrome (`pwa-chrome`), see `plugins.lang.typescript`
+    dap = { 'js' },
   },
   swift = {
     filetypes = { 'swift' },
@@ -1430,6 +1439,8 @@ return {
     -- `biome` cannot read a single-file component, so a Vue file goes to
     -- `prettier` the way the stylesheets already do.
     formatters = { 'prettier' },
+    -- js-debug drives Chrome (`pwa-chrome`), see `plugins.lang.typescript`
+    dap = { 'js' },
     dial = function(augend)
       return {
         augend.constant.new({
