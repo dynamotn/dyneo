@@ -136,6 +136,8 @@ below follow the sections of `:help dyneo`.
   metadata, tensors, shapes and the parameter count.
 - **Cells & REPL** — `# %%` cells of a Python script moved through,
   selected and sent to IPython. `]j` `ij` `<localleader>c`
+- **Quarto** — the chunks of a `.qmd` or `.Rmd` document with their language
+  servers, run in the REPL, previewed. `<localleader>c` `<localleader>p`
 - **Virtual environments** — picked once per project, from uv, poetry or
   conda, for the server, the debugger and the REPL. `<localleader>v`
 

@@ -900,6 +900,15 @@ so an activated virtual environment is the one used.  Then:
 
 The REPL loads with the first of these keys, not with the file.
 
+A Quarto (`.qmd`) or R Markdown (`.Rmd`) document runs its chunks the same
+way (quarto-nvim): `<localleader>c` sends the `{python}` or `{r}` chunk under
+the cursor to the REPL of its language, without its fences, `<localleader>a`
+the chunks above it and `<localleader>A` all of them, `<localleader>s` the
+line or the selection.  The language server of each chunk's language
+answers inside it, through otter, so it runs where otter is enabled
+(|DyNeo.enabled_plugins|).  `<localleader>p` previews the document with
+`quarto preview`.
+
 8.4 Model files                                                  *dyneo-model*
 
 Opening a `.safetensors` or `.gguf` file shows its header rather than its

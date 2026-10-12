@@ -1066,6 +1066,14 @@ return {
       }
     end,
   },
+  -- Markdown with chunks of code that run. quarto-nvim gives the chunks
+  -- their servers itself, through otter, so the entry asks for none.
+  quarto = {
+    filetypes = { 'quarto', 'rmd' },
+    parser = 'markdown',
+    injected_parsers = { 'markdown_inline', 'yaml' },
+    ext = 'qmd',
+  },
   qml = { -- Qt
     filetypes = { 'qml' },
     parser = 'qmljs',

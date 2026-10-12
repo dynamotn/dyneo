@@ -467,6 +467,7 @@ local function requirements()
     jq = '`:DyQuery` on JSON, and the jq filter of `:DyLog`',
     yq = '`:DyQuery` on YAML, `:DyOpenApiRequest` and `:DyArchitecture`',
     openssl = '`:DyInspect` on a certificate',
+    quarto = '`:QuartoPreview` of a Quarto document',
     oasdiff = '`:DyOpenApiDiff` (`:MasonInstall oasdiff`)',
     crane = '`:DyImagePin` (or `skopeo`)',
     duckdb = '`:DyData` and opening a Parquet file (`:MasonInstall duckdb`)',
