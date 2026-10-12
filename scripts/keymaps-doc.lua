@@ -58,12 +58,32 @@ package.preload['util.plugin'] = function()
   local lazy = require('lazy')
   local setup = lazy.setup
   lazy.setup = function(spec, opts)
+    -- `config.lazy` hands everything over as one table holding `spec`,
+    -- which lazy.nvim then reads as the options: the overrides go there
+    if type(spec) == 'table' and spec.spec then
+      spec, opts = nil, spec
+    end
     opts = vim.tbl_deep_extend('force', opts or {}, {
       install = { missing = false },
       checker = { enabled = false },
       change_detection = { enabled = false },
     })
-    return setup(spec, opts)
+    if spec ~= nil then opts.spec = spec end
+    -- A spec turned on by a binary (`enabled` or `cond` asking
+    -- `executable`: mcphub for npm, flutter-tools for dart, R.nvim for R) is
+    -- read as on a machine that has them all, so the file does not change
+    -- with the machine it is written on. Only while the specs resolve:
+    -- what runs afterwards sees the machine as it is.
+    local LazyPlugin = require('lazy.core.plugin')
+    local load = LazyPlugin.load
+    LazyPlugin.load = function(...)
+      local executable = vim.fn.executable
+      vim.fn.executable = function() return 1 end
+      local ok, err = pcall(load, ...)
+      vim.fn.executable = executable
+      if not ok then error(err, 0) end
+    end
+    return setup(opts)
   end
   local Plugin =
     assert(loadfile(vim.fs.joinpath(root, 'lua/util/plugin.lua')))()
