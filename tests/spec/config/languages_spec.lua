@@ -28,6 +28,9 @@ local null_ls_types = {
   completion = true,
 }
 
+-- none-ls sources that send buffer text to a server
+local sends_text = { jira = true, ltcc = true, ai_fix = true }
+
 local function is_string_list(value)
   if type(value) ~= 'table' or not vim.islist(value) then return false end
   for _, item in ipairs(value) do
@@ -207,6 +210,10 @@ describe('config.languages', function()
             assert.are.equal('boolean', type(source.custom), where)
           end
           assert_mason(source.mason, where)
+          -- Their text leaves the machine, so sensitive buffers must skip them
+          if sends_text[source[1]] then
+            assert.is_true(source.remote, where .. ': not marked remote')
+          end
         end
       end)
 
