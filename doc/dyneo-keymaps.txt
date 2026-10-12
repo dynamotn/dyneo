@@ -138,7 +138,6 @@ one of the same keys in those buffers.
 `<leader>cI`           n      Rule Docs
 `<leader>cL`           n      Language servers of buffer
 `<leader>cM`           n      Add missing imports  (LSP: vtsls)
-`<leader>cN`           n      Generate Annotations (sh-docs)  (ft: sh, bats, sh.ebuild, sh.eclass, sh.install, sh.PKGBUILD, zsh)
 `<leader>cP`           n      Pin main file  (LSP: tinymist)
 `<leader>cR`           n      Rename File
 `<leader>cS`           n      LSP references/definitions/... (Trouble)

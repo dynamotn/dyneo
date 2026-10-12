@@ -9,17 +9,6 @@ return {
         function() require('neogen').generate() end,
         desc = 'Generate Annotations (Neogen)',
       },
-      {
-        '<leader>cN',
-        function()
-          require('neogen').generate({
-            type = 'any',
-            annotation_convention = { sh = 'sh_docs' },
-          })
-        end,
-        ft = require('util.neogen').filetypes('sh_docs'),
-        desc = 'Generate Annotations (sh-docs)',
-      },
     },
     opts = function(_, opts)
       -- Expand through LuaSnip, the snippet engine of this config

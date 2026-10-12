@@ -767,17 +767,6 @@ local function conventions()
   return ret
 end
 
---- The filetypes whose annotations follow `convention`
----@param convention string
----@return string[]
-function M.filetypes(convention)
-  local ret = {}
-  for _, entry in ipairs(conventions()) do
-    if entry[2] == convention then vim.list_extend(ret, entry[1]) end
-  end
-  return ret
-end
-
 --- Every configuration, keyed by filetype, for neogen's `languages`, from the
 --- `neogen` convention of each language. Neogen looks a configuration up by
 --- the exact filetype, so `sh.PKGBUILD` or `typescript.tsx` needs one of its
