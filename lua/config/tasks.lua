@@ -196,6 +196,15 @@ return {
       desc = sub[2],
       exe = 'dbt',
       root = { 'dbt_project.yml' },
+      -- A model lives under `models/`: a macro, an analysis or a compiled
+      -- copy is no model to select, and a package's own project under
+      -- `dbt_packages/` is not the one to run.
+      -- shortcut: only dbt's default `model-paths`, read `dbt_project.yml`
+      -- once a project here moves them
+      when = function(ctx)
+        return vim.startswith(ctx.file, ctx.root .. '/models/')
+          and not ctx.file:find('/dbt_packages/', 1, true)
+      end,
       cmd = function(ctx)
         return { ctx.exe, sub[1], '--select', vim.fs.basename(ctx.stem) }
       end,

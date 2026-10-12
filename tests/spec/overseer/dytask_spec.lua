@@ -141,6 +141,16 @@ describe('overseer.template.dytask', function()
       assert.is_not_nil(list['dbt show'])
     end)
 
+    it('offers dbt only for a model of the project itself', function()
+      h.write(dir .. '/dbt_project.yml', { 'name: shop' })
+      assert.is_nil(templates('macros/cents.sql', 'sql')['dbt run'])
+      assert.is_nil(templates('target/compiled/x.sql', 'sql')['dbt run'])
+      h.write(dir .. '/dbt_packages/utils/dbt_project.yml', { 'name: utils' })
+      assert.is_nil(
+        templates('dbt_packages/utils/models/y.sql', 'sql')['dbt run']
+      )
+    end)
+
     it(
       'offers dbt nothing outside a dbt project',
       function() assert.is_nil(templates('query.sql', 'sql')['dbt run']) end

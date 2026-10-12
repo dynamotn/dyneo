@@ -894,7 +894,10 @@ for the rest.
 Inside a dbt project, a folder holding `dbt_project.yml`, `<leader>oo` offers
 `dbt compile`, `dbt run`, `dbt test` and `dbt show` for the model of the
 buffer, named after its file, run from the project root when `dbt` is on
-`$PATH`.  sqlfluff reads the project's `.sqlfluff` there too: one saying
+`$PATH`.  A model is a file under `models/`: a macro, an analysis or a
+package under `dbt_packages/` gets none of them.
+
+sqlfluff reads the project's `.sqlfluff` in a dbt project too: one saying
 `templater = dbt` lints a model as dbt compiles it, and without one the
 `{{ ref() }}` and `{{ source() }}` of a model still parse.
 
