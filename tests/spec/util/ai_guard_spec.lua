@@ -558,20 +558,16 @@ describe('util.ai_guard', function()
 
     it('detaches Copilot once betterleaks reports a finding', function()
       local buf = h.buffer({ name = plain, lines = { 'nothing to see' } })
-      vim.diagnostic.set(
-        vim.api.nvim_create_namespace('dy_spec_ai_guard'),
-        buf,
+      vim.diagnostic.set(vim.api.nvim_create_namespace('betterleaks'), buf, {
         {
-          {
-            lnum = 0,
-            col = 0,
-            severity = vim.diagnostic.severity.WARN,
-            source = 'betterleaks',
-            code = 'generic-api-key',
-            message = 'Detected a generic API key',
-          },
-        }
-      )
+          lnum = 0,
+          col = 0,
+          severity = vim.diagnostic.severity.WARN,
+          source = 'betterleaks',
+          code = 'generic-api-key',
+          message = 'Detected a generic API key',
+        },
+      })
       settle('DiagnosticChanged', buf)
       assert.same({ { buf, 42 } }, detached)
     end)
