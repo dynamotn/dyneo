@@ -1,25 +1,33 @@
 local enabled = require('util.chezmoi').enabled()
 
 --- Pick a chezmoi managed file and edit it through `chezmoi edit --watch`
+---
+--- `chezmoi managed` walks the whole source tree, most of a second here, so
+--- its list streams into the picker rather than being waited for.
 local function pick_chezmoi()
-  local results = require('chezmoi.commands').list({
-    args = {
-      '--path-style',
-      'absolute',
-      '--include',
-      'files',
-      '--exclude',
-      'externals',
-    },
-  })
-  local items = {}
-  for _, file in ipairs(results) do
-    table.insert(items, { text = file, file = file })
-  end
-
   ---@type snacks.picker.Config
   local opts = {
-    items = items,
+    title = 'Chezmoi',
+    format = 'file',
+    finder = function(_, ctx)
+      return require('snacks.picker.source.proc').proc(
+        ctx:opts({
+          cmd = 'chezmoi',
+          args = {
+            'managed',
+            '--path-style',
+            'absolute',
+            '--include',
+            'files',
+            '--exclude',
+            'externals',
+          },
+          notify = true,
+          transform = function(item) item.file = item.text end,
+        }),
+        ctx
+      )
+    end,
     confirm = function(picker, item)
       picker:close()
       require('chezmoi.commands').edit({
