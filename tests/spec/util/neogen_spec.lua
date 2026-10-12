@@ -205,6 +205,24 @@ describe('util.neogen', function()
       },
     },
     {
+      'haskell',
+      'documents the first equation of a function from the last one',
+      lines = {
+        'fact :: Int -> Int',
+        'fact 0 = 1',
+        'fact 1 = 1',
+        'fact n = n * fact (n - 1)',
+      },
+      cursor = { 4, 9 },
+      expect = {
+        '-- | ',
+        'fact :: Int -> Int',
+        'fact 0 = 1',
+        'fact 1 = 1',
+        'fact n = n * fact (n - 1)',
+      },
+    },
+    {
       'scala',
       'lists type parameters, parameters and the return value',
       lines = { 'object O {', '  def f[A](a: A, b: Int): Int = b', '}' },

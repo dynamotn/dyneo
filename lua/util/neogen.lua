@@ -195,19 +195,20 @@ local function haskell()
         return of_type(node, types)
       end
     end,
-    -- Above the type signature, which comes before the equations
+    -- Above the type signature, which comes before the first equation
     position = function(node)
+      local name = node:field('name')[1]
+      name = name and text(name)
       local prev = node:prev_named_sibling()
-      local name, signature =
-        node:field('name')[1], prev and prev:field('name')[1]
-      if
-        prev
-        and prev:type() == 'signature'
-        and name
-        and signature
-        and text(name) == text(signature)
-      then
-        node = prev
+      while
+        name
+        and prev
+        and vim.list_contains({ 'function', 'bind', 'signature' }, prev:type())
+      do
+        local other = prev:field('name')[1]
+        if not (other and text(other) == name) then break end
+        node, prev = prev, prev:prev_named_sibling()
+        if node:type() == 'signature' then break end
       end
       return node:range()
     end,
