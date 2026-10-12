@@ -812,6 +812,11 @@ missing.  DuckDB reads Parquet, CSV, TSV, JSON and JSON lines, compressed
 with gzip or zstd or not (`:MasonInstall duckdb`).  A pattern such as
 `:DyData data/*.parquet` reads every file it matches as one table.
 
+A CSV, TSV or pipe-separated `.psv` file lines its columns up as a table
+with `<localleader>v` (csvview.nvim), split on the delimiter its filetype
+names rather than one guessed from its first lines.  A `.jsonl` or `.ndjson`
+file, one JSON value per line, is highlighted and left unformatted.
+
 Opening a `.parquet` file shows that summary in place of its bytes.  The
 buffer is no copy of the file and cannot be written over it.
 

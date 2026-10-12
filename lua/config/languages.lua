@@ -1472,6 +1472,14 @@ return {
     filetypes = { 'csv' },
     parser = 'csv',
   },
+  tsv = { -- See `csv`
+    filetypes = { 'tsv' },
+    parser = 'tsv',
+  },
+  psv = { -- See `csv`
+    filetypes = { 'psv' },
+    parser = 'psv',
+  },
   d2 = {
     filetypes = { 'd2' },
     parser = {
@@ -1705,6 +1713,13 @@ return {
         },
       },
     },
+  },
+  -- One JSON value per line. The `json` grammar reads several values where
+  -- `json5` stops at the first, and nothing formats it: `jq` would spread
+  -- each value over many lines.
+  jsonl = {
+    filetypes = { 'jsonl' },
+    parser = 'json',
   },
   jsonnet = {
     filetypes = { 'jsonnet' },

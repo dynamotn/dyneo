@@ -41,6 +41,9 @@ vim.filetype.add({
     dbml = 'dbml',
     d2 = 'd2',
     ipynb = 'ipynb',
+    -- Neovim knows `.tsv` and `.jsonl` already, not these two spellings
+    psv = 'psv',
+    ndjson = 'jsonl',
     j2 = 'jinja',
     jinja = 'jinja',
     jinja2 = 'jinja',

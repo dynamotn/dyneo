@@ -23,6 +23,8 @@ describe('ftdetect', function()
     { '/p/schema.dbml', 'dbml' },
     { '/p/diagram.d2', 'd2' },
     { '/p/notebook.ipynb', 'ipynb' },
+    { '/p/table.psv', 'psv' },
+    { '/p/events.ndjson', 'jsonl' },
     { '/p/page.j2', 'jinja' },
     { '/p/page.jinja', 'jinja' },
     { '/p/page.jinja2', 'jinja' },
