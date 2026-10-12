@@ -47,6 +47,25 @@ return vim.list_contains(DyNeo.enabled_languages, 'python')
         opts = { handlers = { python = function() end } },
       },
       {
+        -- Virtual environments: picked once per project from uv, poetry,
+        -- conda, pyenv and the rest, then put back as a file of the project
+        -- opens. It sets `$VIRTUAL_ENV` and `$PATH` and restarts the Python
+        -- servers in it, so pyright, the debugger, the REPL and the tasks all
+        -- follow it.
+        'linux-cultist/venv-selector.nvim',
+        ft = language.filetypes,
+        cmd = 'VenvSelect',
+        keys = {
+          {
+            '<localleader>v',
+            '<cmd>VenvSelect<cr>',
+            ft = language.filetypes,
+            desc = 'Select Virtualenv',
+          },
+        },
+        opts = { options = { picker = 'snacks' } },
+      },
+      {
         -- REPL: the line, the selection or the `# %%` cell sent to IPython
         'Vigemus/iron.nvim',
         cmd = { 'IronRepl', 'IronRestart', 'IronFocus', 'IronHide' },

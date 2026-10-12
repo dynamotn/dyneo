@@ -815,6 +815,7 @@ Other keys
 `<localleader>s`       x      Send Selection to REPL  (ft: python)
 `<localleader>t`       n      CMake Build Type  (ft: cmake, c, cpp)
 `<localleader>v`       n      Toggle Table View  (ft: csv)
+`<localleader>v`       n      Select Virtualenv  (ft: python)
 `<localleader>x`       n      Xcodebuild actions  (ft: swift)
 `<localleader>xT`      n      Run this test class  (ft: swift)
 `<localleader>xb`      n      Build project  (ft: swift)

@@ -136,6 +136,8 @@ below follow the sections of `:help dyneo`.
   metadata, tensors, shapes and the parameter count.
 - **Cells & REPL** — `# %%` cells of a Python script moved through,
   selected and sent to IPython. `]j` `ij` `<localleader>c`
+- **Virtual environments** — picked once per project, from uv, poetry or
+  conda, for the server, the debugger and the REPL. `<localleader>v`
 
 ### 🔍 Project and writing — `<leader>p`
 

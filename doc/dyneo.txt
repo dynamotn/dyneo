@@ -876,6 +876,13 @@ VS Code and Spyder write them; a `.ipynb` notebook converts to one with
 cell, `ij` selects the code of a cell and `aj` the whole of it, marker
 included, line by line.
 
+`<localleader>v` picks the virtual environment of the project (venv-selector)
+among those of poetry, pipenv, pyenv, hatch, pixi and conda, and a `.venv` in
+the project, where uv puts its own.  It sets `$VIRTUAL_ENV` and `$PATH` and
+restarts the Python servers, so completion, the debugger, the REPL and the
+tasks all use it, and it comes back by itself the next time a file of the
+project opens.
+
 `<localleader>r` opens a REPL beside the script (iron.nvim): IPython when the
 environment has it, `python3` otherwise, taken from `$PATH` as it starts,
 so an activated virtual environment is the one used.  Then:
@@ -1163,6 +1170,7 @@ Data and machine learning (|dyneo-data|) ~
     `]j` `[j`          nxo    Next and previous `# %%` cell of a Python script
     `ij` `aj`          xo     The cell: its code, or all of it
     `<localleader>c`   n      Send the cell to the REPL and move to the next
+    `<localleader>v`   n      Pick the virtual environment of the project
 
 Project and forges (|dyneo-features|) ~
     `<leader>pp`       n      Project overview
