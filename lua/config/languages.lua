@@ -356,6 +356,10 @@ return {
       -- never the secret itself, so a leak is flagged before it is saved.
       -- Mason has no package; `tools.mason-registry.betterleaks` adds one.
       'betterleaks',
+      -- Only in a project with rules of its own (`.semgrep.yml`), see
+      -- `lua/lint/linters/semgrep.lua`. Installed by hand, being a large
+      -- Python package most projects never ask for (`:checkhealth dyneo`).
+      { 'semgrep', mason = { enabled = false } },
     },
     null_ls = {
       {
@@ -2089,6 +2093,13 @@ return {
       },
     },
     autopairs = html_comment_autopairs,
+  },
+  -- Malware signatures. No tree-sitter grammar is in nvim-treesitter; the
+  -- server compiles each rule on save and reports what does not.
+  yara = {
+    filetypes = { 'yara' },
+    parser = nil,
+    lsp_servers = { 'yls' },
   },
   yaml = {
     filetypes = reuse_filetypes.yaml.filetypes,

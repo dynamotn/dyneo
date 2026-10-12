@@ -74,6 +74,10 @@ below follow the sections of `:help dyneo`.
   update adds, flagged. `:DyQuarantine review`
 - **SBOM** — the editor as CycloneDX, checked against OSV, and the project's
   lockfiles too. `:DySbom osv` · `:DySbom lock`
+- **Scanner findings** — a SARIF report (semgrep, CodeQL, trivy…) in the
+  quickfix list; semgrep on a project's own rules, offline. `:DySarif`
+- **Detection rules and binaries** — YARA server, Sigma schema, hex editing.
+  `:DyHex`
 - **AI guard** — `.env`, keys and token-shaped text kept from every AI;
   masked on screen; every handover logged. `:DyAiGuardCheck` ·
   `:DyAiGuardLog`
@@ -83,7 +87,7 @@ below follow the sections of `:help dyneo`.
 
 ### 🏗 Infrastructure — `<leader>i`, `<localleader>`
 
-- **YAML schemas** detected: Kubernetes, CRDs, cloud-init. `<leader>cys`
+- **YAML schemas** detected: Kubernetes, CRDs, cloud-init, Sigma. `<leader>cys`
 - **Kubernetes** — the field under the cursor explained, diff, server dry
   run, apply, Helm and Kustomize render. `<localleader>k`
 - **Helm values** to templates and back, unused values marked.

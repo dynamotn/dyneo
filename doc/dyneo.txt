@@ -37,6 +37,9 @@ CONTENTS                                                      *dyneo-contents*
        5.2 SBOM and vulnerabilities ............................. |dyneo-sbom|
        5.3 Files kept from AI ............................... |dyneo-ai-guard|
        5.4 Encrypted files ................................. |dyneo-encrypted|
+       5.5 Scanner findings ................................ |dyneo-findings|
+       5.6 Detection rules ................................ |dyneo-detection|
+       5.7 Binary files .......................................... |dyneo-hex|
     6. Infrastructure .......................................... |dyneo-infra|
        6.1 YAML and JSON schemas .............................. |dyneo-schema|
        6.2 Kubernetes ........................................... |dyneo-kube|
@@ -498,6 +501,40 @@ background, and open the file again -- unless it was edited meanwhile, which
 they say rather than lose the edits.  Ansible Vault is left out: rekeying it
 asks for passwords Neovim cannot type.
 
+5.5 Scanner findings                                          *dyneo-findings*
+
+A scanner run in CI leaves a SARIF report: semgrep, CodeQL, gosec, trivy,
+checkov and bandit all write one.  `<leader>kf` (|:DySarif|) reads it -- the
+file given, the buffer when it is a `.sarif`, or one asked for -- and lists
+every result in the quickfix list, errors first, each with its tool and
+rule.  A relative path is read against the base the report gives it, or the
+git root of the report.  Nothing runs; a report over 64 MiB is not read.
+
+In a project with semgrep rules of its own -- `.semgrep.yml`,
+`.semgrep.yaml` or a `.semgrep/` folder at its root -- semgrep lints every
+buffer with those rules, and only those: never `--config auto` or a
+registry pack, and with metrics and the version check off, so no code or
+metadata leaves the machine.  A rule that does not parse is reported on the
+first line.  semgrep is a large Python package, so it is not installed on
+its own: `:MasonInstall semgrep`.
+
+5.6 Detection rules                                          *dyneo-detection*
+
+YARA rules (`.yar`, `.yara`) get the `yls` server, which compiles each rule
+on save and reports what does not compile.  A Sigma rule has no file name
+of its own, so a YAML buffer with a top-level `logsource:` and `detection:`
+is given the Sigma schema (|dyneo-schema|).  Snort and Suricata `.rules`
+files are Neovim's own `hog` filetype.
+
+5.7 Binary files                                                   *dyneo-hex*
+
+`<leader>kh` (|:DyHex|) opens the bytes of the buffer's file, as they are
+on disk, as an `xxd` dump in a buffer of its own; `:w` there writes the hex
+columns back as bytes over the file.  The offsets and the text column are
+ignored, so deleting a line deletes its bytes, and a line that is not hex
+pairs writes nothing.  It needs no `xxd`.  A buffer with unwritten edits, a
+sensitive file (|dyneo-ai-guard|) and a file over 16 MiB are refused.
+
 ------------------------------------------------------------------------------
 6. INFRASTRUCTURE                                                *dyneo-infra*
 
@@ -511,9 +548,10 @@ are under `<leader>i`.
 6.1 YAML and JSON schemas                                       *dyneo-schema*
 
 YAML schemas are detected from the content of the buffer -- Kubernetes
-manifests, CRDs, cloud-init.  `<leader>cys`, or |:DyYamlSchema|, opens a
-picker to set one for the buffer, `<leader>cym` to write it in as a
-modeline, and `<leader>cyr` hands the buffer back to detection.  Candidates
+manifests, CRDs, cloud-init, Sigma rules.  `<leader>cys`, or
+|:DyYamlSchema|, opens a picker to set one for the buffer, `<leader>cym` to
+write it in as a modeline, and `<leader>cyr` hands the buffer back to
+detection.  Candidates
 come from the public catalogs, from the project, from
 |DyNeo.yaml_schema_dirs|, and from any path typed in.
 
@@ -1330,6 +1368,15 @@ Supply chain and secrets ~
 :DyAiGuardLog[!]        What the AI integrations were handed, and refused,
                         this session, newest first; with [!], every session
                         the log file still holds.  See |dyneo-ai-guard|.
+
+                                                                    *:DySarif*
+:DySarif [{path}]       List the findings of the SARIF report {path}, of the
+                        buffer, or of one asked for, in the quickfix list.
+                        See |dyneo-findings|.
+
+                                                                      *:DyHex*
+:DyHex                  Edit the bytes of the buffer's file as a hex dump,
+                        written back on `:w`.  See |dyneo-hex|.
 
                                                             *:DyEncryptedDiff*
 :DyEncryptedDiff [{rev}]

@@ -235,9 +235,9 @@ describe('util.yaml_schema', function()
       end
     end
 
-    it('tries cloud-init before Kubernetes', function()
+    it('tries cloud-init, then Kubernetes, then Sigma', function()
       assert.are.same(
-        { 'cloud-init', 'Kubernetes' },
+        { 'cloud-init', 'Kubernetes', 'Sigma' },
         vim.tbl_map(function(m) return m.name end, yaml_schema.matchers)
       )
       assert.are.equal(CLOUD_INIT, matcher('cloud-init').uri)
@@ -258,6 +258,20 @@ describe('util.yaml_schema', function()
       assert.is_false(m.match({ '  apiVersion: v1', '  kind: Pod' }))
       assert.is_false(m.match({ 'apiVersion:', 'kind:' }))
       assert.is_false(m.match({}))
+    end)
+
+    it('knows a Sigma rule by a top-level logsource and detection', function()
+      local m = matcher('Sigma')
+      assert.is_true(m.match({
+        'title: Whoami',
+        'logsource:',
+        '  category: process_creation',
+        'detection:',
+        '  selection: {}',
+      }))
+      assert.is_false(m.match({ 'logsource:', '  detection: {}' }))
+      assert.is_false(m.match({ 'detection:' }))
+      assert.matches('sigma%-detection%-rule', m.uri)
     end)
   end)
 

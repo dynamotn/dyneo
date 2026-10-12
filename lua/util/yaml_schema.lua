@@ -20,6 +20,9 @@ local KUBERNETES_SCHEMAS =
   'https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master'
 local CLOUD_INIT =
   'https://raw.githubusercontent.com/canonical/cloud-init/main/cloudinit/config/schemas/schema-cloud-config-v1.json'
+-- The URL SchemaStore lists it under, so the picker names it the same
+local SIGMA =
+  'https://raw.githubusercontent.com/SigmaHQ/sigma-specification/main/json-schema/sigma-detection-rule-schema.json'
 -- The keyword yamlls expands into the schema of every built-in kind, and then
 -- narrows down per document by `apiVersion`/`kind`, CRDs included
 local KUBERNETES = 'kubernetes'
@@ -232,6 +235,20 @@ M.matchers = {
         api_version = api_version or line:match('^apiVersion:%s*%S') ~= nil
         kind = kind or line:match('^kind:%s*%S') ~= nil
         if api_version and kind then return true end
+      end
+      return false
+    end,
+  },
+  {
+    -- A detection rule: no fixed file name, but always these two mappings
+    name = 'Sigma',
+    uri = SIGMA,
+    match = function(lines)
+      local logsource, detection = false, false
+      for _, line in ipairs(lines) do
+        logsource = logsource or line:match('^logsource:') ~= nil
+        detection = detection or line:match('^detection:') ~= nil
+        if logsource and detection then return true end
       end
       return false
     end,

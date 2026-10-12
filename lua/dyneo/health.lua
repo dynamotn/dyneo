@@ -471,6 +471,7 @@ local function requirements()
     hdb = 'debugging Haskell (`cabal install haskell-debugger`)',
     oasdiff = '`:DyOpenApiDiff` (`:MasonInstall oasdiff`)',
     crane = '`:DyImagePin` (or `skopeo`)',
+    semgrep = 'linting a project with `.semgrep.yml` (`:MasonInstall semgrep`)',
     duckdb = '`:DyData` and opening a Parquet file (`:MasonInstall duckdb`)',
     tofu = '`:DyTfPlan` and `:DyTfState` (or `terraform`)',
     claude = '`:DyAi commit` (`DyNeo.ai.commit_command`) and claudecode.nvim',

@@ -17,6 +17,7 @@
 :DyHelmUnused	dyneo.txt	/*:DyHelmUnused*
 :DyHelmUsages	dyneo.txt	/*:DyHelmUsages*
 :DyHelmValue	dyneo.txt	/*:DyHelmValue*
+:DyHex	dyneo.txt	/*:DyHex*
 :DyImagePin	dyneo.txt	/*:DyImagePin*
 :DyImageScan	dyneo.txt	/*:DyImageScan*
 :DyInspect	dyneo.txt	/*:DyInspect*
@@ -31,6 +32,7 @@
 :DyRename	dyneo.txt	/*:DyRename*
 :DyRoot	dyneo.txt	/*:DyRoot*
 :DyRunbook	dyneo.txt	/*:DyRunbook*
+:DySarif	dyneo.txt	/*:DySarif*
 :DySbom	dyneo.txt	/*:DySbom*
 :DySonarlintDeactivateRule	dyneo.txt	/*:DySonarlintDeactivateRule*
 :DySonarlintToken	dyneo.txt	/*:DySonarlintToken*
@@ -74,12 +76,15 @@ dyneo-contents	dyneo.txt	/*dyneo-contents*
 dyneo-cron	dyneo.txt	/*dyneo-cron*
 dyneo-data	dyneo.txt	/*dyneo-data*
 dyneo-data-files	dyneo.txt	/*dyneo-data-files*
+dyneo-detection	dyneo.txt	/*dyneo-detection*
 dyneo-development	dyneo.txt	/*dyneo-development*
 dyneo-diagram	dyneo.txt	/*dyneo-diagram*
 dyneo-encrypted	dyneo.txt	/*dyneo-encrypted*
 dyneo-features	dyneo.txt	/*dyneo-features*
+dyneo-findings	dyneo.txt	/*dyneo-findings*
 dyneo-globals	dyneo.txt	/*dyneo-globals*
 dyneo-helm	dyneo.txt	/*dyneo-helm*
+dyneo-hex	dyneo.txt	/*dyneo-hex*
 dyneo-images	dyneo.txt	/*dyneo-images*
 dyneo-infra	dyneo.txt	/*dyneo-infra*
 dyneo-inspect	dyneo.txt	/*dyneo-inspect*

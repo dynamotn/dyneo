@@ -49,6 +49,8 @@ vim.filetype.add({
     jinja = 'jinja',
     jinja2 = 'jinja',
     djhtml = 'htmldjango',
+    -- A code scanner's report, see `:DySarif`
+    sarif = 'json',
     -- Markdown with JSX, which Neovim leaves without a filetype
     mdx = 'markdown.mdx',
   },

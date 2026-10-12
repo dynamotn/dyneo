@@ -319,6 +319,8 @@ one of the same keys in those buffers.
 `<leader>kL`           n      AI Handover Log
 `<leader>kR`           n      Recheck Buffer for AI
 `<leader>ka`           n      Why Kept From AI
+`<leader>kf`           n      Findings of a SARIF Report
+`<leader>kh`           n      Hex Dump of the File
 `<leader>ki`           n      Scan Images
 `<leader>kl`           n      Vulnerable Dependencies (OSV)
 `<leader>ko`           n      Vulnerable Plugins (OSV)
