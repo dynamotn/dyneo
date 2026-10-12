@@ -933,14 +933,16 @@ so an activated virtual environment is the one used.  Then:
 
 The REPL loads with the first of these keys, not with the file.
 
-A Quarto (`.qmd`) or R Markdown (`.Rmd`) document runs its chunks the same
-way (quarto-nvim): `<localleader>c` sends the `{python}` or `{r}` chunk under
-the cursor to the REPL of its language, without its fences, `<localleader>a`
-the chunks above it and `<localleader>A` all of them, `<localleader>s` the
-line or the selection.  The language server of each chunk's language
+A Quarto (`.qmd`) document runs its chunks the same way (quarto-nvim):
+`<localleader>c` sends the `{python}` or `{r}` chunk under the cursor to the
+REPL of its language, without its fences, `<localleader>a` the chunks above
+it and `<localleader>A` all of them, `<localleader>s` the line or the
+selection.  The language server of each chunk's language
 answers inside it, through otter, so it runs where otter is enabled
 (|DyNeo.enabled_plugins|).  `<localleader>p` previews the document with
-`quarto preview`.
+`quarto preview`.  An R Markdown (`.Rmd`) document has the language servers
+of its chunks too, and runs them with R.nvim's own keys where R is
+installed; R.nvim leaves `.qmd` documents to quarto-nvim.
 
 8.4 Model files                                                  *dyneo-model*
 
