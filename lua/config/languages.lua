@@ -1,6 +1,17 @@
+--- One language, framework or tool: everything installed and set up for its
+--- filetypes. An entry is keyed by its name, which `DyNeo.enabled_languages`
+--- and `DyNeo.bundle_languages` list. Two keys are pseudo-languages, never
+--- filetypes: `['*']` holds what serves every buffer (its tools come before a
+--- language's own, its dial augends join every group), and `['_']` what
+--- serves a filetype no language claims.
 ---@class DyLangSpec
----@field filetypes string[]
----@field parser string|DyParserSpec
+---@field filetypes string[] The filetypes of the language, each claimed by
+--- this language alone. Opening one installs everything below, once
+--- (`util.lazy_install`). A dialect that reuses another language's parser
+--- (`arduino` on `cpp`) lists only its own filetypes.
+---@field parser string|DyParserSpec The nvim-treesitter parser, registered
+--- for every filetype of the language: a name nvim-treesitter knows, or a
+--- `DyParserSpec` for one it does not know or gets from elsewhere.
 ---@field injected_parsers? string[] Parsers this language's injection
 --- queries name outright, nvim-treesitter's as well as the ones in
 --- `queries/` and `after/queries/`. An injection whose parser is missing is
@@ -12,31 +23,49 @@
 --- differ. `injected` names the scratch file it hands a formatter after the
 --- language, and a formatter that switches on the file name (`prettier`,
 --- `terraform fmt`, ...) needs the extension it would see on disk.
----@field lsp_servers? (string|DyLspSpec)[]
----@field linters? (string|DyLinterSpec)[]
----@field formatters? (string|DyFormatterSpec)[]
----@field null_ls? DyNullLsSpec[]
----@field dap? (string|DyDapSpec)[]
----@field test? string[]
+---@field lsp_servers? (string|DyLspSpec)[] Language servers, by their
+--- `vim.lsp.config` name; Mason installs each through mason-lspconfig.
+---@field linters? (string|DyLinterSpec)[] nvim-lint linters, by name.
+---@field formatters? (string|DyFormatterSpec)[] conform formatters, by name,
+--- run in this order. None leaves formatting to the language server.
+---@field null_ls? DyNullLsSpec[] none-ls sources: code actions, completion,
+--- diagnostics or hover that no server or linter gives.
+---@field dap? (string|DyDapSpec)[] Debug adapters, by their nvim-dap name;
+--- the configurations themselves live in `lua/plugins/lang/<language>.lua`.
+---@field test? string[] The neotest adapters of the language, set up in
+--- `lua/plugins/lang/<language>.lua`. `vim-test` among them lets vim-test run
+--- the language's files; every other filetype is kept away from it.
 ---@field neogen? string The annotation convention `<leader>cn` writes. One
 --- `util.neogen` builds serves every filetype of the language; one of
 --- neogen's own configurations only the filetypes neogen has none for, such
 --- as `typescript.tsx`. A language neogen knows needs no entry.
----@field dial? fun(augend: Augend): Augend[]
+---@field dial? fun(augend: Augend): Augend[] Extra `<C-a>`/`<C-x>` cycles,
+--- given `dial.augend`. They form the dial group of the language's name,
+--- after the ones of `['*']`.
 ---@field autopairs? fun(filetypes: string[], rule: Rule, cond: CondOpts, ts_cond: table): Rule[]
----@field endwise? boolean
----@field otter? boolean
+--- Extra nvim-autopairs rules, given the language's filetypes and
+--- nvim-autopairs' `rule`, `conds` and `ts-conds` modules.
+---@field endwise? boolean Close a block with its `end`, `fi` or `done` as
+--- it is opened (nvim-treesitter-endwise); the language's grammar must have
+--- endwise queries.
+---@field otter? boolean Give code embedded in the language's files -- a
+--- Markdown fence, say -- the language servers of its own language
+--- (otter.nvim), where `DyNeo.enabled_plugins.otter` allows it.
 
+--- A parser nvim-treesitter does not know, or one taken from another
+--- repository than its own; set on `User TSUpdate`, before any install.
 ---@class DyParserSpec
----@field [1] string
+---@field [1] string The parser name, as `vim.treesitter.language` knows it
 ---@field install_info DyParserInstallSpec
 
+--- Where the parser is built from, handed to nvim-treesitter as it is
 ---@class DyParserInstallSpec:InstallInfo
----@field url string
----@field branch? string
+---@field url string The repository of the grammar
+---@field branch? string A branch other than the repository's default
 
+--- A server with more to say than its name
 ---@class DyLspSpec
----@field [1] string
+---@field [1] string The `vim.lsp.config` name of the server
 ---@field enabled? fun(bufnr: integer): boolean Asked for each buffer the
 --- server would attach to, so the answer can depend on where that buffer
 --- lives rather than on the directory Neovim happened to start in.
@@ -72,34 +101,41 @@
 --- tool named below, so a name that drifts is caught before it goes silent.
 
 ---@class DyLinterSpec
----@field [1] string
----@field opts? table
----@field command? string
+---@field [1] string The nvim-lint name of the linter
+---@field opts? table Fields laid over nvim-lint's linter table (`args`,
+--- `stdin`, `parser`, ...), for every language that names the linter
+---@field command? string The binary, when it is not named `[1]`
 ---@field mason? DyMasonSpec
 
 ---@class DyFormatterSpec
----@field [1] string
+---@field [1] string The conform name of the formatter
 ---@field filetypes? string[] Only these filetypes of the language
----@field opts? table
----@field command? string
+---@field opts? table conform's options of the formatter (`prepend_args`,
+--- `condition`, ...). Conform keys them by name alone, so a formatter two
+--- languages share has one definition, which reads the buffer if it must.
+---@field command? string The binary, when it is not named `[1]`
 ---@field mason? DyMasonSpec
 
 ---@class DyNullLsSpec
----@field [1] string
----@field type string
----@field command string
----@field custom? boolean
+---@field [1] string The name of the source
+---@field type 'code_actions'|'completion'|'diagnostics'|'formatting'|'hover'
+--- The none-ls method, the folder the source lives in
+---@field command string The binary the source runs
+---@field custom? boolean The source is `lua/tools/<type>/<name>.lua` of
+--- this repository rather than a none-ls builtin
 ---@field remote? boolean Sends the buffer off the machine: never a sensitive one
 ---@field mason? DyMasonSpec
 
 --- A debug adapter mason-nvim-dap does not map to a package, see `util.dap`
 ---@class DyDapSpec
----@field [1] string
+---@field [1] string The nvim-dap name of the adapter
 ---@field mason DyMasonSpec
 
+--- How Mason installs a tool, when its package is not named after the tool
 ---@class DyMasonSpec
----@field enabled? boolean
----@field package string
+---@field enabled? boolean `false` for a tool nothing has to install
+---@field package string The Mason package, in its registry or in
+--- `tools.mason-registry`
 
 ---@type table<string, {filetypes: string[]}>
 local reuse_filetypes = {
