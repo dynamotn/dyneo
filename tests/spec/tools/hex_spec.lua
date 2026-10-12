@@ -5,6 +5,7 @@ describe('tools.hex', function()
 
   before_each(function()
     h.unload('tools.hex')
+    dofile(h.root .. '/plugin/hex.lua')
     hex = require('tools.hex')
     notes = {}
     restore = h.stub(vim, 'notify', function(msg) table.insert(notes, msg) end)
@@ -45,22 +46,48 @@ describe('tools.hex', function()
       'ignores the offsets and the text column',
       function()
         assert.are.equal(
-          'AB',
-          hex.parse({ '00000099: 41 42  zz  zz', 'deadbeef: ' })
+          'ABC',
+          hex.parse({ '00000099: 41 42  zz', 'deadbeef: ', '43' })
         )
       end
     )
 
     it(
-      'takes bare hex with no offset',
-      function() assert.are.equal('\1\2', hex.parse({ '0102' })) end
+      'takes bare hex with no offset, in either case',
+      function() assert.are.equal('\1\2\171', hex.parse({ '0102 aB' })) end
+    )
+
+    it(
+      'takes a text column that starts with a byte shown as a space',
+      function()
+        assert.are.equal(' a', hex.parse(hex.dump(' a')))
+        assert.are.equal('  ', hex.parse(hex.dump('  ')))
+      end
     )
 
     it('refuses a line that is not hex pairs', function()
-      local bytes, err = hex.parse({ '00000000: 4142', '00000002: 4g' })
+      local bytes, err = hex.parse({ '00000000: 4142  AB', '00000002: 4g  ?' })
       assert.is_nil(bytes)
       assert.matches('line 2', err)
-      assert.is_nil((hex.parse({ '00000000: 414' })))
+      assert.is_nil((hex.parse({ '414' })))
+    end)
+
+    it('refuses a line whose text column does not match its bytes', function()
+      local lines = hex.dump('abcdefghijklmnopqr')
+      local function refused(line)
+        local bytes, err = hex.parse({ lines[2], line })
+        assert.is_nil(bytes)
+        assert.matches('line 2', err)
+      end
+      -- one space before a text column of hex digits
+      refused('00000000: 6162 6364  6566 abcdef')
+      refused('00000000: 6162 6364 abcd')
+      -- two lines joined with `J`
+      refused(lines[1] .. ' ' .. lines[2])
+      -- two spaces inside the hex columns
+      refused('00000000: 6162  6364 6566  abcdef')
+      -- an offset with hex and no text column
+      refused('00000000: 4344')
     end)
   end)
 
@@ -94,7 +121,7 @@ describe('tools.hex', function()
       assert.are.equal('dyhex://' .. path, vim.api.nvim_buf_get_name(bufnr))
       assert.are.equal('xxd', vim.bo.filetype)
       assert.are.equal('acwrite', vim.bo.buftype)
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { '00000000: 4344' })
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { '00000000: 4344  CD' })
       vim.cmd.write()
       assert.are.equal('CD', read(path))
       assert.is_false(vim.bo[bufnr].modified)
@@ -115,13 +142,104 @@ describe('tools.hex', function()
       vim.cmd.edit(path)
       hex.open()
       local first = vim.api.nvim_get_current_buf()
+      local function handlers()
+        return #vim.api.nvim_get_autocmds({ group = 'dy_hex', buffer = first })
+      end
+      local before = handlers()
       vim.cmd.edit(path)
       hex.open()
+      vim.cmd('edit!')
       assert.are.equal(first, vim.api.nvim_get_current_buf())
-      assert.are.equal(1, #vim.api.nvim_get_autocmds({
-        group = 'dy_hex',
-        buffer = first,
-      }))
+      assert.are.equal(before, handlers())
+    end)
+
+    it('does not undo the dump into an empty buffer', function()
+      local path = file('u.bin', 'AB')
+      vim.cmd.edit(path)
+      hex.open()
+      local dump = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+      vim.cmd('silent! undo')
+      assert.are.same(dump, vim.api.nvim_buf_get_lines(0, 0, -1, false))
+      vim.cmd.write()
+      assert.are.equal('AB', read(path))
+    end)
+
+    it('dumps the file again on `:e!`', function()
+      local path = file('r.bin', 'AB')
+      vim.cmd.edit(path)
+      hex.open()
+      local dump = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, { '41' })
+      vim.cmd('edit!')
+      assert.are.same(dump, vim.api.nvim_buf_get_lines(0, 0, -1, false))
+      assert.is_false(vim.bo.modified)
+      vim.cmd.write()
+      assert.are.equal('AB', read(path))
+    end)
+
+    it('writes only the whole dump over its own file', function()
+      local path = file('w.bin', 'AB')
+      vim.cmd.edit(path)
+      hex.open()
+      local bufnr = vim.api.nvim_get_current_buf()
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, { '43', '44' })
+      pcall(vim.cmd.write, dir .. '/other.bin')
+      assert.matches('only over its own file', notes[#notes])
+      pcall(vim.cmd, '1write!')
+      assert.matches('Only the whole dump', notes[#notes])
+      pcall(vim.cmd.saveas, dir .. '/saved.bin')
+      assert.matches('only over its own file', notes[#notes])
+      assert.are.equal('AB', read(path))
+      assert.is_nil(vim.uv.fs_stat(dir .. '/other.bin'))
+      assert.is_true(vim.bo[bufnr].modified)
+    end)
+
+    it('tells apart files whose names start alike', function()
+      local short = file('p.bin', 'A')
+      local long = file('p.bin.bak', 'B')
+      vim.cmd.edit(long)
+      hex.open()
+      local first = vim.api.nvim_get_current_buf()
+      vim.cmd.edit(short)
+      hex.open()
+      assert.are_not.equal(first, vim.api.nvim_get_current_buf())
+      assert.are.equal('dyhex://' .. short, vim.api.nvim_buf_get_name(0))
+    end)
+
+    it('refuses to write over a file changed on disk', function()
+      local path = file('s.bin', 'AB')
+      vim.cmd.edit(path)
+      hex.open()
+      file('s.bin', 'changed')
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, { '43' })
+      vim.cmd.write()
+      assert.are.equal('changed', read(path))
+      assert.matches('changed on disk', notes[#notes])
+      assert.is_true(vim.bo.modified)
+    end)
+
+    it('keeps the buffer modified when the file cannot be written', function()
+      local path = file('ro.bin', 'AB')
+      vim.cmd.edit(path)
+      hex.open()
+      vim.uv.fs_chmod(path, tonumber('444', 8))
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, { '43' })
+      vim.cmd.write()
+      assert.are.equal('AB', read(path))
+      assert.matches('nothing written', notes[#notes])
+      assert.is_true(vim.bo.modified)
+    end)
+
+    it('says so of a file it cannot read', function()
+      local path = file('x.bin', 'AB')
+      vim.cmd.edit(path)
+      vim.uv.fs_chmod(path, 0)
+      hex.open()
+      assert.matches('denied', notes[#notes])
+      vim.cmd.write()
+      assert.matches('not read', notes[#notes])
+      vim.uv.fs_chmod(path, tonumber('644', 8))
+      assert.are.equal('AB', read(path))
     end)
 
     it('refuses a buffer with unwritten edits', function()
