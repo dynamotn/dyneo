@@ -345,6 +345,11 @@ one of the same keys in those buffers.
 `<leader>pp`           n      Project Overview
 
 ==============================================================================
+<leader>pA  architecture
+
+`<leader>pAn`          n      Service Levels (NFR)
+
+==============================================================================
 <leader>pd  devcontainer
 
 `<leader>pda`          n      Attach to Devcontainer

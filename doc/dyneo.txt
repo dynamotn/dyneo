@@ -70,6 +70,7 @@ CONTENTS                                                      *dyneo-contents*
        9.4 Diagrams .......................................... |dyneo-diagram|
        9.5 Integrations ................................. |dyneo-integrations|
        9.6 AI actions ............................................ |dyneo-ai|
+       9.7 Service levels ........................................ |dyneo-nfr|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -1243,6 +1244,21 @@ same; `{ "local_only": false }` lets a folder inside such a project out
 again.  Claude Code and the CLIs still read files themselves when started
 inside the project: the guard covers what Neovim hands them.
 
+9.7 Service levels                                                 *dyneo-nfr*
+
+`<leader>pAn` (|:DyNfr|) works out what a system promises from the parts a
+request goes through, one after the other.  Each term is one part: `99.9` a
+component up 99.9% of the time, `2x99.95` two redundant copies of one of
+which either is enough, `rps=200` the load and `latency=150ms` (or `p99=`,
+in `us`, `ms` or `s`; `ms` when no unit is given) how long a request takes: >vim
+
+    :DyNfr 99.95 2x99.9 99.99 rps=200 latency=150ms
+<
+reads out the availability of the whole, the downtime it allows a week, a
+30-day month and a year, the requests it may fail a month (its error
+budget), and how many are in flight at once by Little's law.  Without terms
+it asks for them.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -1583,6 +1599,10 @@ Project ~
 :DyAdr supersede [{title}]
                         Write a record replacing the one open, linking both.
                         See |dyneo-adr|.
+
+                                                                      *:DyNfr*
+:DyNfr [{term}...]      Availability, downtime, error budget and requests in
+                        flight of a chain of components.  See |dyneo-nfr|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose

@@ -21,6 +21,7 @@ return {
           { '<leader>i', group = 'infra' },
           { '<leader>D', group = 'data' },
           { '<leader>k', group = 'security' },
+          { '<leader>pA', group = 'architecture' },
           { '<leader>pj', group = 'jira' },
           { '<leader>pr', group = 'decision records' },
           { '<leader>q', group = 'quit/session' },

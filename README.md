@@ -167,6 +167,11 @@ below follow the sections of `:help dyneo`.
   a review of the staged diff, a pull request, why a CI job failed; projects
   that keep AI local. `<leader>ai` · `:DyAi commit` · `:DyAi pr`
 
+### 🏛 Architecture — `<leader>pA`
+
+- **Service levels** — the availability of a chain of components, its
+  downtime, error budget and requests in flight. `:DyNfr 99.9 2x99.95 rps=200`
+
 <details>
 <summary><b>42 languages · 13 frameworks · 38 tools</b> —
 131 filetypes in all</summary>
