@@ -84,7 +84,7 @@ describe('util.yaml_schema', function()
     return vim.fs.joinpath(
       dir,
       'cache',
-      'nvim',
+      vim.env.NVIM_APPNAME or 'nvim',
       'yaml-schema',
       'crds-catalog.json'
     )

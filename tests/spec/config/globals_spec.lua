@@ -11,7 +11,10 @@ describe('config.globals', function()
     )
     assert.is_false(DyNeo.is_gentoo)
     assert.is_false(DyNeo.used_full_plugins)
-    assert.are.equal('latest', DyNeo.plugin_channel)
+    assert.are.equal(
+      vim.fn.has('nvim-0.13') == 1 and 'latest' or 'stable',
+      DyNeo.plugin_channel
+    )
     assert.are.same({
       obsidian = false,
       leetcode = false,
