@@ -417,6 +417,25 @@ describe('util.neogen', function()
         '}',
       },
     },
+    {
+      'sh',
+      'reads the parameters a function expands, not a $1 of awk',
+      lines = { 'foo() {', [[  awk '{print $1}' "${2:-x}" "$@"]], '}' },
+      cursor = { 2, 2 },
+      expect = {
+        '#######################################',
+        '# @description ',
+        '# @arg __SHDOC_ARG2@ string ',
+        '# @arg __SHDOC_ARG@@ string ',
+        '# @stdout ',
+        '# @exitcode 0 ',
+        '# @exitcode 1 ',
+        '#######################################',
+        'foo() {',
+        [[  awk '{print $1}' "${2:-x}" "$@"]],
+        '}',
+      },
+    },
   })
 
   for _, case in ipairs(cases) do

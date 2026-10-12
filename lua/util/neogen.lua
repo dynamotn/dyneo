@@ -526,6 +526,27 @@ local function extract_expect_args(node)
   return args, declared
 end
 
+--- The nodes of bash and zsh that expand a parameter: `$1`, `${1}`, `${1:-x}`
+local SHELL_EXPANSIONS = { 'simple_expansion', 'expansion', 'variable_ref' }
+
+--- Add the parameters `node` and its descendants expand to `found`, by name.
+--- A quoted string with no expansion of its own -- the `$1` of an awk program
+--- in single quotes -- holds no node to find.
+---@param node TSNode
+---@param found table<string, true>
+local function expanded(node, found)
+  for child in node:iter_children() do
+    local kind = child:type()
+    if
+      (kind == 'variable_name' or kind == 'special_variable_name')
+      and inside(child, SHELL_EXPANSIONS)
+    then
+      found[text(child)] = true
+    end
+    expanded(child, found)
+  end
+end
+
 --- Collect the positional parameters a function body actually reads, which is
 --- how a script that does not source dybatpho takes its arguments. `$1` and
 --- `${1}` are the same parameter, and `$@` is reported last, the way it is
@@ -533,21 +554,14 @@ end
 --- @param node TSNode The `function_definition` node
 --- @return table positionals One entry per parameter, in numeric order
 local function extract_positionals(node)
-  local body = nil
-  for child in node:iter_children() do
-    if child:type() == 'compound_statement' then body = child end
+  local found = {}
+  for _, body in ipairs(node:field('body')) do
+    expanded(body, found)
   end
-  if not body then return {} end
 
-  local source = text(body)
-  local seen, order = {}, {}
-  for _, pattern in ipairs({ '%$([0-9]+)', '%${([0-9]+)}' }) do
-    for token in source:gmatch(pattern) do
-      if not seen[token] then
-        seen[token] = true
-        table.insert(order, tonumber(token))
-      end
-    end
+  local order = {}
+  for name in pairs(found) do
+    if name:match('^%d+$') then table.insert(order, tonumber(name)) end
   end
   table.sort(order)
 
@@ -555,9 +569,7 @@ local function extract_positionals(node)
   for _, number in ipairs(order) do
     table.insert(positionals, { positional = { tostring(number) } })
   end
-  if source:find('%$@') or source:find('%${@}') then
-    table.insert(positionals, { positional = { '@' } })
-  end
+  if found['@'] then table.insert(positionals, { positional = { '@' } }) end
   return positionals
 end
 
