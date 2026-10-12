@@ -63,9 +63,13 @@ end
 --- changes. `ancestors` holds the aged ancestor of a tip and the cutoff it was
 --- found for; it is reused for `M.ANCESTOR_REUSE` seconds of a moving cutoff,
 --- which can only hold a commit back longer, never let one through early.
+--- `tips` holds, per plugin directory and oldest first, each target lazy.nvim
+--- resolved and when this machine first saw it: unlike a commit date, that
+--- is not up to whoever pushed the commit.
 ---@class DyQuarantineCache
 ---@field times table<string, integer>
 ---@field ancestors table<string, { commit: string, cutoff: integer }>
+---@field tips table<string, { commit: string, at: integer }[]>
 
 ---@type DyQuarantineCache?
 local cache
@@ -86,7 +90,7 @@ end
 ---@return DyQuarantineCache
 local function load_cache()
   if cache then return cache end
-  cache = { times = {}, ancestors = {} }
+  cache = { times = {}, ancestors = {}, tips = {} }
   local file = io.open(M.cache_file(), 'r')
   if not file then return cache end
   local ok, decoded = pcall(vim.json.decode, file:read('*a'))
@@ -106,6 +110,18 @@ local function load_cache()
       and type(found.cutoff) == 'number'
     then
       cache.ancestors[hash] = found
+    end
+  end
+  for dir, tips in pairs(type(decoded.tips) == 'table' and decoded.tips or {}) do
+    if type(tips) == 'table' then
+      cache.tips[dir] = vim.tbl_filter(
+        function(tip)
+          return type(tip) == 'table'
+            and type(tip.commit) == 'string'
+            and type(tip.at) == 'number'
+        end,
+        tips
+      )
     end
   end
   return cache
@@ -137,18 +153,18 @@ end
 ---@param dir string
 ---@param rev string
 ---@return integer?
+---@return boolean ran Whether git could answer
 local function committed_at(dir, rev)
   local hash = full_hash(rev)
   local times = load_cache().times
-  if hash and times[hash] then return times[hash] end
-  -- Parenthesised: `git` hands back two values, and `tonumber` reads the
-  -- second as a base.
-  local time = tonumber((git(dir, { 'log', '-1', '--format=%ct', rev })))
+  if hash and times[hash] then return times[hash], true end
+  local out, ran = git(dir, { 'log', '-1', '--format=%ct', rev })
+  local time = tonumber(out)
   if hash and time then
     times[hash] = time
     save_cache()
   end
-  return time
+  return time, ran
 end
 
 --- Whether `rev` has been in the repository for longer than the window
@@ -156,9 +172,10 @@ end
 ---@param rev string
 ---@param now integer
 ---@return boolean
+---@return boolean ran Whether git could answer
 local function aged(dir, rev, now)
-  local committed = committed_at(dir, rev)
-  return committed ~= nil and os.difftime(now, committed) >= M.window()
+  local committed, ran = committed_at(dir, rev)
+  return committed ~= nil and os.difftime(now, committed) >= M.window(), ran
 end
 
 --- The newest ancestor of `rev` that is out of quarantine
@@ -169,6 +186,7 @@ end
 ---@param rev string
 ---@param now integer
 ---@return string?
+---@return boolean ran Whether git could answer
 local function aged_ancestor(dir, rev, now)
   local cutoff = now - M.window()
   local hash = full_hash(rev)
@@ -179,9 +197,9 @@ local function aged_ancestor(dir, rev, now)
     and cutoff >= found.cutoff
     and cutoff - found.cutoff < M.ANCESTOR_REUSE
   then
-    return found.commit
+    return found.commit, true
   end
-  local commit = git(dir, {
+  local commit, ran = git(dir, {
     'log',
     '-1',
     -- The main line only: a branch merged today has commits of last week,
@@ -195,7 +213,59 @@ local function aged_ancestor(dir, rev, now)
     ancestors[hash] = { commit = commit, cutoff = cutoff }
     save_cache()
   end
-  return commit
+  return commit, ran
+end
+
+--- Note `commit` as the tip of `dir` at `now`, and hand back the newest tip
+--- first seen at least a window ago: nil until this machine has watched the
+--- plugin for that long
+---@param dir string
+---@param commit string
+---@param now integer
+---@return { commit: string, at: integer }?
+local function watched(dir, commit, now)
+  local tips = load_cache().tips
+  local list = tips[dir] or {}
+  tips[dir] = list
+  if not list[#list] or list[#list].commit ~= commit then
+    table.insert(list, { commit = commit, at = now })
+    save_cache()
+  end
+  local cutoff = now - M.window()
+  local newest = 0
+  for index, tip in ipairs(list) do
+    if tip.at <= cutoff then newest = index end
+  end
+  -- What came before the newest aged tip no longer decides anything
+  if newest > 1 then
+    for _ = 1, newest - 1 do
+      table.remove(list, 1)
+    end
+    save_cache()
+  end
+  return newest > 0 and list[1] or nil
+end
+
+--- Whether a failing git was reported this session
+local warned = false
+
+--- What to check out when git cannot say how old `target` is: the commit
+--- already there, since a check that cannot run must not let anything
+--- through. A plugin not cloned yet has nothing to stay on.
+---@param plugin LazyPlugin
+---@param target GitInfo
+---@param quiet? boolean Nothing failed: there is just nothing to move to
+---@return GitInfo
+local function stay(plugin, target, quiet)
+  if not quiet and not warned then
+    warned = true
+    notify(
+      ('git failed in `%s`: plugins stay where they are'):format(plugin.dir),
+      vim.log.levels.WARN
+    )
+  end
+  local ok, Git = pcall(require, 'lazy.manage.git')
+  return ok and Git.info(plugin.dir) or target
 end
 
 --- The target lazy.nvim should check out instead of `target`
@@ -216,7 +286,28 @@ function M.target(plugin, target, releases, now)
   if plugin._ and plugin._.is_local then return target end
 
   now = now or os.time()
-  if aged(plugin.dir, target.commit, now) then return target end
+  -- A commit date says nothing a pusher cannot set: a target this machine
+  -- first saw inside the window gives way to the newest one it saw before
+  local seen = watched(plugin.dir, target.commit, now)
+  if seen and seen.commit ~= target.commit then
+    if not target.tag then
+      target = vim.tbl_extend('force', target, { commit = seen.commit })
+    else
+      local release = vim.iter(releases and releases() or {}):find(
+        function(release) return release.commit == seen.commit end
+      )
+      if not release then return stay(plugin, target, true) end
+      target = vim.tbl_extend('force', target, {
+        tag = release.tag,
+        version = release.version,
+        commit = release.commit,
+      })
+    end
+  end
+
+  local is_aged, ran = aged(plugin.dir, target.commit, now)
+  if not ran then return stay(plugin, target) end
+  if is_aged then return target end
 
   if target.tag then
     for _, release in ipairs(releases and releases() or {}) do
@@ -231,7 +322,8 @@ function M.target(plugin, target, releases, now)
     return target
   end
 
-  local commit = aged_ancestor(plugin.dir, target.commit, now)
+  local commit, walked = aged_ancestor(plugin.dir, target.commit, now)
+  if not walked then return stay(plugin, target) end
   if not commit then return target end
   return vim.tbl_extend('force', target, { commit = commit })
 end
@@ -374,10 +466,13 @@ function M.pending(now)
     local state = plugin._ or {}
     if state.installed and not state.is_local then
       local ok, target = pcall(resolve, plugin)
+      -- Read off `.git` by lazy.nvim: a process per plugin would freeze
+      -- the editor before the review opens
       local head = ok
         and target
         and target.commit
-        and git(plugin.dir, { 'rev-parse', 'HEAD' })
+        and require('lazy.manage.git').info(plugin.dir)
+      head = head and head.commit
       if head and head ~= target.commit then
         local held = M.target(plugin, target, releases_of(plugin), now)
         local committed = committed_at(plugin.dir, target.commit) or now
