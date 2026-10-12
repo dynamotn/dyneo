@@ -61,6 +61,19 @@ return vim.list_contains(DyNeo.enabled_languages, 'lua')
         },
       },
       {
+        -- Test adapter, finding a project's `tests/minimal_init.lua` itself
+        'nvim-neotest/neotest',
+        dependencies = {
+          'nvim-neotest/neotest-plenary',
+          ft = language.filetypes,
+        },
+        opts = {
+          adapters = {
+            ['neotest-plenary'] = {},
+          },
+        },
+      },
+      {
         -- Debug adapter
         'jbyuki/one-small-step-for-vimkind',
         keys = {

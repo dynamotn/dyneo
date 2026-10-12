@@ -631,6 +631,7 @@ return {
     -- `cljstyle` and `zprint` would do as well; `cljfmt` is the one
     -- `clojure_lsp` itself runs, so the server and the formatter agree.
     formatters = { 'cljfmt' },
+    test = { 'vim-test' },
   },
   css = {
     filetypes = { 'css', 'less' },
@@ -661,6 +662,7 @@ return {
       },
     },
     lsp_servers = { 'cucumber_language_server' },
+    test = { 'vim-test' },
   },
   dart = {
     filetypes = { 'dart' },
@@ -670,6 +672,7 @@ return {
     formatters = {
       { 'dart_format', command = 'dart', mason = { package = 'dart' } },
     },
+    test = { 'neotest-dart' },
     autopairs = block_comment_autopairs,
   },
   elixir = {
@@ -682,6 +685,7 @@ return {
     -- dytoy installs.
     linters = { { 'credo', command = 'mix', mason = { package = 'elixir' } } },
     formatters = { { 'mix', command = 'mix', mason = { package = 'elixir' } } },
+    test = { 'neotest-elixir' },
     endwise = true,
   },
   erlang = { -- See `elixir`
@@ -692,6 +696,7 @@ return {
     -- is not in lspconfig.
     lsp_servers = { 'elp' },
     formatters = { { 'erlfmt', mason = { package = 'erlfmt' } } },
+    test = { 'vim-test' },
     autopairs = function(filetypes, rule)
       return {
         -- Close a binary
@@ -737,6 +742,7 @@ return {
     -- the `gleam` binary is both the server and the formatter
     lsp_servers = { 'gleam', 'harper_ls' },
     formatters = { { 'gleam', mason = { package = 'gleam' } } },
+    test = { 'vim-test' },
   },
   go = {
     filetypes = { 'go' },
@@ -803,6 +809,7 @@ return {
     -- `fourmolu` over `ormolu`: same formatter, but it reads a project's
     -- `fourmolu.yaml` instead of imposing one style.
     formatters = { 'fourmolu' },
+    test = { 'neotest-haskell' },
     autopairs = function(filetypes, rule, cond)
       return {
         -- Add spaces in a block comment
@@ -904,6 +911,7 @@ return {
     linters = { 'ktlint' },
     formatters = { 'ktfmt' },
     dap = { 'kotlin' },
+    test = { 'vim-test' },
     autopairs = block_comment_autopairs,
   },
   latex = {
@@ -968,6 +976,8 @@ return {
     injected_parsers = { 'bash', 'luadoc', 'luap', 'printf' },
     lsp_servers = { 'lua_ls', 'harper_ls' },
     formatters = { 'stylua' },
+    -- Neovim plugins and configs test with plenary-busted, not plain busted
+    test = { 'neotest-plenary' },
     dial = function(augend)
       return {
         augend.constant.new({
@@ -1102,6 +1112,7 @@ return {
     -- `styler` is an R package and needs an R session to run; `air` is a
     -- standalone binary, so Mason can install it like any other tool.
     formatters = { 'air' },
+    test = { 'neotest-testthat' },
   },
   rails = { -- See `ruby` and `html`
     filetypes = { 'eruby' },
@@ -1184,6 +1195,7 @@ return {
     -- `metals` bootstraps itself.
     lsp_servers = { 'metals', 'harper_ls' },
     formatters = { { 'scalafmt', mason = { package = 'scalafmt' } } },
+    test = { 'vim-test' },
     autopairs = block_comment_autopairs,
   },
   snakemake = {
@@ -1251,6 +1263,7 @@ return {
     lsp_servers = { 'sourcekit', 'harper_ls' },
     linters = { 'swiftlint' },
     formatters = { 'swiftformat' },
+    test = { 'vim-test' },
     autopairs = block_comment_autopairs,
   },
   templ = { -- See `go` and `html`
@@ -1608,6 +1621,7 @@ return {
     lsp_servers = { 'groovyls', 'harper_ls' },
     linters = { 'npm-groovy-lint' },
     formatters = { 'npm-groovy-lint' },
+    test = { 'vim-test' },
   },
   helm = { -- See `gotmpl`
     filetypes = { 'helm' },
