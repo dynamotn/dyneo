@@ -71,6 +71,7 @@ CONTENTS                                                      *dyneo-contents*
        9.5 Integrations ................................. |dyneo-integrations|
        9.6 AI actions ............................................ |dyneo-ai|
        9.7 Service levels ........................................ |dyneo-nfr|
+       9.8 Network ranges ....................................... |dyneo-cidr|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -1259,6 +1260,24 @@ reads out the availability of the whole, the downtime it allows a week, a
 budget), and how many are in flight at once by Little's law.  Without terms
 it asks for them.
 
+9.8 Network ranges                                                *dyneo-cidr*
+
+`<leader>pAc` (|:DyCidr|) reads out the IPv4 range under the cursor: its
+network address and mask, its first and last host and how many there are, its
+broadcast address, and whether the address written is the network's.
+
+`<localleader>n` in a Terraform buffer (`:DyCidr overlaps`) reads every `.tf`
+and `.tfvars` file beside the buffer -- the module -- and puts the ranges that
+collide in the quickfix list.  Only the keys that define a network are read:
+`cidr`, `cidr_block`, `ip_cidr_range`, `address_space`, `address_prefixes`,
+the `*_subnets` lists of the AWS VPC module and the like; never the
+`cidr_blocks` a security group lets in.  Only a whole network -- `cidr`,
+`cidr_block` or `address_space`, or a key ending in one, outside an
+`aws_subnet` and the like -- may hold other ranges: a subnet inside it is
+fine.  The same range twice, a subnet inside another subnet, and a network
+inside another network are listed.  A range worked out with `cidrsubnet()` is
+not read, nor is an IPv6 range: a warning says how many were left out.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -1603,6 +1622,11 @@ Project ~
                                                                       *:DyNfr*
 :DyNfr [{term}...]      Availability, downtime, error budget and requests in
                         flight of a chain of components.  See |dyneo-nfr|.
+
+                                                                     *:DyCidr*
+:DyCidr                 What the IPv4 range under the cursor holds.
+:DyCidr overlaps        List the ranges of the module that collide.  See
+                        |dyneo-cidr|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose

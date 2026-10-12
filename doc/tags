@@ -7,6 +7,7 @@
 :DyArchitecture	dyneo.txt	/*:DyArchitecture*
 :DyCiLint	dyneo.txt	/*:DyCiLint*
 :DyCiStatus	dyneo.txt	/*:DyCiStatus*
+:DyCidr	dyneo.txt	/*:DyCidr*
 :DyCron	dyneo.txt	/*:DyCron*
 :DyData	dyneo.txt	/*:DyData*
 :DyEncryptedDiff	dyneo.txt	/*:DyEncryptedDiff*
@@ -71,6 +72,7 @@ dyneo-ai-review	dyneo.txt	/*dyneo-ai-review*
 dyneo-architecture	dyneo.txt	/*dyneo-architecture*
 dyneo-channels	dyneo.txt	/*dyneo-channels*
 dyneo-ci	dyneo.txt	/*dyneo-ci*
+dyneo-cidr	dyneo.txt	/*dyneo-cidr*
 dyneo-commands	dyneo.txt	/*dyneo-commands*
 dyneo-configuration	dyneo.txt	/*dyneo-configuration*
 dyneo-contents	dyneo.txt	/*dyneo-contents*

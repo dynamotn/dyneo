@@ -341,8 +341,9 @@ map("n", "<leader>prs", "<cmd>DyAdr status<cr>", { desc = "Set Status" })
 map("n", "<leader>prS", "<cmd>DyAdr supersede<cr>", { desc = "Supersede This Decision" })
 map("n", "<leader>pR", "<cmd>DyRoot<cr>", { desc = "Project Roots" })
 
--- architecture work (`tools.nfr`, ...)
+-- architecture work (`tools.nfr`, `tools.cidr`, ...)
 map("n", "<leader>pAn", "<cmd>DyNfr<cr>", { desc = "Service Levels (NFR)" })
+map("n", "<leader>pAc", "<cmd>DyCidr<cr>", { desc = "Explain IPv4 Range" })
 
 -- infrastructure beyond the buffer: what a directory declares, what a
 -- certificate or a token says, logs, and the cluster in use

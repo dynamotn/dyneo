@@ -312,6 +312,12 @@ describe('config.keymaps', function()
     assert.are.equal('lint: first\nsecond', copied['+'])
   end)
 
+  it('maps a command acting on one kind of buffer only there', function()
+    for _, lhs in ipairs({ ' pAo' }) do
+      assert.same({}, map('n', lhs), lhs)
+    end
+  end)
+
   it('keeps the command line of the search mappings in sight', function()
     for _, lhs in ipairs({ '/', '<C-f>', '<C-r>' }) do
       assert.are.equal(0, map('x', lhs).silent, lhs)
