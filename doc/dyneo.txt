@@ -537,7 +537,7 @@ Snort and Suricata `.rules` files are Neovim's own `hog` filetype.
 on disk, as an `xxd` dump in a `dyhex://` buffer of its own; `:w` there
 writes the hex columns back as bytes over the file, and `:e!` dumps the
 file again.  It needs no `xxd`.  A buffer with unwritten edits, a sensitive
-file (|dyneo-ai-guard|) and a file over 16 MiB are refused.
+file (|dyneo-ai-guard|) and a file over 4 MiB are refused.
 
 The offsets are ignored, so deleting a line deletes its bytes.  The text
 column is not read, but it must hold one character per byte: a line whose

@@ -9,24 +9,45 @@
 --- edited in a way that would write the wrong bytes. Pure Lua: no `xxd`.
 local M = {}
 
---- The most of a file opened; a dump is about four times the file
-M.LIMIT = 16 * 1024 * 1024
+--- The most of a file opened. The dump is made and read back on the main
+--- loop: about 0.3 s to open and 1.2 s to write at this size.
+M.LIMIT = 4 * 1024 * 1024
 
 local notify = require('util.notify').titled('Hex')
+
+-- Each byte as its two hex digits, and back: `gsub` with a table is far
+-- faster than with a function called per byte
+local HEX, BYTE = {}, {}
+for i = 0, 255 do
+  local char, pair = string.char(i), ('%02x'):format(i)
+  HEX[char] = pair
+  for _, digits in ipairs({ pair, pair:upper() }) do
+    BYTE[digits] = char
+    BYTE[digits:sub(1, 1) .. pair:sub(2)] = char
+    BYTE[pair:sub(1, 1) .. digits:sub(2)] = char
+  end
+end
+
+-- The hex columns of 16 bytes, formatted in one call
+local FULL_HEX = ('%02x%02x '):rep(8)
 
 --- `bytes` as `xxd` prints them: offset, 16 bytes in pairs, the text
 ---@param bytes string
 ---@return string[]
 function M.dump(bytes)
   local lines = {}
-  for offset = 0, #bytes - 1, 16 do
-    local chunk = bytes:sub(offset + 1, offset + 16)
-    local hex = chunk:gsub('..?', function(pair)
-      return (pair:gsub('.', function(c) return ('%02x'):format(c:byte()) end))
-        .. ' '
-    end)
-    local text = chunk:gsub('[^\32-\126]', '.')
-    table.insert(lines, ('%08x: %-40s %s'):format(offset, hex, text))
+  local text = bytes:gsub('[^\32-\126]', '.')
+  local full = #bytes - #bytes % 16
+  for offset = 0, full - 1, 16 do
+    lines[#lines + 1] = ('%08x: %s %s'):format(
+      offset,
+      FULL_HEX:format(bytes:byte(offset + 1, offset + 16)),
+      text:sub(offset + 1, offset + 16)
+    )
+  end
+  if full < #bytes then
+    local hex = bytes:sub(full + 1):gsub('.', HEX):gsub('%x%x?%x?%x?', '%0 ')
+    lines[#lines + 1] = ('%08x: %-40s %s'):format(full, hex, text:sub(full + 1))
   end
   return lines
 end
@@ -50,10 +71,7 @@ function M.parse(lines)
     hex = hex:gsub('%s', '')
     -- Anything but hex pairs is left as it is, and so makes the bytes longer
     -- than half the digits
-    local bytes = hex:gsub(
-      '%x%x',
-      function(pair) return string.char(tonumber(pair, 16)) end
-    )
+    local bytes = hex:gsub('%x%x', BYTE)
     if #bytes * 2 ~= #hex then
       return nil, ('line %d is not pairs of hex digits'):format(number)
     end
