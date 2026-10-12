@@ -99,11 +99,8 @@ M.DEV_SERVERS = {
 ---@type table<string, integer>
 M.DEV_PORTS = { vue = 5173, svelte = 5173, astro = 4321, htmlangular = 4200 }
 
---- URL of the dev server serving `bufnr`
----
---- Taken from the nearest frontend config file above the buffer, else from
---- its filetype, else port 3000. Only the framework's default port is used;
---- a port set inside the config file is not read.
+--- URL of the dev server serving `bufnr`: the port of the nearest config
+--- file above it, else of its filetype, else 3000
 ---@param bufnr? integer
 ---@return string
 M.dev_server_url = function(bufnr)
@@ -111,8 +108,6 @@ M.dev_server_url = function(bufnr)
   local name = vim.api.nvim_buf_get_name(bufnr)
   local port
   if name ~= '' then
-    -- The nearest directory holding a config file decides, as `vim.fs.find`
-    -- walks up one directory at a time
     vim.fs.find(function(file)
       for _, server in ipairs(M.DEV_SERVERS) do
         if file:match(server[1]) then

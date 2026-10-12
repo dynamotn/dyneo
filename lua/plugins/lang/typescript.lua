@@ -278,8 +278,7 @@ return condition
             }, dap.configurations[filetype] or {})
           end
 
-          -- A frontend runs in the browser: Vue, Svelte, Astro and Angular
-          -- components get only this one, scripts get it beside the Node ones
+          -- Components run only in the browser, scripts in Node too
           local browser_filetypes = vim
             .iter({
               js_filetypes,

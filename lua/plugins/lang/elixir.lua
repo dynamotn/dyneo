@@ -3,9 +3,8 @@ local language = require('config.languages').elixir
 return vim.list_contains(DyNeo.enabled_languages, 'elixir')
     and {
       {
-        -- Debug adapter & configurations. mason-nvim-dap maps `elixir` to the
-        -- `elixir-ls` package but names its adapter `mix_task`, so its own
-        -- handler finds nothing to set up; the adapter is registered here.
+        -- Debug adapter & configurations; mason-nvim-dap's `elixir` handler
+        -- sets up nothing, as it names the adapter `mix_task`
         'mfussenegger/nvim-dap',
         optional = true,
         opts = function()
@@ -19,7 +18,6 @@ return vim.list_contains(DyNeo.enabled_languages, 'elixir')
             type = 'mix_task',
             request = 'launch',
             task = 'test',
-            -- Starts the application, as a Phoenix project's tests need
             startApps = true,
             projectDir = '${workspaceFolder}',
             requireFiles = {

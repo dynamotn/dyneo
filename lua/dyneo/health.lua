@@ -468,7 +468,6 @@ local function requirements()
     yq = '`:DyQuery` on YAML, `:DyOpenApiRequest` and `:DyArchitecture`',
     openssl = '`:DyInspect` on a certificate',
     quarto = '`:QuartoPreview` of a Quarto document',
-    -- Not in Mason; haskell-tools registers it once found on `PATH`
     hdb = 'debugging Haskell (`cabal install haskell-debugger`)',
     oasdiff = '`:DyOpenApiDiff` (`:MasonInstall oasdiff`)',
     crane = '`:DyImagePin` (or `skopeo`)',
