@@ -70,11 +70,13 @@ local PLAN = {
 }
 
 describe('tools.tfplan', function()
-  local tfplan, dir, cleanup
+  local tfplan, dir, cleanup, restore_confirm
 
   before_each(function()
     h.unload('tools.tfplan')
     tfplan = require('tools.tfplan')
+    -- Planning is agreed to unless a spec says otherwise
+    restore_confirm = h.stub(vim.fn, 'confirm', function() return 1 end)
     dir, cleanup = h.tmpdir()
     h.write(dir .. '/main.tf', {
       'resource "aws_s3_bucket" "logs" {',
@@ -94,6 +96,7 @@ describe('tools.tfplan', function()
     h.write(dir .. '/README.md', { 'resource "aws_x" "not_code" {' })
   end)
   after_each(function()
+    restore_confirm()
     tfplan.clear()
     vim.cmd('silent! %bwipeout!')
     cleanup()
@@ -696,6 +699,62 @@ describe('tools.tfplan', function()
     it('refuses an unknown subcommand', function()
       tfplan.command({ fargs = { 'nope' } })
       assert.same({ 'Unknown subcommand: nope' }, notes)
+    end)
+  end)
+
+  describe('trust', function()
+    local path, restores, asked
+    before_each(function()
+      vim.fn.mkdir(dir .. '/bin', 'p')
+      h.write(dir .. '/bin/tofu', {
+        '#!/bin/sh',
+        'echo "$@" >> "' .. dir .. '/ran"',
+        'exit 1',
+      })
+      vim.fn.setfperm(dir .. '/bin/tofu', 'rwxr-xr-x')
+      path = vim.env.PATH
+      vim.env.PATH = dir .. '/bin:' .. path
+      asked = 0
+      restores = { h.stub(vim, 'notify', function() end) }
+      vim.cmd.edit(dir .. '/main.tf')
+    end)
+    after_each(function()
+      vim.env.PATH = path
+      for i = #restores, 1, -1 do
+        restores[i]()
+      end
+    end)
+
+    ---@param answer integer
+    local function answering(answer)
+      table.insert(
+        restores,
+        h.stub(vim.fn, 'confirm', function()
+          asked = asked + 1
+          return answer
+        end)
+      )
+    end
+
+    it('runs nothing of a project it was not allowed to', function()
+      answering(2)
+      tfplan.run()
+      vim.wait(300, function() return false end)
+      assert.are.equal(1, asked)
+      assert.are.equal(0, vim.fn.filereadable(dir .. '/ran'))
+    end)
+
+    it('asks once a session for a directory', function()
+      answering(1)
+      tfplan.run()
+      tfplan.run()
+      assert.is_true(
+        vim.wait(
+          2000,
+          function() return vim.fn.filereadable(dir .. '/ran') == 1 end
+        )
+      )
+      assert.are.equal(1, asked)
     end)
   end)
 end)

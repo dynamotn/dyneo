@@ -594,6 +594,10 @@ list.  A module call carries every change below it.  The plan runs with
 `-lock=false`, and its file -- every planned value in plain text -- is
 deleted once read.  `<localleader>P` clears it.
 
+A plan runs the providers and `external` data sources the project names, as
+you and with your credentials, so the first plan of a directory in a session
+asks first.
+
 `<localleader>d` (`:DyTfPlan drift`) runs a `-refresh-only` plan instead and
 shows what changed or was deleted outside the code, on the blocks that
 declare it.  It runs only when asked: a refresh reads every object of the
