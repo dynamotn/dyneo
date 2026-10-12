@@ -110,10 +110,6 @@ jobs:
         with:
           path: ~/.local/share/nvim/lazy
           key: ${{ steps.cache.outputs.cache-primary-key }}
-      # Plenary and lazy.nvim come from the plugins just installed, so the
-      # specs run against the same commits the configuration does.
-      - name: Unit tests
-        run: ./scripts/test.sh
       # Only the registry index, no package: `validate-tools.lua` checks Mason
       # names against it, and so does the check of the installs it skipped.
       # Loaded with `--clean` so that nothing else of the configuration -- and
@@ -126,6 +122,17 @@ jobs:
             --cmd "set runtimepath^=$GITHUB_WORKSPACE,$HOME/.local/share/nvim/lazy/mason.nvim" \
             -c "lua require('mason').setup({ registries = { 'lua:tools.mason-registry', 'github:mason-org/mason-registry' } })" \
             -c "lua require('mason-registry').refresh(vim.schedule_wrap(function(ok) vim.cmd(ok and 'qa' or 'cq') end))"
+      # The language cases of the neogen spec need real parsers, and fail on
+      # CI without them; the tree-sitter CLI to build them with comes from
+      # the Mason registry just fetched.
+      - name: Build parsers for the specs
+        run: |
+          nvim --clean --headless -l scripts/install-parsers.lua \
+            bash dart elixir fish gleam haskell ocaml perl r scala swift zig zsh
+      # Plenary and lazy.nvim come from the plugins just installed, so the
+      # specs run against the same commits the configuration does.
+      - name: Unit tests
+        run: ./scripts/test.sh
       - name: Validate tool names
         run: nvim --clean --headless -l scripts/validate-tools.lua
       - name: Check startup

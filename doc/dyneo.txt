@@ -1664,6 +1664,11 @@ that loads only the module each spec requires: >sh
 Plenary and lazy.nvim are taken from lazy.nvim's install directory, or cloned
 into `.tests/` when the configuration has never been started.
 
+A case that needs a tree-sitter parser this machine lacks is skipped, except
+on CI (`$CI` set), where it fails: CI builds the parsers first with >sh
+
+    nvim --clean --headless -l scripts/install-parsers.lua bash fish ...
+<
 The rest of the checks: >sh
 
     scripts/check-startup.sh    # load it all, open a file of each language

@@ -500,6 +500,9 @@ describe('util.neogen', function()
     local ft, name = case[1], case[2]
     it(ft .. ': ' .. name, function()
       if not has_parser(ft) then
+        -- CI builds every parser a case needs (`scripts/install-parsers.lua`),
+        -- so one missing there is a case that would test nothing
+        assert(not vim.env.CI, 'no ' .. ft .. ' parser on CI')
         return pending('no ' .. ft .. ' parser on this machine')
       end
       assert.are.same(case.expect, generate(ft, case.lines, case.cursor))
