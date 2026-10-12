@@ -130,6 +130,22 @@ describe('overseer.template.dytask', function()
       assert.is_nil(list['go build'])
     end)
 
+    it('runs a dbt model by its name from the project root', function()
+      h.write(dir .. '/dbt_project.yml', { 'name: shop' })
+      local list = templates('models/staging/stg_orders.sql', 'sql')
+      local task = list['dbt run'].builder()
+      assert.are.same({ 'dbt', 'run', '--select', 'stg_orders' }, task.cmd)
+      assert.are.equal(dir, task.cwd)
+      assert.is_not_nil(list['dbt compile'])
+      assert.is_not_nil(list['dbt test'])
+      assert.is_not_nil(list['dbt show'])
+    end)
+
+    it(
+      'offers dbt nothing outside a dbt project',
+      function() assert.is_nil(templates('query.sql', 'sql')['dbt run']) end
+    )
+
     it('builds a go module from its root', function()
       h.write(dir .. '/go.mod', { 'module x' })
       local task = templates('cmd/x/main.go', 'go')['go test'].builder()

@@ -857,6 +857,13 @@ formats them: with the project's `.sqlfluff` when there is one, otherwise
 in the dialect of the filetype -- `mysql`, `oracle` for `plsql`, and `ansi`
 for the rest.
 
+Inside a dbt project, a folder holding `dbt_project.yml`, `<leader>oo` offers
+`dbt compile`, `dbt run`, `dbt test` and `dbt show` for the model of the
+buffer, named after its file, run from the project root when `dbt` is on
+`$PATH`.  sqlfluff reads the project's `.sqlfluff` there too: one saying
+`templater = dbt` lints a model as dbt compiles it, and without one the
+`{{ ref() }}` and `{{ source() }}` of a model still parse.
+
 A database answers through a connection; a data file answers through
 DuckDB, with no server at all (|dyneo-data-files|).
 

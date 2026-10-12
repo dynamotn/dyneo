@@ -188,6 +188,24 @@ return {
       cmd = exe(),
     },
   },
+  -- A model of a dbt project, named after its file: dbt compiles, runs,
+  -- tests and previews it from the project's root
+  sql = vim.tbl_map(function(sub)
+    return {
+      name = 'dbt ' .. sub[1],
+      desc = sub[2],
+      exe = 'dbt',
+      root = { 'dbt_project.yml' },
+      cmd = function(ctx)
+        return { ctx.exe, sub[1], '--select', vim.fs.basename(ctx.stem) }
+      end,
+    }
+  end, {
+    { 'compile', 'Show the SQL this dbt model compiles to' },
+    { 'run', 'Run this dbt model' },
+    { 'test', 'Test this dbt model' },
+    { 'show', 'Preview the first rows of this dbt model' },
+  }),
   ruby = {
     {
       name = 'ruby run',
