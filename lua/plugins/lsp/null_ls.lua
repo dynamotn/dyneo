@@ -90,9 +90,9 @@ return {
       -- null-ls answers `supports_method` from the filetype of the current
       -- buffer and ignores the buffer it is asked about. Otter forwards
       -- requests from a markdown buffer to its hidden `.otter.py` buffer, so
-      -- null-ls claimed completion there on the strength of the markdown
-      -- `jira` source, answered first with no items, and that empty list
-      -- won over the real language server's
+      -- null-ls would claim completion there on the strength of a markdown
+      -- source, answer first with no items, and that empty list would win
+      -- over the real language server's
       local on_init = opts.on_init
       opts.on_init = function(client, initialize_result)
         local supports_method = client.supports_method

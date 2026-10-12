@@ -259,6 +259,39 @@ function M.clear(bufnr) vim.api.nvim_buf_clear_namespace(bufnr or 0, ns, 0, -1) 
 ---@field url? string
 ---@field jobs DyCiJob[]
 
+--- Jobs a forge hands over per page, the most both of them allow
+M.PER_PAGE = 100
+
+--- How many pages of jobs are read before giving up on a run
+M.MAX_PAGES = 10
+
+--- Every job at `path`, read a page at a time: one page alone could leave out
+--- the very job that failed, and read as a clean run
+---@param remote DyForgeRemote
+---@param path string
+---@param rows_of fun(data: any): table[]
+---@param on_done fun(rows: table[]?, err: string?)
+local function all_jobs(remote, path, rows_of, on_done)
+  local rows = {}
+  local function page(index)
+    local url = ('%s?per_page=%d&page=%d'):format(path, M.PER_PAGE, index)
+    forge.api(remote, url, function(data, err)
+      if not data then return on_done(nil, err) end
+      local got = rows_of(data)
+      vim.list_extend(rows, got)
+      if #got < M.PER_PAGE then return on_done(rows) end
+      if index >= M.MAX_PAGES then
+        return on_done(
+          nil,
+          ('More than %d jobs: not all of them could be read'):format(#rows)
+        )
+      end
+      page(index + 1)
+    end)
+  end
+  page(1)
+end
+
 --- The last pipeline of `branch` for the file `file`, with its jobs
 ---@param remote DyForgeRemote
 ---@param branch string
@@ -277,11 +310,9 @@ function M.fetch(remote, branch, file, on_done)
       if type(last) ~= 'table' or not last.id then
         return on_done(nil, 'No pipeline on ' .. branch)
       end
-      local jobs = ('%s/pipelines/%d/jobs?per_page=100'):format(
-        project,
-        last.id
-      )
-      forge.api(remote, jobs, function(rows, e)
+      local jobs = ('%s/pipelines/%d/jobs'):format(project, last.id)
+      local function rows_of(data) return type(data) == 'table' and data or {} end
+      all_jobs(remote, jobs, rows_of, function(rows, e)
         if not rows then return on_done(nil, e) end
         on_done({
           id = last.id,
@@ -291,7 +322,7 @@ function M.fetch(remote, branch, file, on_done)
             function(row)
               return { id = row.id, name = row.name, status = row.status }
             end,
-            type(rows) == 'table' and rows or {}
+            rows
           ),
         })
       end)
@@ -309,11 +340,12 @@ function M.fetch(remote, branch, file, on_done)
     if type(last) ~= 'table' or not last.id then
       return on_done(nil, 'No run of this workflow on ' .. branch)
     end
-    local jobs = ('repos/%s/actions/runs/%d/jobs?per_page=100'):format(
-      remote.slug,
-      last.id
-    )
-    forge.api(remote, jobs, function(rows, e)
+    local jobs = ('repos/%s/actions/runs/%d/jobs'):format(remote.slug, last.id)
+    local function rows_of(data)
+      return type(data) == 'table' and type(data.jobs) == 'table' and data.jobs
+        or {}
+    end
+    all_jobs(remote, jobs, rows_of, function(rows, e)
       if not rows then return on_done(nil, e) end
       on_done({
         id = last.id,
@@ -328,7 +360,7 @@ function M.fetch(remote, branch, file, on_done)
               conclusion = row.conclusion,
             }
           end,
-          type(rows.jobs) == 'table' and rows.jobs or {}
+          rows
         ),
       })
     end)

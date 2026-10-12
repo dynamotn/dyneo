@@ -237,6 +237,26 @@ describe('tools.ci_inline', function()
       assert.is_truthy(notes[1]:find('Run 7 on feat/x', 1, true))
     end)
 
+    it('reads every page of jobs, not the first alone', function()
+      git('remote', 'add', 'gh', 'https://github.com/o/r.git')
+      cli('gh', {
+        'case "$*" in',
+        [[  *workflows/ci.yml/runs*) echo '{"workflow_runs":[{"id":7,"status":"completed","conclusion":"failure","html_url":"u"}]}';;]],
+        [[  *runs/7/jobs*page=1) echo '{"jobs":[{"name":"other","status":"completed","conclusion":"success"}]}';;]],
+        [[  *runs/7/jobs*page=2) echo '{"jobs":[{"name":"test","status":"completed","conclusion":"failure"}]}';;]],
+        [[  *runs/7/jobs*) echo '{"jobs":[]}';;]],
+        'esac',
+      })
+      ci.PER_PAGE = 1
+      h.write(repo .. '/.github/workflows/ci.yml', GITHUB)
+      vim.cmd.edit(repo .. '/.github/workflows/ci.yml')
+      local bufnr = vim.api.nvim_get_current_buf()
+      vim.bo.filetype = 'yaml.gh-action'
+      ci.status(bufnr)
+      assert.is_true(vim.wait(5000, function() return #notes > 0 end, 20))
+      assert.same({ { 13, '  ✗ fail' } }, marks(bufnr))
+    end)
+
     it('says when the forge has no pipeline, or is another one', function()
       git('remote', 'add', 'origin', 'https://gitlab.com/g/p')
       cli('glab', { [[echo '[]']] })

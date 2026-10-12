@@ -250,7 +250,11 @@ function M.populate(client)
     local function send(path, text, filetype)
       if not text then return end
       -- A server may well send what it is given on to somewhere else
-      if require('util.sensitive').is_sensitive_path(path) then return end
+      local sensitive = require('util.sensitive')
+      if sensitive.is_sensitive_path(path) then return end
+      for line in text:gmatch('[^\n]+') do
+        if sensitive.secret_format(line) then return end
+      end
       -- An extension alone does not tell every filetype apart (`.conf`,
       -- `.h`, a script without one), the contents do
       filetype = filetype

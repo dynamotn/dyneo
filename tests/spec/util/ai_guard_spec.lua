@@ -426,6 +426,16 @@ describe('util.ai_guard', function()
         assert.same({ { buf, 42 } }, detached)
       end)
 
+      it('drops a credential sent without a buffer number', function()
+        local buf = h.buffer({
+          name = plain,
+          lines = { 'local token = "ghp_0123456789abcdefghij"' },
+        })
+        local params = { textDocument = { uri = vim.uri_from_bufnr(buf) } }
+        assert.is_true(client:notify('textDocument/didChange', params))
+        assert.same({}, sent)
+      end)
+
       it('lets the close through', function()
         local buf = h.buffer({ name = secret })
         client:notify('textDocument/didClose', {}, buf)
@@ -548,20 +558,16 @@ describe('util.ai_guard', function()
 
     it('detaches Copilot once betterleaks reports a finding', function()
       local buf = h.buffer({ name = plain, lines = { 'nothing to see' } })
-      vim.diagnostic.set(
-        vim.api.nvim_create_namespace('dy_spec_ai_guard'),
-        buf,
+      vim.diagnostic.set(vim.api.nvim_create_namespace('betterleaks'), buf, {
         {
-          {
-            lnum = 0,
-            col = 0,
-            severity = vim.diagnostic.severity.WARN,
-            source = 'betterleaks',
-            code = 'generic-api-key',
-            message = 'Detected a generic API key',
-          },
-        }
-      )
+          lnum = 0,
+          col = 0,
+          severity = vim.diagnostic.severity.WARN,
+          source = 'betterleaks',
+          code = 'generic-api-key',
+          message = 'Detected a generic API key',
+        },
+      })
       settle('DiagnosticChanged', buf)
       assert.same({ { buf, 42 } }, detached)
     end)

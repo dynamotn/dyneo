@@ -189,11 +189,18 @@ end
 --- run, though -- on a write, a read or leaving insert mode -- which is why
 --- the patterns above are there as well, and why they are the ones that can
 --- answer the instant a key is pressed.
+---
+--- nvim-lint names the namespace of a linter after it, so only that one is
+--- read: `vim.diagnostic.get` copies every diagnostic it hands back.
 ---@param bufnr integer
 ---@return { name: string, line: integer }[]
 local function leaks_in_buffer(bufnr)
   local found = {}
-  for _, diagnostic in ipairs(vim.diagnostic.get(bufnr)) do
+  local namespace = vim.api.nvim_get_namespaces().betterleaks
+  if not namespace then return found end
+  for _, diagnostic in
+    ipairs(vim.diagnostic.get(bufnr, { namespace = namespace }))
+  do
     if diagnostic.source == 'betterleaks' then
       table.insert(found, {
         name = ('betterleaks %s'):format(diagnostic.code or 'finding'),
@@ -291,6 +298,11 @@ M.reasons = function(bufnr, opts)
   return reasons
 end
 
+--- `is_sensitive_path` of each buffer name asked about: a name keeps its
+--- answer, and asking it again costs a `realpath` on every keystroke
+---@type table<string, boolean>
+local by_name = {}
+
 --- Whether a buffer holds a file whose content must not leave the machine
 ---@param bufnr? integer Buffer number, the current one when nil or 0
 ---@return boolean
@@ -300,7 +312,9 @@ M.is_sensitive = function(bufnr)
   if vim.list_contains(config.filetypes, vim.bo[bufnr].filetype) then
     return true
   end
-  if M.is_sensitive_path(vim.api.nvim_buf_get_name(bufnr)) then return true end
+  local name = vim.api.nvim_buf_get_name(bufnr)
+  if by_name[name] == nil then by_name[name] = M.is_sensitive_path(name) end
+  if by_name[name] then return true end
   if M.marked(bufnr) then return true end
   if M.is_allowed(bufnr) then return false end
   local found, partial = secrets_in_buffer(bufnr)

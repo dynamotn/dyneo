@@ -153,6 +153,16 @@ describe('tools.workspace_diagnostics', function()
     assert.are.same({ 'a.lua' }, sent_paths(c, 'textDocument/didOpen'))
   end)
 
+  it('never sends a file holding a credential', function()
+    files({
+      ['a.lua'] = { 'x' },
+      ['settings.lua'] = { 'local token = "ghp_0123456789abcdefghij"' },
+    })
+    local c = client()
+    populate(c)
+    assert.are.same({ 'a.lua' }, sent_paths(c, 'textDocument/didOpen'))
+  end)
+
   it('skips binary and oversized files', function()
     files({ ['small.lua'] = { 'x' }, ['big.lua'] = { string.rep('x', 100) } })
     local file = assert(io.open(dir .. '/bin.lua', 'wb'))

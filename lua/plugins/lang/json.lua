@@ -25,8 +25,9 @@ return vim.list_contains(DyNeo.enabled_languages, 'json')
                   new_config.name,
                   new_config
                 )
-                new_config.settings.json.schemas = vim.tbl_deep_extend(
-                  'force',
+                -- Appended: a deep merge would lay SchemaStore's list over
+                -- the project's one index at a time
+                new_config.settings.json.schemas = vim.list_extend(
                   new_config.settings.json.schemas or {},
                   require('schemastore').json.schemas()
                 )

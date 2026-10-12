@@ -608,6 +608,32 @@ function M.impact_entries(reached, blocks)
   return entries
 end
 
+--- The verdict on each directory this session; false while it is asked
+---@type table<string, boolean>
+local trusted = {}
+
+--- Whether `dir` may be planned: `plan` runs the providers and the
+--- `external` data sources the project names, as the user and with their
+--- cloud credentials, so a directory is asked about once a session
+---@param dir string
+---@param bin string
+---@return boolean
+function M.trusted(dir, bin)
+  if trusted[dir] ~= nil then return trusted[dir] end
+  -- Pinned before asking: the prompt keeps handling events
+  trusted[dir] = false
+  local answer = vim.fn.confirm(
+    ('Run `%s plan` in %s?\nIts providers and external data sources run as you.'):format(
+      bin,
+      vim.fn.fnamemodify(dir, ':~')
+    ),
+    '&Run\n&Cancel',
+    2
+  )
+  trusted[dir] = answer == 1 or nil
+  return answer == 1
+end
+
 ---@alias DyTfMode 'plan'|'drift'|'cost'|'impact'
 
 --- Plan the module of the current buffer, and show on its blocks what the
@@ -627,6 +653,7 @@ function M.run(mode)
   end
   local name = vim.api.nvim_buf_get_name(0)
   local dir = name ~= '' and vim.fs.dirname(name) or vim.uv.cwd() --[[@as string]]
+  if not M.trusted(dir, bin) then return end
   local planfile = vim.fn.tempname()
   local jsonfile = planfile .. '.json'
   notify(

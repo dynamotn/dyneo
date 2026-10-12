@@ -326,6 +326,9 @@ return {
       -- with its own `filetypes` claims only those, so a server for one
       -- dialect of YAML is not widened to every other.
       local declared_filetypes = {} ---@type table<string, string[]>
+      -- Servers some entry gives filetypes of its own: their shipped
+      -- default is what that entry narrows them from
+      local narrowed = {} ---@type table<string, true>
       for _, language in pairs(languages) do
         -- '*' and '_' are pseudo filetypes, not something a server attaches to
         if
@@ -335,6 +338,9 @@ return {
           for _, lsp_server in ipairs(language.lsp_servers or {}) do
             local server = type(lsp_server) == 'table' and lsp_server[1]
               or lsp_server--[[@as string]]
+            if type(lsp_server) == 'table' and lsp_server.filetypes then
+              narrowed[server] = true
+            end
             declared_filetypes[server] = vim.list_extend(
               declared_filetypes[server] or {},
               type(lsp_server) == 'table' and lsp_server.filetypes
@@ -357,7 +363,7 @@ return {
         if not widened_filetypes[server] then
           local filetypes = vim.deepcopy(
             server_opts.filetypes
-              or (vim.lsp.config[server] or {}).filetypes
+              or not narrowed[server] and (vim.lsp.config[server] or {}).filetypes
               or {}
           )
           widened_filetypes[server] =

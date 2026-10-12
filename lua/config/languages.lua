@@ -1608,8 +1608,15 @@ return {
     injected_parsers = { 'git_rebase' },
     lsp_servers = { 'harper_ls' },
     linters = { 'gitlint' },
+    -- `remote`: each word typed is a query to the Jira host
     null_ls = {
-      { 'jira', type = 'completion', command = 'jira', custom = true },
+      {
+        'jira',
+        type = 'completion',
+        command = 'jira',
+        custom = true,
+        remote = true,
+      },
     },
   },
   gitrebase = {
@@ -1897,9 +1904,6 @@ return {
           end,
         },
       },
-    },
-    null_ls = {
-      { 'jira', type = 'completion', command = 'jira', custom = true },
     },
     dial = function(augend)
       return {

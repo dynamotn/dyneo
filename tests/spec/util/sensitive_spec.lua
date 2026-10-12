@@ -169,6 +169,20 @@ describe('util.sensitive', function()
       assert.is_true(sensitive.is_sensitive(bufnr))
     end)
 
+    it('resolves the path of a buffer once, not on every question', function()
+      local bufnr = h.buffer({ name = dir .. '/main.lua', lines = { 'a' } })
+      local calls = 0
+      local realpath = vim.uv.fs_realpath
+      local restore = h.stub(vim.uv, 'fs_realpath', function(...)
+        calls = calls + 1
+        return realpath(...)
+      end)
+      sensitive.is_sensitive(bufnr)
+      sensitive.is_sensitive(bufnr)
+      restore()
+      assert.are.equal(1, calls)
+    end)
+
     it('asks about the current buffer for nil and 0', function()
       local bufnr = h.buffer({ name = dir .. '/id_rsa' })
       vim.api.nvim_set_current_buf(bufnr)
@@ -274,7 +288,8 @@ describe('util.sensitive', function()
     --- Leave a `betterleaks` finding on `bufnr`, as the linter would
     ---@param bufnr integer
     local function leak(bufnr)
-      vim.diagnostic.set(vim.api.nvim_create_namespace('dy_spec_lint'), bufnr, {
+      -- nvim-lint's namespace for the linter, named after it
+      vim.diagnostic.set(vim.api.nvim_create_namespace('betterleaks'), bufnr, {
         {
           lnum = 2,
           col = 0,

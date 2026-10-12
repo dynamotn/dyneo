@@ -63,11 +63,28 @@ return {
       local mr = require('mason-registry')
       mr:on('package:install:success', function()
         vim.defer_fn(function()
-          -- A server installed just now may be wanted by the open buffer
-          require('lazy.core.handler.event').trigger({
-            event = 'FileType',
-            buf = vim.api.nvim_get_current_buf(),
-          })
+          -- A server installed just now may be wanted by a file on screen,
+          -- which is not the current buffer while `:Mason` has the focus.
+          -- Every handler runs again: some servers start from an ftplugin.
+          local done = {}
+          for _, win in ipairs(vim.api.nvim_list_wins()) do
+            local buf = vim.api.nvim_win_get_buf(win)
+            if
+              not done[buf]
+              and vim.bo[buf].buftype == ''
+              and vim.bo[buf].filetype ~= ''
+            then
+              done[buf] = true
+              vim.api.nvim_buf_call(
+                buf,
+                function()
+                  require('lazy.core.handler.event').trigger({
+                    event = 'FileType',
+                  })
+                end
+              )
+            end
+          end
         end, 100)
       end)
 

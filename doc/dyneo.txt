@@ -400,6 +400,12 @@ commit for commit, and a pinned plugin stays where it is.  A repository
 younger than the window is installed as lazy.nvim resolved it, since the
 alternative is not installing it at all.
 
+A commit date is whatever the pusher set, so each target lazy.nvim resolves
+is also written down with the time this machine first saw it.  Once a plugin
+has been watched for a whole window, a target first seen inside it gives way
+to the newest one seen before, however old its date claims to be.  When git
+cannot answer at all, a plugin stays on the commit it has, with a warning.
+
 A week of waiting only helps if someone looks.  `<leader>kq` (|:DyQuarantine|)
 lists what is held back and for how long; `<leader>kr` (`:DyQuarantine
 review`) reads every update on its way, held or already through: the commits
@@ -597,6 +603,10 @@ shows what it would do on the blocks that ask for it: `+ create`,
 list.  A module call carries every change below it.  The plan runs with
 `-lock=false`, and its file -- every planned value in plain text -- is
 deleted once read.  `<localleader>P` clears it.
+
+A plan runs the providers and `external` data sources the project names, as
+you and with your credentials, so the first plan of a directory in a session
+asks first.
 
 `<localleader>d` (`:DyTfPlan drift`) runs a `-refresh-only` plan instead and
 shows what changed or was deleted outside the code, on the blocks that

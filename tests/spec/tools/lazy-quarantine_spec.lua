@@ -435,6 +435,53 @@ describe('tools.lazy-quarantine', function()
     end)
   end)
 
+  it('holds back a commit it first saw today, whatever its date', function()
+    -- The third commit is pushed today, its committer date set 15 days back
+    local dir, commits, cleanup = repository({ 30 * DAY, 20 * DAY, 15 * DAY })
+    h.unload('tools.lazy-quarantine')
+    local quarantine = require('tools.lazy-quarantine')
+    local plugin = { dir = dir, name = 'spec.nvim' }
+    local before = quarantine.target(
+      plugin,
+      { branch = 'main', commit = commits[2] },
+      nil,
+      now - 10 * DAY
+    )
+    local today = quarantine.target(
+      plugin,
+      { branch = 'main', commit = commits[3] },
+      nil,
+      now
+    )
+    local later = quarantine.target(
+      plugin,
+      { branch = 'main', commit = commits[3] },
+      nil,
+      now + 8 * DAY
+    )
+    cleanup()
+    assert.are.equal(commits[2], before.commit)
+    assert.are.equal(commits[2], today.commit)
+    assert.are.equal(commits[3], later.commit)
+  end)
+
+  it('stays on the checkout when git cannot answer', function()
+    local dir, commits, cleanup = repository({ 30 * DAY, DAY })
+    git(dir, { 'checkout', '--quiet', '--detach', commits[1] })
+    local bin, clean_bin = h.tmpdir()
+    h.write(bin .. '/git', { '#!/bin/sh', 'exit 128' })
+    vim.fn.setfperm(bin .. '/git', 'rwxr-xr-x')
+    local path = vim.env.PATH
+    vim.env.PATH = bin .. ':' .. path
+    local restore = h.stub(vim, 'notify', function() end)
+    local picked = target(dir, commits[2])
+    restore()
+    vim.env.PATH = path
+    clean_bin()
+    cleanup()
+    assert.are.equal(commits[1], picked.commit)
+  end)
+
   it('copes with a directory that is not a repository', function()
     local dir, cleanup = h.tmpdir()
     local picked = target(dir, 'deadbeef')
