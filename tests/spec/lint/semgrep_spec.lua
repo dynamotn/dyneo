@@ -1,14 +1,25 @@
 local h = require('helpers')
 
 describe('lint.linters.semgrep', function()
-  local semgrep, dir, cleanup
+  local semgrep, dir, cleanup, notes, reads, verdict, restores
 
   before_each(function()
     h.unload('lint.linters.semgrep')
     semgrep = require('lint.linters.semgrep')
     dir, cleanup = h.tmpdir()
+    notes, reads, verdict = {}, 0, ''
+    restores = {
+      h.stub(vim, 'notify', function(msg) table.insert(notes, msg) end),
+      h.stub(vim.secure, 'read', function()
+        reads = reads + 1
+        return verdict
+      end),
+    }
   end)
   after_each(function()
+    for _, restore in ipairs(restores) do
+      restore()
+    end
     vim.cmd('silent! %bwipeout!')
     cleanup()
   end)
@@ -17,6 +28,47 @@ describe('lint.linters.semgrep', function()
     assert.is_true(vim.list_contains(semgrep.args, '--metrics=off'))
     assert.is_true(vim.list_contains(semgrep.args, '--disable-version-check'))
     assert.is_false(vim.list_contains(semgrep.args, 'auto'))
+  end)
+
+  it('bounds the time and memory of a run', function()
+    local args = table.concat(semgrep.args, ' ', 1, #semgrep.args - 1)
+    assert.matches('%-%-timeout 5', args)
+    assert.matches('%-%-max%-memory 1024', args)
+  end)
+
+  it('runs the rules only once they are trusted, asking once', function()
+    h.write(dir .. '/.semgrep.yml', { 'rules: []' })
+    h.write(dir .. '/main.py')
+    vim.cmd.edit(dir .. '/main.py')
+    verdict = nil
+    assert.is_false(semgrep.condition())
+    assert.is_false(semgrep.condition())
+    assert.are.equal(1, reads)
+    assert.are.equal(1, #notes)
+    assert.matches('not trusted', notes[1])
+  end)
+
+  it('asks again about rules that changed', function()
+    local rules = dir .. '/.semgrep.yml'
+    h.write(rules, { 'rules: []' })
+    h.write(dir .. '/main.py')
+    vim.cmd.edit(dir .. '/main.py')
+    assert.is_true(semgrep.condition())
+    assert.is_true(semgrep.condition())
+    assert.are.equal(1, reads)
+    vim.uv.fs_utime(rules, 1, 1)
+    verdict = nil
+    assert.is_false(semgrep.condition())
+    assert.are.equal(2, reads)
+  end)
+
+  it('leaves a buffer with unwritten edits alone', function()
+    h.write(dir .. '/.semgrep.yml', { 'rules: []' })
+    h.write(dir .. '/main.py')
+    vim.cmd.edit(dir .. '/main.py')
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'x = 1' })
+    assert.is_false(semgrep.condition())
+    assert.are.equal(0, reads)
   end)
 
   it('runs only in a project with rules of its own', function()

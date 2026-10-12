@@ -521,9 +521,14 @@ In a project with semgrep rules of its own -- `.semgrep.yml`,
 `.semgrep.yaml` or a `.semgrep/` folder at its root -- semgrep lints every
 buffer with those rules, and only those: never `--config auto` or a
 registry pack, and with metrics and the version check off, so no code or
-metadata leaves the machine.  A rule that does not parse is reported on the
-first line.  semgrep is a large Python package, so it is not installed on
-its own: `:MasonInstall semgrep`.
+metadata leaves the machine.  The rules come with the repository, so they
+run only once trusted: Neovim asks, as for `exrc`, once per session and
+again when the rules change, and says when it skips them (`:trust` them to
+lint).  semgrep reads the file on disk, so it lints on opening and saving,
+not a buffer with unwritten edits.  A rule gives up a file after 5 seconds
+or 1 GiB of memory.  A rule that does not parse is reported on the first
+line.  semgrep is a large Python package, so it is not installed on its
+own: `:MasonInstall semgrep`.
 
 5.6 Detection rules                                          *dyneo-detection*
 
