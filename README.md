@@ -4,7 +4,7 @@
 
 # DyNeo
 
-**Neovim, turned into a DevOps & SA workstation.**
+**Neovim, turned into a workstation for infrastructure, security and data.**
 
 One table per language · nothing installed until a file asks ·
 a supply chain on a leash
@@ -212,8 +212,29 @@ scripts/keymaps-doc.sh     # regenerate doc/dyneo-keymaps.txt
 pre-commit run --all-files # all of the above, and more
 ```
 
-`lua/config/` holds the globals, languages and options; `lua/plugins/` the
-plugin specs; `lua/tools/` the features built here; `doc/` the help.
+```
+init.lua                globals, per-machine settings, version gate, lazy.nvim
+lua/
+├── config/             options, keymaps, autocmds, DyNeo.* globals
+│   └── languages.lua   one entry per language: parser, servers, tools, dap
+├── plugins/<group>/    lazy.nvim specs; lang/ holds per-language extras
+├── tools/              features built here (runbook, kube, tfplan, sbom…)
+│   └── mason-registry/ the config's own Mason registry
+├── util/               shared helpers (sensitive, ai_guard, root, system…)
+├── lint/linters/       custom nvim-lint linters
+├── overseer/template/  task templates
+├── per_machine/        rendered by chezmoi, never in a clone
+└── dyneo/health.lua    :checkhealth dyneo
+plugin/                 thin startup shims: commands that require a tool
+lsp/                    per-server settings
+ftplugin/ ftdetect/     per-filetype options and detection
+after/ queries/         tree-sitter queries, extended or overridden
+prompts/                AI prompts
+snippets/ spell/        snippets and word lists
+doc/                    :help dyneo, and the generated keymap reference
+tests/spec/             plenary-busted specs mirroring lua/
+scripts/                checks and benchmarks run by pre-commit and CI
+```
 
 </details>
 
