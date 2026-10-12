@@ -119,6 +119,12 @@ M.filter_copilot = function(client)
   rawset(client, 'dy_ai_guard', true)
   local notify = client.notify
   rawset(client, 'notify', function(self, method, params, bufnr)
+    -- Neovim 0.12.0 and 0.12.1 pass no `bufnr`: the URI still names it
+    local uri = CONTENT_METHODS[method]
+      and type(params) == 'table'
+      and type(params.textDocument) == 'table'
+      and params.textDocument.uri
+    if not bufnr and uri then bufnr = vim.uri_to_bufnr(uri) end
     if
       bufnr
       and CONTENT_METHODS[method]

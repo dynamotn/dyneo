@@ -426,6 +426,16 @@ describe('util.ai_guard', function()
         assert.same({ { buf, 42 } }, detached)
       end)
 
+      it('drops a credential sent without a buffer number', function()
+        local buf = h.buffer({
+          name = plain,
+          lines = { 'local token = "ghp_0123456789abcdefghij"' },
+        })
+        local params = { textDocument = { uri = vim.uri_from_bufnr(buf) } }
+        assert.is_true(client:notify('textDocument/didChange', params))
+        assert.same({}, sent)
+      end)
+
       it('lets the close through', function()
         local buf = h.buffer({ name = secret })
         client:notify('textDocument/didClose', {}, buf)
