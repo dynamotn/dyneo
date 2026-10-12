@@ -2102,13 +2102,6 @@ return {
     },
     autopairs = html_comment_autopairs,
   },
-  -- Malware signatures. No tree-sitter grammar is in nvim-treesitter; the
-  -- server compiles each rule on save and reports what does not.
-  yara = {
-    filetypes = { 'yara' },
-    parser = nil,
-    lsp_servers = { 'yls' },
-  },
   yaml = {
     filetypes = reuse_filetypes.yaml.filetypes,
     parser = 'yaml',
@@ -2167,6 +2160,22 @@ return {
     },
     -- CI and Taskfile scripts: `run`, `script`, `cmds`, ...
     otter = true,
+  },
+  -- Malware signatures. nvim-treesitter has no grammar for YARA, and the
+  -- community ones fail on most real rules, so this one is the author's own.
+  -- The server compiles each rule on save and reports what does not.
+  yara = {
+    filetypes = { 'yara' },
+    parser = {
+      'yara',
+      install_info = {
+        url = 'https://github.com/dynamotn/tree-sitter-yara',
+        revision = '6924b06f10c6014092b2f09da610cb21a9b7278b',
+        queries = 'queries',
+      },
+    },
+    injected_parsers = { 'regex' },
+    lsp_servers = { 'yls' },
   },
   yuck = {
     filetypes = { 'yuck' },

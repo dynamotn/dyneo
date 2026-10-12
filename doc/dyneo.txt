@@ -520,11 +520,13 @@ its own: `:MasonInstall semgrep`.
 
 5.6 Detection rules                                          *dyneo-detection*
 
-YARA rules (`.yar`, `.yara`) get the `yls` server, which compiles each rule
-on save and reports what does not compile.  A Sigma rule has no file name
-of its own, so a YAML buffer with a top-level `logsource:` and `detection:`
-is given the Sigma schema (|dyneo-schema|).  Snort and Suricata `.rules`
-files are Neovim's own `hog` filetype.
+YARA rules (`.yar`, `.yara`) are highlighted by `tree-sitter-yara`
+(https://github.com/dynamotn/tree-sitter-yara), a grammar of YARA 4.5 and
+YARA-X written for this configuration, and get the `yls` server, which
+compiles each rule on save and reports what does not compile.  A Sigma
+rule has no file name of its own, so a YAML buffer with a top-level
+`logsource:` and `detection:` is given the Sigma schema (|dyneo-schema|).
+Snort and Suricata `.rules` files are Neovim's own `hog` filetype.
 
 5.7 Binary files                                                   *dyneo-hex*
 
