@@ -276,7 +276,21 @@ function M.guard(bufnr)
   vim.api.nvim_create_autocmd('BufWriteCmd', {
     group = group,
     buffer = bufnr,
-    callback = function(args) M.write(args.buf) end,
+    callback = function(args)
+      -- `:w {file}` fires this too: encrypting into the buffer's own file
+      -- would replace it with edits meant for a copy
+      local target = vim.fn.fnamemodify(args.file, ':p')
+      if
+        target ~= vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ':p')
+      then
+        notify(
+          'Not written: an encrypted file is only written to itself',
+          vim.log.levels.ERROR
+        )
+        return
+      end
+      M.write(args.buf)
+    end,
   })
   vim.keymap.set(
     'n',
@@ -338,18 +352,18 @@ function M.hold(bufnr, group)
 
   if not decrypted_any then
     decrypted_any = true
-    -- Registers and the search history are written to the shada file on
-    -- quitting: after clear text was in a buffer, neither is kept
+    -- Registers and the search and command histories are written to the
+    -- shada file on quitting: after clear text was in a buffer, none is kept
     vim.api.nvim_create_autocmd('VimLeavePre', {
       group = vim.api.nvim_create_augroup('dy_encrypted_shada', {}),
       -- Neovim reads the first `<` item, so the default `<50` has to go
       -- rather than have `<0` appended after it
       callback = function()
         local items = vim.tbl_filter(
-          function(item) return not item:match('^[<"/@]') end,
+          function(item) return not item:match('^[<"/@:]') end,
           vim.split(vim.o.shada, ',', { plain = true, trimempty = true })
         )
-        vim.list_extend(items, { '<0', '/0', '@0' })
+        vim.list_extend(items, { '<0', '/0', '@0', ':0' })
         vim.o.shada = table.concat(items, ',')
       end,
     })

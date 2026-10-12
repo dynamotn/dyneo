@@ -203,6 +203,30 @@ describe('tools.encrypted', function()
     assert.equals(1, #edits)
   end)
 
+  it('refuses to write a decrypted buffer to another file', function()
+    local file = dir .. '/values.yaml'
+    local original = { 'plain: a: 1', 'x: ENC[AES256_GCM,data:x]', 'sops:' }
+    h.write(file, original)
+    local bufnr = open(file)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { 'a: 2' })
+    vim.cmd('silent! write ' .. dir .. '/copy.yaml')
+    assert.same(original, vim.fn.readfile(file))
+    assert.is_true(vim.bo[bufnr].modified)
+    assert.is_truthy(notes[#notes]:find('Not written', 1, true))
+  end)
+
+  it('keeps the command history out of the shada file', function()
+    local saved = vim.o.shada
+    vim.o.shada = "!,'100,<50,s10,h"
+    local file = dir .. '/values.yaml'
+    h.write(file, { 'plain: a: 1', 'x: ENC[AES256_GCM,data:x]', 'sops:' })
+    open(file)
+    vim.api.nvim_exec_autocmds('VimLeavePre', { group = 'dy_encrypted_shada' })
+    local shada = vim.o.shada
+    vim.o.shada = saved
+    assert.equals("!,'100,s10,h,<0,/0,@0,:0", shada)
+  end)
+
   it('keeps the clear text out of the system clipboard', function()
     local saved = vim.o.clipboard
     vim.o.clipboard = 'unnamedplus'
