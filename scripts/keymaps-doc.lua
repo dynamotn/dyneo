@@ -70,17 +70,22 @@ package.preload['util.plugin'] = function()
     })
     if spec ~= nil then opts.spec = spec end
     -- A spec turned on by a binary (`enabled` or `cond` asking
-    -- `executable`: mcphub for npm, flutter-tools for dart, R.nvim for R) is
-    -- read as on a machine that has them all, so the file does not change
-    -- with the machine it is written on. Only while the specs resolve:
+    -- `executable`: mcphub for npm, flutter-tools for dart, R.nvim for R) or
+    -- by the Neovim it runs on (`has('nvim-0.13')`: ci.nvim) is read as on a
+    -- machine that has them all, so the file does not change with the
+    -- machine or the channel it is written on. Only while the specs resolve:
     -- what runs afterwards sees the machine as it is.
     local LazyPlugin = require('lazy.core.plugin')
     local load = LazyPlugin.load
     LazyPlugin.load = function(...)
-      local executable = vim.fn.executable
+      local executable, has = vim.fn.executable, vim.fn.has
       vim.fn.executable = function() return 1 end
+      vim.fn.has = function(feature)
+        if feature:match('^nvim%-') then return 1 end
+        return has(feature)
+      end
       local ok, err = pcall(load, ...)
-      vim.fn.executable = executable
+      vim.fn.executable, vim.fn.has = executable, has
       if not ok then error(err, 0) end
     end
     return setup(opts)
