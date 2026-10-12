@@ -334,17 +334,29 @@ local function zig()
   })
 end
 
+--- The operators of R that assign their right side to a name
+local R_ASSIGN = { '<-', '<<-', '=' }
+
 local function r()
   return build({
     name = 'roxygen2',
     parent = { func = { 'binary_operator' } },
-    -- roxygen2 documents the assignment naming a function, not the function
+    -- roxygen2 documents the assignment naming a function, not the function,
+    -- reached from its body or from the name
     pick = function(node)
-      local parent = node:type() == 'function_definition' and node:parent()
-      local rhs = parent
-        and parent:type() == 'binary_operator'
-        and parent:field('rhs')[1]
-      if rhs and rhs:equal(node) then return parent end
+      if node:type() == 'function_definition' then node = node:parent() end
+      local operator = node
+        and node:type() == 'binary_operator'
+        and node:field('operator')[1]
+      local rhs = node and node:field('rhs')[1]
+      if
+        operator
+        and vim.list_contains(R_ASSIGN, operator:type())
+        and rhs
+        and rhs:type() == 'function_definition'
+      then
+        return node
+      end
     end,
     extract = function(node)
       local fn = node:field('rhs')[1]
