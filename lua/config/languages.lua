@@ -61,6 +61,7 @@
 --- Where the parser is built from, handed to nvim-treesitter as it is
 ---@class DyParserInstallSpec:InstallInfo
 ---@field url string The repository of the grammar
+---@field revision string The commit to build, never a moving branch
 ---@field branch? string A branch other than the repository's default
 
 --- A server with more to say than its name
@@ -708,6 +709,7 @@ return {
       'gherkin',
       install_info = {
         url = 'https://github.com/binhtran432k/tree-sitter-gherkin',
+        revision = '6bd665dd7d4159c63c0b7a9f69d784f3315328c1',
         -- nvim-treesitter has no queries for it, so take the grammar's own
         queries = 'queries/gherkin',
       },
@@ -1579,6 +1581,7 @@ return {
       'd2',
       install_info = {
         url = 'https://github.com/madmaxieee/tree-sitter-d2',
+        revision = '1e6d8ca3d85c0031ff010759bb60804dd47b95f2',
       },
     },
     injected_parsers = { 'javascript', 'typescript' },
@@ -1600,6 +1603,7 @@ return {
       'dbml',
       install_info = {
         url = 'https://github.com/dynamotn/tree-sitter-dbml',
+        revision = '5066af94a26dabceb2d71fd928ddb7a20f99b8a3',
       },
     },
   },
