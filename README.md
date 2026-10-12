@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src=".github/logo.svg" alt="DyNeo logo" width="128">
+
 # DyNeo
 
 **Neovim, turned into a DevOps & SA workstation.**

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="title">
+  <title id="title">DyNeo</title>
+  <!-- Catppuccin Mocha: a D with a Neovim-style pillar, and a prompt chevron for "đi nào" -->
+  <defs>
+    <linearGradient id="pillar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a6e3a1"/>
+      <stop offset="1" stop-color="#94e2d5"/>
+    </linearGradient>
+    <linearGradient id="bow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#74c7ec"/>
+      <stop offset="1" stop-color="#cba6f7"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="#1e1e2e" stroke="#313244" stroke-width="4"/>
+  <g transform="translate(-5 0)">
+  <path d="M56 64 L92 48 V208 L56 192 Z" fill="url(#pillar)"/>
+  <path d="M100 48 H130 A80 80 0 0 1 130 208 H100 V170 H130 A42 42 0 0 0 130 86 H100 Z" fill="url(#bow)"/>
+  <polyline points="112,104 138,128 112,152" fill="none" stroke="#fab387" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
