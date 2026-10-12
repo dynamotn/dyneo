@@ -40,7 +40,7 @@ DyNeo.used_full_plugins = false
 --- releases the plugin authors vouched for, and a released Neovim. Each keeps
 --- its own lockfile, so machines on different channels never rewrite each
 --- other's pins.
-DyNeo.plugin_channel = 'latest'
+DyNeo.plugin_channel = vim.fn.has('nvim-0.13') == 1 and 'latest' or 'stable'
 
 ---@type integer Seconds a release has to have been out before it may be
 --- installed, by Mason (`tools.mason-quarantine`) or by lazy.nvim
