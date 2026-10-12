@@ -1,17 +1,16 @@
 local language = require('config.languages').dart
 
+-- flutter-tools finds its SDK through `flutter` alone: with just `dart` it
+-- hands its debugger setup no paths and fails on the first Dart file
+local function has_flutter() return vim.fn.executable('flutter') == 1 end
+
 return vim.list_contains(DyNeo.enabled_languages, 'dart')
     and {
       {
         -- Flutter toolbox: runner, devices, outline, and the Dart LSP
         'akinsho/flutter-tools.nvim',
         ft = language.filetypes,
-        -- Without an SDK it hands its debugger setup no paths and fails on
-        -- the first Dart file, and there is no `dartls` for it to start.
-        cond = function()
-          return vim.fn.executable('flutter') == 1
-            or vim.fn.executable('dart') == 1
-        end,
+        cond = has_flutter,
         dependencies = { 'nvim-lua/plenary.nvim' },
         -- stylua: ignore
         keys = {
@@ -27,12 +26,13 @@ return vim.list_contains(DyNeo.enabled_languages, 'dart')
       },
       {
         -- `flutter-tools` starts `dartls` with its own settings, so keep
-        -- lspconfig from starting a second one; the entry in
-        -- `config.languages` is what installs and documents the server.
+        -- lspconfig from starting a second one; with only the Dart SDK,
+        -- lspconfig starts it. The entry in `config.languages` is what
+        -- installs and documents the server.
         'neovim/nvim-lspconfig',
         opts = {
           setup = {
-            dartls = function() return true end,
+            dartls = has_flutter,
           },
         },
       },
