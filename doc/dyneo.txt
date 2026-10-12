@@ -917,7 +917,9 @@ among those of poetry, pipenv, pyenv, hatch, pixi and conda, and a `.venv` in
 the project, where uv puts its own.  It sets `$VIRTUAL_ENV` and `$PATH` and
 restarts the Python servers, so completion, the debugger, the REPL and the
 tasks all use it, and it comes back by itself the next time a file of the
-project opens.
+project opens.  A script declaring its own dependencies (PEP 723, a
+`# /// script` block) gets them through `uv sync --script` once you agree,
+the first time it opens: that installs what the file asks for.
 
 `<localleader>r` opens a REPL beside the script (iron.nvim): IPython when the
 environment has it, `python3` otherwise, taken from `$PATH` as it starts,

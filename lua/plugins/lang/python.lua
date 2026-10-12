@@ -64,6 +64,38 @@ return vim.list_contains(DyNeo.enabled_languages, 'python')
           },
         },
         opts = { options = { picker = 'snacks' } },
+        config = function(_, opts)
+          require('venv-selector').setup(opts)
+          -- A script declaring its dependencies (PEP 723) is synced with
+          -- `uv sync --script` as it opens and after each write: that
+          -- installs whatever a file from someone else's repository asks
+          -- for, and may build it from source. It runs once agreed to.
+          local uv2 = require('venv-selector.uv2')
+          local run = uv2.run_uv_flow_if_needed
+          uv2.run_uv_flow_if_needed = function(bufnr)
+            if not bufnr or bufnr == 0 then
+              bufnr = vim.api.nvim_get_current_buf()
+            end
+            if not vim.api.nvim_buf_is_valid(bufnr) then return end
+            if uv2.is_uv_buffer(bufnr) then
+              local verdict = vim.b[bufnr].dy_uv_allowed
+              if verdict == nil then
+                -- Pinned before asking: the prompt keeps handling events
+                vim.b[bufnr].dy_uv_allowed = false
+                verdict = vim.fn.confirm(
+                  ('Install the dependencies %s declares with `uv sync --script`?'):format(
+                    vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ':~:.')
+                  ),
+                  '&Install\n&Cancel',
+                  2
+                ) == 1
+                vim.b[bufnr].dy_uv_allowed = verdict
+              end
+              if not verdict then return end
+            end
+            return run(bufnr)
+          end
+        end,
       },
       {
         -- REPL: the line, the selection or the `# %%` cell sent to IPython
@@ -80,6 +112,10 @@ return vim.list_contains(DyNeo.enabled_languages, 'python')
           { '<localleader>q', function() require('iron.core').close_repl() end, ft = language.filetypes, desc = 'Close REPL' },
         },
         opts = function()
+          -- The command the REPL was started with: the paste format follows
+          -- it, not whichever venv is active by the time a line is sent
+          local started
+          local paste = require('iron.fts.common').bracketed_paste_python
           return {
             config = {
               scratch_repl = true,
@@ -88,11 +124,19 @@ return vim.list_contains(DyNeo.enabled_languages, 'python')
                   -- IPython when the environment has it; read from `$PATH`
                   -- as the REPL starts, so an activated venv is the one used
                   command = function()
-                    return vim.fn.executable('ipython') == 1
+                    started = vim.fn.executable('ipython') == 1
                         and { 'ipython', '--no-autoindent' }
                       or { 'python3' }
+                    return started
                   end,
-                  format = require('iron.fts.common').bracketed_paste_python,
+                  format = function(lines, extras)
+                    if started then
+                      extras = vim.tbl_extend('force', extras, {
+                        command = started,
+                      })
+                    end
+                    return paste(lines, extras)
+                  end,
                   block_dividers = { '# %%', '#%%' },
                   -- Python 3.13's REPL mangles pasted blocks
                   env = { PYTHON_BASIC_REPL = '1' },
