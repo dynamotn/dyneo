@@ -93,6 +93,7 @@ dyneo-layout	dyneo.txt	/*dyneo-layout*
 dyneo-lazy-install	dyneo.txt	/*dyneo-lazy-install*
 dyneo-logs	dyneo.txt	/*dyneo-logs*
 dyneo-mappings	dyneo.txt	/*dyneo-mappings*
+dyneo-model	dyneo.txt	/*dyneo-model*
 dyneo-openapi	dyneo.txt	/*dyneo-openapi*
 dyneo-ops	dyneo.txt	/*dyneo-ops*
 dyneo-per-machine	dyneo.txt	/*dyneo-per-machine*

@@ -132,6 +132,8 @@ below follow the sections of `:help dyneo`.
   columns completed, SQL linted and formatted by sqlfluff. `<leader>Db`
 - **dbt** — the model of the buffer compiled, run, tested or previewed from
   its project root. `<leader>oo`
+- **Model files** — a `.safetensors` or `.gguf` file opens as its header:
+  metadata, tensors, shapes and the parameter count.
 - **Cells & REPL** — `# %%` cells of a Python script moved through,
   selected and sent to IPython. `]j` `ij` `<localleader>c`
 

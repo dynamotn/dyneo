@@ -58,6 +58,7 @@ CONTENTS                                                      *dyneo-contents*
        8.1 Data files ..................................... |dyneo-data-files|
        8.2 SQL and databases ..................................... |dyneo-sql|
        8.3 Cells and the REPL ................................... |dyneo-repl|
+       8.4 Model files ......................................... |dyneo-model|
     9. Project and writing .................................. |dyneo-features|
        9.1 Project overview .................................. |dyneo-project|
        9.2 Decision records ...................................... |dyneo-adr|
@@ -886,6 +887,20 @@ so an activated virtual environment is the one used.  Then:
     `<localleader>q`   leave the REPL
 
 The REPL loads with the first of these keys, not with the file.
+
+8.4 Model files                                                  *dyneo-model*
+
+Opening a `.safetensors` or `.gguf` file shows its header rather than its
+bytes: the format and the size of the file, how many parameters its tensors
+add up to and of which types, its metadata, and every tensor with its type
+and shape.  A GGUF vocabulary is counted, not listed, and a long string is
+cut to one line.
+
+Only the header is read, a megabyte at a time, so a model of many gigabytes
+opens at once.  The file usually comes from elsewhere and nothing in it is
+trusted: a length running past the end of the file or past 128 MiB of
+header stops the reading, and the buffer says why.  The buffer is no copy of
+the file and cannot be written over it.
 
 ------------------------------------------------------------------------------
 9. PROJECT AND WRITING                                        *dyneo-features*
