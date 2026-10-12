@@ -50,33 +50,30 @@ Plugin.lazy_file()
 local defaults = require('config.defaults')
 local stable = DyNeo.plugin_channel == 'stable'
 
--- Plugins still developed on their branch but whose newest release is more
--- than two years old (as of 2026-10). `version = '*'` would take them back to
--- that release -- `vim-snippets` to 2014 -- so on `stable` they stay on their
--- branch, the way `plugins.treesitter.parser` keeps `nvim-treesitter` on its own.
+-- Plugins whose newest release the config cannot run on, so on `stable` they
+-- stay on their branch, the way `plugins.treesitter.parser` keeps
+-- `nvim-treesitter` on its own. Each entry says why:
+-- - "no release since": still developed on its branch, but the last tag is
+--   more than two years old (as of 2026-10), and `version = '*'` would take
+--   it back to that code;
+-- - "lacks ...": the release is missing something the config uses.
 -- `optional` keeps a plugin out when nothing else in the spec asks for it.
---
--- `conform.nvim` is here for another reason: its release is younger, but
--- `config.languages` names formatters added since (`gdscript-formatter`), and
--- `scripts/validate-tools.lua` fails on a formatter conform does not know.
--- `nvim-origami` too: its one tag, `v1.9`, is where to pin to keep options
--- it has since dropped, not a release to follow.
 local stale_releases = {
-  'stevearc/conform.nvim',
-  'chrisgrieser/nvim-origami',
-  'folke/edgy.nvim',
-  'folke/flash.nvim',
-  'folke/persistence.nvim',
-  'folke/ts-comments.nvim',
-  'gbprod/yanky.nvim',
-  'gpanders/nvim-parinfer',
-  'honza/vim-snippets',
-  'johmsalas/text-case.nvim',
-  'marilari88/neotest-vitest',
-  'mfussenegger/nvim-jdtls',
-  'nvim-lua/plenary.nvim',
-  'tpope/vim-dadbod',
-  'esensar/nvim-dev-container',
+  'stevearc/conform.nvim', -- v9.1.0 lacks `gdscript-formatter`
+  'chrisgrieser/nvim-origami', -- `v1.9` is a pin to keep dropped options
+  'willothy/flatten.nvim', -- v0.5.1 calls `hooks` `callbacks`
+  'lewis6991/satellite.nvim', -- no release since v1.0.0 (2023-07)
+  'folke/flash.nvim', -- no release since v2.1.0 (2024-07)
+  'folke/ts-comments.nvim', -- v1.5.0 lacks its fix for Neovim 0.12
+  'gbprod/yanky.nvim', -- no release since v2.0.0 (2023-11)
+  'gpanders/nvim-parinfer', -- v1.2.0 lacks `vim.text.diff` for Neovim 0.12
+  'honza/vim-snippets', -- no release since 1.0.0 (2014-05)
+  'marilari88/neotest-vitest', -- no release since v0.2.0 (2022-09)
+  'mfussenegger/nvim-dap', -- 0.10.0 lacks `listeners.on_session` (dap-view)
+  'mfussenegger/nvim-jdtls', -- no release since 0.2.0 (2022-12)
+  'nvim-lua/plenary.nvim', -- no release since v0.1.4 (2023-10)
+  'tpope/vim-dadbod', -- no release since v1.4 (2021-08)
+  'esensar/nvim-dev-container', -- no release since 0.2.0 (2022-05)
 }
 local stale_specs = vim.tbl_map(
   function(repo) return { repo, optional = true, version = false } end,
