@@ -1,8 +1,9 @@
 -- Globals shared across the configuration, with their defaults and types
 require('config.globals')
 -- Load specific configurations per machine. It runs ahead of the version
--- check because it is where `DyNeo.plugin_channel` is chosen, and the channel
--- decides which Neovim is new enough.
+-- check because it may override `DyNeo.plugin_channel` (a nightly defaults
+-- to `latest`, a release to `stable`), and the channel decides which Neovim
+-- is new enough.
 require('per_machine')
 
 -- `latest` runs plugins at their newest commit, and those follow Neovim's

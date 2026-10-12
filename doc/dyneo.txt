@@ -161,7 +161,8 @@ defaulted in `lua/config/globals.lua`.
         thing consulted.
 
                                                         *DyNeo.plugin_channel*
-`DyNeo.plugin_channel`         (default `'latest'`)
+`DyNeo.plugin_channel`         (default `'latest'` on a nightly,
+                          `'stable'` on a release)
         `'latest'` or `'stable'`, see |dyneo-channels|.
 
                                                      *DyNeo.quarantine_window*
@@ -243,14 +244,15 @@ defaulted in `lua/config/globals.lua`.
 
 3.3 Plugin channels                                           *dyneo-channels*
 
-                `latest` (default)        `stable`
+                `latest`                  `stable`
 Plugins         newest commit           newest release, or their branch
                                         when they tag none
 Neovim          0.13 nightly            0.12 or newer
 Lockfile        `lazy-lock.json`          `lazy-lock.stable.json`
 
 Each channel writes only its own lockfile, so a machine on `stable` and a
-machine on `latest` never rewrite each other's pins.
+machine on `latest` never rewrite each other's pins.  The default follows the
+Neovim running: a nightly gets `latest`, a release gets `stable`.
 
 `latest` follows the newest Neovim and the newest plugin commits, so an
 upstream break can land with any `:Lazy update`.  Set

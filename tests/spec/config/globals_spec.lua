@@ -10,10 +10,6 @@ describe('config.globals', function()
       DyNeo.day_night
     )
     assert.is_false(DyNeo.used_full_plugins)
-    assert.are.equal(
-      vim.fn.has('nvim-0.13') == 1 and 'latest' or 'stable',
-      DyNeo.plugin_channel
-    )
     assert.are.same({
       obsidian = false,
       leetcode = false,
@@ -32,6 +28,49 @@ describe('config.globals', function()
       local_only = {},
       local_providers = { 'ollama' },
     }, DyNeo.ai)
+  end)
+
+  describe('plugin_channel', function()
+    ---@param prerelease string|nil What `vim.version()` reports
+    local function globals_on(prerelease)
+      local version = vim.version
+      -- A module table that is also callable, like `vim.version` itself
+      local fake = setmetatable({}, {
+        __index = version,
+        __call = function()
+          local v = version()
+          v.prerelease = prerelease
+          return v
+        end,
+      })
+      local restore = h.stub(vim, 'version', fake)
+      h.globals()
+      restore()
+    end
+
+    it('rides latest on a nightly', function()
+      globals_on('dev')
+      assert.are.equal('latest', DyNeo.plugin_channel)
+    end)
+
+    it('stays stable on a release, whatever its number', function()
+      globals_on(nil)
+      assert.are.equal('stable', DyNeo.plugin_channel)
+    end)
+
+    it('lets per_machine override it', function()
+      globals_on('dev')
+      local restore = h.stub(
+        package.preload,
+        'per_machine.config',
+        function() DyNeo.plugin_channel = 'stable' end
+      )
+      h.unload('per_machine', 'per_machine.config')
+      require('per_machine')
+      restore()
+      h.unload('per_machine', 'per_machine.config')
+      assert.are.equal('stable', DyNeo.plugin_channel)
+    end)
   end)
 
   it('enables every language of config.languages', function()

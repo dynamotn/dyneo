@@ -36,8 +36,11 @@ DyNeo.used_full_plugins = false
 --- fixes the day they land and breakage with them; `stable` trades that for
 --- releases the plugin authors vouched for, and a released Neovim. Each keeps
 --- its own lockfile, so machines on different channels never rewrite each
---- other's pins.
-DyNeo.plugin_channel = vim.fn.has('nvim-0.13') == 1 and 'latest' or 'stable'
+--- other's pins. The default follows the Neovim running it: a nightly
+--- (`prerelease` is `'dev'`) rides `latest`, a release (`nil`) stays on
+--- `stable`, so a released 0.13 under `NVIM_APPNAME=nvim-stable` never
+--- starts writing `lazy-lock.json`.
+DyNeo.plugin_channel = vim.version().prerelease and 'latest' or 'stable'
 
 ---@type integer Seconds a release has to have been out before it may be
 --- installed, by Mason (`tools.mason-quarantine`) or by lazy.nvim
