@@ -227,10 +227,6 @@ return condition
             end
           end
 
-          local vscode = require('dap.ext.vscode')
-          vscode.type_to_filetypes['node'] = js_filetypes
-          vscode.type_to_filetypes['pwa-node'] = js_filetypes
-
           -- Ahead of whatever is there already rather than instead of it:
           -- mason-nvim-dap's Firefox handler may have run first, and its
           -- configurations would otherwise have been the only ones
@@ -289,8 +285,6 @@ return condition
             })
             :flatten()
             :totable()
-          vscode.type_to_filetypes['chrome'] = browser_filetypes
-          vscode.type_to_filetypes['pwa-chrome'] = browser_filetypes
           for _, filetype in ipairs(browser_filetypes) do
             dap.configurations[filetype] =
               vim.list_extend(dap.configurations[filetype] or {}, {
