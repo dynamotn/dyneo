@@ -6,16 +6,17 @@
 --- Nothing runs: the report is only read.
 local M = {}
 
---- The most of a report read; CodeQL's of a large repository is big
-M.MAX_REPORT = 64 * 1024 * 1024
+--- The most of a report read. It is read and decoded on the main loop, which
+--- takes about 0.2 s at this size; a larger report is better filtered first.
+M.MAX_REPORT = 16 * 1024 * 1024
 
 local notify = require('util.notify').titled('SARIF')
 
 local TYPES = { error = 'E', warning = 'W', note = 'N', none = 'I' }
 local RANK = { E = 1, W = 2, N = 3, I = 4 }
 
---- The path of a result's artifact. A relative URI is read against the base
---- the report gives it (`originalUriBaseIds`), else against `root`.
+--- The absolute path of a result's artifact. A relative URI is read against
+--- the base the report gives it (`originalUriBaseIds`), else against `root`.
 ---@param location table `physicalLocation.artifactLocation`
 ---@param bases table `run.originalUriBaseIds`
 ---@param root string
@@ -23,47 +24,86 @@ local RANK = { E = 1, W = 2, N = 3, I = 4 }
 local function path_of(location, bases, root)
   local uri = type(location.uri) == 'string' and location.uri or nil
   if not uri then return nil end
-  if uri:match('^file:') then return vim.uri_to_fname(uri) end
+  if uri:match('^file:') then return vim.fs.normalize(vim.uri_to_fname(uri)) end
   if uri:match('^%a[%w+.-]*:') then return nil end
+  uri = vim.uri_decode(uri)
+  if uri:sub(1, 1) == '/' then return vim.fs.normalize(uri) end
   local base = location.uriBaseId and bases[location.uriBaseId]
   local base_uri = type(base) == 'table' and base.uri or nil
   if type(base_uri) == 'string' and base_uri:match('^file:') then
     root = vim.uri_to_fname(base_uri)
   end
-  return vim.fs.normalize(vim.fs.joinpath(root, vim.uri_decode(uri)))
+  return vim.fs.normalize(vim.fs.joinpath(root, uri))
+end
+
+--- The quickfix item of one `result`; raises on one that is not SARIF
+---@param result table
+---@param tool string
+---@param bases table
+---@param root string The project root, symlinks resolved
+---@return vim.quickfix.entry
+local function item_of(result, tool, bases, root)
+  assert(type(result) == 'table', 'a result is not an object')
+  local physical = vim.tbl_get(result, 'locations', 1, 'physicalLocation') or {}
+  local region = physical.region or {}
+  local filename = path_of(physical.artifactLocation or {}, bases, root)
+  local message = vim.tbl_get(result, 'message', 'text') or ''
+  assert(type(message) == 'string', 'message.text is not a string')
+  local text = ('[%s %s] %s'):format(
+    tool,
+    type(result.ruleId) == 'string' and result.ruleId or '?',
+    -- One line: a multi-line message would break the list up
+    (message:gsub('%s*\n%s*', ' '))
+  )
+  -- A report is no reason to open a file outside the project it is about:
+  -- `../..`, `file:///etc/shadow` or a base of its own can point anywhere
+  if
+    filename
+    and not require('util.root').contains(
+      root,
+      vim.uv.fs_realpath(filename) or filename
+    )
+  then
+    text = ('%s (outside the project: %s)'):format(text, filename)
+    filename = nil
+  end
+  return {
+    filename = filename,
+    lnum = tonumber(region.startLine) or 1,
+    col = tonumber(region.startColumn) or 1,
+    end_lnum = tonumber(region.endLine),
+    type = TYPES[result.level] or 'W',
+    text = text,
+    valid = filename ~= nil,
+  }
 end
 
 --- The quickfix items of a decoded SARIF `report`, worst first
 ---@param report table
----@param root string Where relative paths start, usually the project root
+---@param root string The project root, where relative paths start
 ---@return vim.quickfix.entry[]
+---@return integer skipped Results that are not SARIF
 function M.items(report, root)
-  local items = {}
+  root = vim.uv.fs_realpath(root) or vim.fs.normalize(root)
+  local items, skipped = {}, 0
   for _, run in ipairs(type(report.runs) == 'table' and report.runs or {}) do
-    local bases = type(run.originalUriBaseIds) == 'table'
-        and run.originalUriBaseIds
-      or {}
-    local tool = vim.tbl_get(run, 'tool', 'driver', 'name') or 'sarif'
-    for _, result in ipairs(type(run.results) == 'table' and run.results or {}) do
-      local physical = vim.tbl_get(result, 'locations', 1, 'physicalLocation')
+    if type(run) ~= 'table' then
+      skipped = skipped + 1
+    else
+      local bases = type(run.originalUriBaseIds) == 'table'
+          and run.originalUriBaseIds
         or {}
-      local region = physical.region or {}
-      local filename = path_of(physical.artifactLocation or {}, bases, root)
-      local message = vim.tbl_get(result, 'message', 'text') or ''
-      table.insert(items, {
-        filename = filename,
-        lnum = tonumber(region.startLine) or 1,
-        col = tonumber(region.startColumn) or 1,
-        end_lnum = tonumber(region.endLine),
-        type = TYPES[result.level] or 'W',
-        -- One line: a multi-line message would break the list up
-        text = ('[%s %s] %s'):format(
-          tool,
-          result.ruleId or '?',
-          (message:gsub('%s*\n%s*', ' '))
-        ),
-        valid = filename ~= nil,
-      })
+      local tool = vim.tbl_get(run, 'tool', 'driver', 'name')
+      tool = type(tool) == 'string' and tool or 'sarif'
+      local results = type(run.results) == 'table' and run.results or {}
+      for _, result in ipairs(results) do
+        local ok, item = pcall(item_of, result, tool, bases, root)
+        if ok then
+          table.insert(items, item)
+        else
+          skipped = skipped + 1
+        end
+      end
     end
   end
   table.sort(items, function(a, b)
@@ -73,7 +113,7 @@ function M.items(report, root)
     end
     return a.lnum < b.lnum
   end)
-  return items
+  return items, skipped
 end
 
 --- Read the report at `path` into the quickfix list
@@ -102,9 +142,18 @@ function M.load(path)
     return notify(path .. ' is not a SARIF report', vim.log.levels.ERROR)
   end
   local root = vim.fs.root(path, '.git') or vim.fs.dirname(path)
-  local items = M.items(report, root)
+  local items, skipped = M.items(report, root)
+  if skipped > 0 then
+    notify(
+      ('%d results of %s are not SARIF, not listed'):format(skipped, path),
+      vim.log.levels.WARN
+    )
+  end
   vim.fn.setqflist({}, ' ', { title = 'SARIF: ' .. path, items = items })
-  if #items == 0 then return notify('No findings in ' .. path) end
+  if #items == 0 then
+    if skipped == 0 then notify('No findings in ' .. path) end
+    return
+  end
   vim.cmd('botright copen')
 end
 

@@ -5,7 +5,7 @@ local REPORT = {
   runs = {
     {
       tool = { driver = { name = 'semgrep' } },
-      originalUriBaseIds = { SRC = { uri = 'file:///base/' } },
+      originalUriBaseIds = { SRC = { uri = 'file:///root/base/' } },
       results = {
         {
           ruleId = 'note-rule',
@@ -71,7 +71,7 @@ describe('tools.sarif', function()
         { 'E', 'W', 'N' },
         vim.tbl_map(function(i) return i.type end, items)
       )
-      assert.are.equal('/base/app.py', items[1].filename)
+      assert.are.equal('/root/base/app.py', items[1].filename)
       assert.are.equal(10, items[1].lnum)
       assert.are.equal('[semgrep sqli] SQL injection', items[1].text)
     end)
@@ -89,6 +89,64 @@ describe('tools.sarif', function()
       assert.is_nil(item.filename)
       assert.is_false(item.valid)
       assert.are.equal('W', item.type)
+    end)
+
+    it('keeps no path outside the project jumpable', function()
+      local function result(uri, base)
+        return {
+          message = { text = 'x' },
+          locations = {
+            {
+              physicalLocation = {
+                artifactLocation = { uri = uri, uriBaseId = base },
+              },
+            },
+          },
+        }
+      end
+      local items = sarif.items({
+        runs = {
+          {
+            originalUriBaseIds = { UP = { uri = 'file:///etc/' } },
+            results = {
+              result('../../home/u/.ssh/id_rsa'),
+              result('file:///etc/shadow'),
+              result('passwd', 'UP'),
+              result('/etc/passwd'),
+              result('../root-other/a.py'),
+              result('file:///root/in.py'),
+            },
+          },
+        },
+      }, '/root')
+      local valid = vim.tbl_filter(function(i) return i.valid end, items)
+      assert.are.equal(1, #valid)
+      assert.are.equal('/root/in.py', valid[1].filename)
+      for _, i in ipairs(items) do
+        if not i.valid then
+          assert.is_nil(i.filename)
+          assert.matches('outside the project', i.text)
+        end
+      end
+    end)
+
+    it('skips the results that are not SARIF, and counts them', function()
+      local items, skipped = sarif.items({
+        runs = {
+          5,
+          {
+            results = {
+              { message = { text = 5 } },
+              { locations = { { physicalLocation = { region = 3 } } } },
+              'result',
+              { message = { text = 'fine' } },
+            },
+          },
+        },
+      }, '/root')
+      assert.are.equal(4, skipped)
+      assert.are.equal(1, #items)
+      assert.matches('fine', items[1].text)
     end)
 
     it('takes a report with no runs or results', function()
@@ -121,6 +179,48 @@ describe('tools.sarif', function()
       sarif.load(dir .. '/x.json')
       assert.matches('is not a SARIF report', notes[1])
       assert.are.equal('before', vim.fn.getqflist({ title = 1 }).title)
+    end)
+
+    it('says so of results that are not SARIF', function()
+      h.write(dir .. '/bad.sarif', {
+        '{"runs": [{"results": [{"message": {"text": 5}}, {"ruleId": "ok"}]}]}',
+      })
+      sarif.load(dir .. '/bad.sarif')
+      assert.matches('1 results .* not SARIF', notes[1])
+      assert.are.equal(1, #vim.fn.getqflist())
+    end)
+
+    it('leaves a link out of the project unjumpable', function()
+      vim.fn.mkdir(dir .. '/.git', 'p')
+      local outside, cleanup_outside = h.tmpdir()
+      h.write(outside .. '/secret.txt', { 'x' })
+      vim.uv.fs_symlink(outside, dir .. '/link')
+      h.write(dir .. '/r.sarif', {
+        vim.json.encode({
+          runs = {
+            {
+              results = {
+                {
+                  message = { text = 'x' },
+                  locations = {
+                    {
+                      physicalLocation = {
+                        artifactLocation = { uri = 'link/secret.txt' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        }),
+      })
+      sarif.load(dir .. '/r.sarif')
+      cleanup_outside()
+      local item = vim.fn.getqflist()[1]
+      assert.are.equal(0, item.valid)
+      assert.are.equal(0, item.bufnr)
+      assert.matches('outside the project', item.text)
     end)
 
     it('refuses a report over the limit', function()

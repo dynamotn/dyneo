@@ -511,7 +511,11 @@ checkov and bandit all write one.  `<leader>kf` (|:DySarif|) reads it -- the
 file given, the buffer when it is a `.sarif`, or one asked for -- and lists
 every result in the quickfix list, errors first, each with its tool and
 rule.  A relative path is read against the base the report gives it, or the
-git root of the report.  Nothing runs; a report over 64 MiB is not read.
+git root of the report.  A path that leads out of that root -- through
+`..`, an absolute path, a base of the report's own or a symlink -- is kept
+in the list but cannot be jumped to, and says it is outside the project.
+A result that is not SARIF is skipped, and the count of those is shown.
+Nothing runs; a report over 16 MiB is not read.
 
 In a project with semgrep rules of its own -- `.semgrep.yml`,
 `.semgrep.yaml` or a `.semgrep/` folder at its root -- semgrep lints every
