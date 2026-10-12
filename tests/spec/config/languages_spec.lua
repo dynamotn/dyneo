@@ -14,6 +14,7 @@ local known_fields = {
   null_ls = true,
   dap = true,
   test = true,
+  neogen = true,
   dial = true,
   autopairs = true,
   endwise = true,
@@ -135,6 +136,9 @@ describe('config.languages', function()
           end
         end
         if spec.ext ~= nil then assert.is_truthy(spec.ext:match('^[%w_]+$')) end
+        if spec.neogen ~= nil then
+          assert.is_truthy(spec.neogen:match('^[%w_]+$'), 'neogen')
+        end
         for _, field in ipairs({ 'dial', 'autopairs' }) do
           if spec[field] ~= nil then
             assert.are.equal('function', type(spec[field]), field)

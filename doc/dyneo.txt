@@ -291,6 +291,7 @@ each entry is a `DyLangSpec`: >lua
     ---@field null_ls? DyNullLsSpec[]
     ---@field dap? (string|DyDapSpec)[]
     ---@field test? string[]
+    ---@field neogen? string
     ---@field dial? fun(augend: Augend): Augend[]
     ---@field autopairs? fun(filetypes, rule, cond, ts_cond): Rule[]
     ---@field endwise? boolean
@@ -309,6 +310,15 @@ project its build and test tasks, run from the project root.  A task appears
 only when its language is in |DyNeo.enabled_languages| and its program is on
 `$PATH`; make, just, npm, cargo, mix and the rest of overseer's own templates
 are left to it.
+
+`test` names the neotest adapters of a language, and `vim-test` among them
+lets vim-test run its files; vim-test is kept away from every other filetype.
+`<leader>cn` writes a doc comment with neogen, in the convention `neogen`
+names.  A language neogen knows needs none.  The conventions neogen lacks --
+Dart, Elixir, Haskell, Scala, Swift, Zig, R, Gleam, OCaml, Perl and fish, and
+the dybatpho style of every shell filetype -- are built in
+`lua/util/neogen.lua`; a convention neogen ships serves only the filetypes it
+has none for, such as `typescript.tsx`.
 
 4.1 Tooling that installs itself                          *dyneo-lazy-install*
 

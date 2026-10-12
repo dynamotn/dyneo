@@ -18,6 +18,10 @@
 ---@field null_ls? DyNullLsSpec[]
 ---@field dap? (string|DyDapSpec)[]
 ---@field test? string[]
+---@field neogen? string The annotation convention `<leader>cn` writes. One
+--- `util.neogen` builds serves every filetype of the language; one of
+--- neogen's own configurations only the filetypes neogen has none for, such
+--- as `typescript.tsx`. A language neogen knows needs no entry.
 ---@field dial? fun(augend: Augend): Augend[]
 ---@field autopairs? fun(filetypes: string[], rule: Rule, cond: CondOpts, ts_cond: table): Rule[]
 ---@field endwise? boolean
@@ -576,6 +580,7 @@ return {
     },
     dap = { 'bash' },
     test = { 'vim-test' },
+    neogen = 'sh_docs',
     endwise = true,
   },
   cpp = {
@@ -673,6 +678,7 @@ return {
       { 'dart_format', command = 'dart', mason = { package = 'dart' } },
     },
     test = { 'neotest-dart' },
+    neogen = 'dartdoc',
     autopairs = block_comment_autopairs,
   },
   elixir = {
@@ -686,6 +692,7 @@ return {
     linters = { { 'credo', command = 'mix', mason = { package = 'elixir' } } },
     formatters = { { 'mix', command = 'mix', mason = { package = 'elixir' } } },
     test = { 'neotest-elixir' },
+    neogen = 'exdoc',
     endwise = true,
   },
   erlang = { -- See `elixir`
@@ -717,6 +724,7 @@ return {
     formatters = {
       { 'fish_indent', mason = { package = 'fish' } },
     },
+    neogen = 'fishdoc',
     endwise = true,
   },
   gdscript = {
@@ -743,6 +751,7 @@ return {
     lsp_servers = { 'gleam', 'harper_ls' },
     formatters = { { 'gleam', mason = { package = 'gleam' } } },
     test = { 'vim-test' },
+    neogen = 'gleamdoc',
   },
   go = {
     filetypes = { 'go' },
@@ -810,6 +819,7 @@ return {
     -- `fourmolu.yaml` instead of imposing one style.
     formatters = { 'fourmolu' },
     test = { 'neotest-haskell' },
+    neogen = 'haddock',
     autopairs = function(filetypes, rule, cond)
       return {
         -- Add spaces in a block comment
@@ -887,6 +897,7 @@ return {
     formatters = js_formatters,
     dap = js_dap,
     test = js_test,
+    neogen = 'javascriptreact',
     dial = js_dial,
     autopairs = js_autopairs,
   },
@@ -1011,6 +1022,7 @@ return {
     ext = 'ml',
     lsp_servers = { 'ocamllsp' },
     formatters = { 'ocamlformat' },
+    neogen = 'odoc',
     autopairs = function(filetypes, rule, cond)
       return {
         -- Add spaces in a block comment
@@ -1033,6 +1045,7 @@ return {
     formatters = { { 'perltidy', mason = { package = 'perltidy' } } },
     dap = { { 'perl', mason = { package = 'perl-debug-adapter' } } },
     test = { 'vim-test' },
+    neogen = 'pod',
   },
   php = {
     filetypes = { 'php' },
@@ -1113,6 +1126,7 @@ return {
     -- standalone binary, so Mason can install it like any other tool.
     formatters = { 'air' },
     test = { 'neotest-testthat' },
+    neogen = 'roxygen2',
   },
   rails = { -- See `ruby` and `html`
     filetypes = { 'eruby' },
@@ -1196,6 +1210,7 @@ return {
     lsp_servers = { 'metals', 'harper_ls' },
     formatters = { { 'scalafmt', mason = { package = 'scalafmt' } } },
     test = { 'vim-test' },
+    neogen = 'scaladoc',
     autopairs = block_comment_autopairs,
   },
   snakemake = {
@@ -1264,6 +1279,7 @@ return {
     linters = { 'swiftlint' },
     formatters = { 'swiftformat' },
     test = { 'vim-test' },
+    neogen = 'docc',
     autopairs = block_comment_autopairs,
   },
   templ = { -- See `go` and `html`
@@ -1299,6 +1315,7 @@ return {
     formatters = js_formatters,
     dap = js_dap,
     test = js_test,
+    neogen = 'typescriptreact',
     dial = js_dial,
     autopairs = js_autopairs,
   },
@@ -1403,6 +1420,7 @@ return {
     },
     dap = { 'codelldb' },
     test = { 'neotest-zig' },
+    neogen = 'zigdoc',
     autopairs = block_comment_autopairs,
   },
   zsh = { -- See `bash`
@@ -1414,6 +1432,7 @@ return {
     -- the linter is `zsh -n` and `beautysh` is what knows the syntax.
     linters = { { 'zsh', mason = { package = 'zsh' } } },
     formatters = { 'beautysh' },
+    neogen = 'sh_docs',
     endwise = true,
   },
   ------------------------------------ }
