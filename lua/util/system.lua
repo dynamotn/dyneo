@@ -237,19 +237,35 @@ function M.sync(cmd, opts)
   -- The deadline is the wait's: a `timeout` in the options as well would
   -- have the process killed and still leave the wait without a result
   opts.timeout = nil
-  local started, obj = pcall(vim.system, cmd, opts)
+  ---@type vim.SystemCompleted?
+  local result
+  local started, obj = pcall(
+    vim.system,
+    cmd,
+    opts,
+    function(completed) result = completed end
+  )
   if not started then
     return { code = M.MISSING, signal = 0, stdout = '', stderr = tostring(obj) }
   end
-  local ok, result = pcall(obj.wait, obj, timeout)
+  -- Not `obj:wait()`: past the deadline it kills the command and then waits
+  -- as long again for the output something it started still holds open.
+  -- Fast events only, as it does: nothing scheduled runs in the middle.
+  local ok, err = pcall(
+    vim.wait,
+    timeout,
+    function() return result ~= nil end,
+    nil,
+    true
+  )
   if ok and result then return result end
   if opts.detach and obj.pid then pcall(vim.uv.kill, -obj.pid, 'sigkill') end
+  pcall(obj.kill, obj, 'sigkill')
   return {
     code = M.TIMED_OUT,
     signal = 9,
     stdout = '',
-    stderr = ok and ('timed out after %d ms'):format(timeout)
-      or tostring(result),
+    stderr = ok and ('timed out after %d ms'):format(timeout) or tostring(err),
   }
 end
 

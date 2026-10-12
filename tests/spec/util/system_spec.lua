@@ -39,6 +39,23 @@ describe('util.system', function()
     assert.is_true(took < 2000, ('took %d ms'):format(took))
   end)
 
+  it('runs nothing scheduled while it waits', function()
+    local ran = false
+    vim.schedule(function() ran = true end)
+    system.sync({ 'sh', '-c', 'sleep 0.1' })
+    assert.is_false(ran)
+    vim.wait(100, function() return ran end)
+  end)
+
+  it('answers at the deadline, not twice the deadline', function()
+    h.write(dir .. '/slow', { '#!/bin/sh', 'sleep 5', 'echo late' })
+    vim.fn.setfperm(dir .. '/slow', 'rwxr-xr-x')
+    local start = vim.uv.hrtime()
+    system.sync({ dir .. '/slow' }, { timeout = 1000 })
+    local took = (vim.uv.hrtime() - start) / 1e6
+    assert.is_true(took < 1500, ('took %d ms'):format(took))
+  end)
+
   it(
     'kills what a detached command started once it runs out of time',
     function()
