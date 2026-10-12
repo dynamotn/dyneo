@@ -39,9 +39,13 @@ set +e
 # there. Every file is opened by an absolute path.
 # An error echoed while `init.lua` loads can still leave a headless Neovim
 # waiting, deaf to SIGTERM: `timeout` sends SIGKILL after a grace period.
+# mise reads its global versions under the real config home: without them its
+# shims (the `go` gopls runs) have no version to run.
+mise_config="${MISE_CONFIG_DIR:-${XDG_CONFIG_HOME:-${HOME}/.config}/mise}"
 (
   cd "${workdir}" \
-    && XDG_CONFIG_HOME="${workdir}/config" CHECK_STARTUP_WORKDIR="${workdir}" \
+    && MISE_CONFIG_DIR="${mise_config}" \
+      XDG_CONFIG_HOME="${workdir}/config" CHECK_STARTUP_WORKDIR="${workdir}" \
       timeout --kill-after=10 "${CHECK_STARTUP_TIMEOUT:-900}" \
       nvim --headless -i NONE \
       --cmd "luafile ${repo}/scripts/lib/notify-watch.lua" \
