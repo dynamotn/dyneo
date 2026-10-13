@@ -171,6 +171,8 @@ below follow the sections of `:help dyneo`.
 
 - **C4 models** — LikeC4 with its language server, Structurizr DSL; turned
   into D2 to preview inline. `likec4 gen d2`
+- **AsyncAPI** — documents checked against their schema; the changes that
+  break a consumer since a revision. `:DyAsyncApiDiff`
 - **Service levels** — the availability of a chain of components, its
   downtime, error budget and requests in flight. `:DyNfr 99.9 2x99.95 rps=200`
 - **Network ranges** — the IPv4 range under the cursor read out; the subnets

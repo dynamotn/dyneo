@@ -5,6 +5,7 @@
 :DyAiGuardCheck	dyneo.txt	/*:DyAiGuardCheck*
 :DyAiGuardLog	dyneo.txt	/*:DyAiGuardLog*
 :DyArchitecture	dyneo.txt	/*:DyArchitecture*
+:DyAsyncApiDiff	dyneo.txt	/*:DyAsyncApiDiff*
 :DyCiLint	dyneo.txt	/*:DyCiLint*
 :DyCiStatus	dyneo.txt	/*:DyCiStatus*
 :DyCidr	dyneo.txt	/*:DyCidr*
@@ -73,6 +74,7 @@ dyneo-ai-pr	dyneo.txt	/*dyneo-ai-pr*
 dyneo-ai-prompts	dyneo.txt	/*dyneo-ai-prompts*
 dyneo-ai-review	dyneo.txt	/*dyneo-ai-review*
 dyneo-architecture	dyneo.txt	/*dyneo-architecture*
+dyneo-asyncapi	dyneo.txt	/*dyneo-asyncapi*
 dyneo-channels	dyneo.txt	/*dyneo-channels*
 dyneo-ci	dyneo.txt	/*dyneo-ci*
 dyneo-cidr	dyneo.txt	/*dyneo-cidr*
