@@ -31,9 +31,12 @@
     },
     {
       "customType": "regex",
-      "description": "Tools the own Mason registry installs from npm",
+      "description": "Tools the own Mason registry installs from npm; a scoped name is written `%40scope/name` in a purl and looked up as `@scope/name`",
       "managerFilePatterns": ["/^lua/tools/mason-registry/[^/]+\\.lua$/"],
-      "matchStrings": ["'pkg:npm/(?<depName>[^@']+)@(?<currentValue>\\d[^']*)'"],
+      "matchStrings": [
+        "'pkg:npm/(?:%40(?<scope>[^/@']+)/)?(?<name>[^/@']+)@(?<currentValue>\\d[^']*)'"
+      ],
+      "depNameTemplate": "{{#if scope}}@{{scope}}/{{/if}}{{name}}",
       "datasourceTemplate": "npm"
     },
     {
