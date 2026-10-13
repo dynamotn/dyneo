@@ -432,15 +432,13 @@ describe('tools.lazy-quarantine', function()
         ['b.nvim'] = {},
         ['a.nvim'] = {},
       })
-      assert.are.same(
-        { 'review' },
-        vim.fn.getcompletion('DyQuarantine ', 'cmdline')
-      )
-      assert.are.same(
-        { 'a.nvim', 'b.nvim' },
-        vim.fn.getcompletion('DyQuarantine review ', 'cmdline')
-      )
+      local subcommands = vim.fn.getcompletion('DyQuarantine ', 'cmdline')
+      local plugins = vim.fn.getcompletion('DyQuarantine review ', 'cmdline')
+      -- Put back before asserting: a failure would leave lazy.nvim's plugins
+      -- replaced for every spec after this one
       restore()
+      assert.are.same({ 'review' }, subcommands)
+      assert.are.same({ 'a.nvim', 'b.nvim' }, plugins)
     end)
 
     it('hands review its plugin', function()

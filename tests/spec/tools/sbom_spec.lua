@@ -461,27 +461,30 @@ describe('tools.sbom', function()
       function(msg) table.insert(notes, msg) end
     )
 
-    sbom.command({ fargs = { dir .. '/out/sbom.cdx.json' } })
-    local written = vim.json.decode(
-      table.concat(vim.fn.readfile(dir .. '/out/sbom.cdx.json'), '\n')
-    )
-    assert.equals('pkg:npm/x@1', written.components[1].purl)
-    assert.is_truthy(
-      notes[1]:find('1 plugins and packages written to', 1, true)
-    )
+    -- The stubs go back whatever fails, so a failure here stays here
+    local ok, err = pcall(function()
+      sbom.command({ fargs = { dir .. '/out/sbom.cdx.json' } })
+      local written = vim.json.decode(
+        table.concat(vim.fn.readfile(dir .. '/out/sbom.cdx.json'), '\n')
+      )
+      assert.equals('pkg:npm/x@1', written.components[1].purl)
+      assert.is_truthy(
+        notes[1]:find('1 plugins and packages written to', 1, true)
+      )
 
-    -- Asked before the file is written over, and left as it was on no
-    h.write(dir .. '/out/sbom.cdx.json', { 'mine' })
-    local restore_confirm = h.stub(vim.fn, 'confirm', function() return 2 end)
-    sbom.command({ fargs = { dir .. '/out/sbom.cdx.json' } })
-    restore_confirm()
-    assert.same({ 'mine' }, vim.fn.readfile(dir .. '/out/sbom.cdx.json'))
-    assert.equals('Not written', notes[#notes])
+      -- Asked before the file is written over, and left as it was on no
+      h.write(dir .. '/out/sbom.cdx.json', { 'mine' })
+      local restore_confirm = h.stub(vim.fn, 'confirm', function() return 2 end)
+      sbom.command({ fargs = { dir .. '/out/sbom.cdx.json' } })
+      restore_confirm()
+      assert.same({ 'mine' }, vim.fn.readfile(dir .. '/out/sbom.cdx.json'))
+      assert.equals('Not written', notes[#notes])
 
-    sbom.command({ fargs = {} })
-    assert.equals('json', vim.bo.filetype)
-
+      sbom.command({ fargs = {} })
+      assert.equals('json', vim.bo.filetype)
+    end)
     restore_notify()
     restore()
+    if not ok then error(err, 0) end
   end)
 end)
