@@ -11,6 +11,7 @@ local plugins_of = {
   blink_cmp = { 'blink.cmp' },
   dadbod_ui = { 'vim-dadbod-ui' },
   dap = { 'nvim-dap' },
+  diffview = { 'diffview-plus.nvim' },
   dropbar = { 'dropbar.nvim' },
   flash = { 'flash.nvim' },
   gitsigns = { 'gitsigns.nvim' },

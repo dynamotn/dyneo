@@ -32,6 +32,8 @@ return {
         blink_cmp = true,
         dadbod_ui = true,
         dap = true,
+        -- diffview-plus.nvim, set up when `glab` is there
+        diffview = true,
         dropbar = { enabled = true },
         flash = true,
         gitsigns = true,
