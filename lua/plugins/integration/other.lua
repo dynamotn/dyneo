@@ -253,10 +253,30 @@ return {
         return true
       end
 
-      local save_im_state = im.save_im_state
+      -- Upstream waits on `get` with no deadline: a stalled input method
+      -- daemon would hold every `InsertLeave`
+      local get_failed = false
       im.save_im_state = function()
         vim.wait(200, function() return not running end, 5)
-        return save_im_state()
+        local cmd, err = im_command.get_im_command('get')
+        if not cmd then
+          vim.notify('im-switch: ' .. tostring(err), vim.log.levels.ERROR)
+          return false
+        end
+        local system = require('util.system')
+        local result = system.sync(cmd, { text = true, timeout = 1000 })
+        if result.code ~= 0 then
+          if not get_failed then
+            get_failed = true
+            vim.notify(
+              'im-switch: ' .. system.failure(result, cmd[1]),
+              vim.log.levels.ERROR
+            )
+          end
+          return false
+        end
+        vim.b.im_switch_last_state = vim.trim(result.stdout or '')
+        return true
       end
       im.set_default_im = function() return switch() end
       im.restore_im = function()
