@@ -228,10 +228,11 @@ function M.branch(issue)
           local exists = found.code == 0
           local args = exists and { 'switch', name } or { 'switch', '-c', name }
           -- With no deadline: `:wait()` SIGKILLs on timeout, and a checkout
-          -- killed half-way leaves `index.lock` behind
+          -- killed half-way leaves `index.lock` behind. Detached, so a hook
+          -- that prompts cannot fight the TUI for the terminal
           vim.system(
             vim.list_extend({ 'git', '-C', dir }, args),
-            { text = true },
+            { text = true, detach = true },
             vim.schedule_wrap(function(result)
               if result.code ~= 0 then
                 return notify(
