@@ -194,12 +194,14 @@ end
 --- read: `vim.diagnostic.get` copies every diagnostic it hands back.
 ---@param bufnr integer
 ---@return { name: string, line: integer }[]
+local leaks_namespace
 local function leaks_in_buffer(bufnr)
   local found = {}
-  local namespace = vim.api.nvim_get_namespaces().betterleaks
-  if not namespace then return found end
+  -- Asked per keystroke, and `nvim_get_namespaces` builds the whole table
+  leaks_namespace = leaks_namespace or vim.api.nvim_get_namespaces().betterleaks
+  if not leaks_namespace then return found end
   for _, diagnostic in
-    ipairs(vim.diagnostic.get(bufnr, { namespace = namespace }))
+    ipairs(vim.diagnostic.get(bufnr, { namespace = leaks_namespace }))
   do
     if diagnostic.source == 'betterleaks' then
       table.insert(found, {
