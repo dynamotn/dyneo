@@ -2,7 +2,8 @@ return {
   -- Project setting
   {
     'mrjones2014/codesettings.nvim',
-    lazy = false,
+    -- A server starting `require`s it, which loads it then
+    cmd = 'Codesettings',
     keys = {
       {
         '<leader>pss',
