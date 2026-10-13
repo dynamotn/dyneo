@@ -22,11 +22,24 @@ local severities = {
 --- The diagnostics of a checkov report
 ---@param output string
 ---@return vim.Diagnostic[]
+--- What stands in for a report that could not be read, so a tool that
+--- crashed never passes a file
+---@type vim.Diagnostic
+M.unreadable = {
+  lnum = 0,
+  col = 0,
+  severity = vim.diagnostic.severity.ERROR,
+  source = 'checkov',
+  code = 'unreadable-report',
+  message = 'checkov gave a report that could not be read',
+}
+
 function M.parse(output)
-  if output == nil or output == '' then return {} end
+  -- No report is no clean run: the tool prints one even with nothing found
+  if output == nil or output == '' then return { M.unreadable } end
   local ok, report =
     pcall(vim.json.decode, output, { luanil = { object = true, array = true } })
-  if not ok or type(report) ~= 'table' then return {} end
+  if not ok or type(report) ~= 'table' then return { M.unreadable } end
   -- One framework prints an object, several a list of them
   if not vim.islist(report) then report = { report } end
   local diagnostics = {}

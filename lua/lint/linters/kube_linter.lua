@@ -28,11 +28,24 @@ end
 ---@param output string
 ---@param bufnr? integer
 ---@return vim.Diagnostic[]
+--- What stands in for a report that could not be read, so a tool that
+--- crashed never passes a file
+---@type vim.Diagnostic
+M.unreadable = {
+  lnum = 0,
+  col = 0,
+  severity = vim.diagnostic.severity.ERROR,
+  source = 'kube-linter',
+  code = 'unreadable-report',
+  message = 'kube-linter gave a report that could not be read',
+}
+
 function M.parse(output, bufnr)
-  if output == nil or output == '' then return {} end
+  -- No report is no clean run: the tool prints one even with nothing found
+  if output == nil or output == '' then return { M.unreadable } end
   local ok, report =
     pcall(vim.json.decode, output, { luanil = { object = true, array = true } })
-  if not ok or type(report) ~= 'table' then return {} end
+  if not ok or type(report) ~= 'table' then return { M.unreadable } end
   local lines = bufnr and vim.api.nvim_buf_get_lines(bufnr, 0, -1, false) or {}
   local diagnostics = {}
   for _, item in
