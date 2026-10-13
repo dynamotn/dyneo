@@ -64,11 +64,19 @@ describe('tools.encrypted', function()
 
   local function calls() return vim.fn.readfile(log) end
 
+  --- Decrypt `bufnr` and wait until it is done
+  local function decrypt(bufnr)
+    local decrypted
+    encrypted.open(bufnr, function(ok) decrypted = ok end)
+    assert.is_true(vim.wait(5000, function() return decrypted ~= nil end, 10))
+    return decrypted
+  end
+
   --- Open `file` the way the BufReadPost hook does
   local function open(file)
     vim.cmd.edit(file)
     local bufnr = vim.api.nvim_get_current_buf()
-    return bufnr, encrypted.open(bufnr)
+    return bufnr, decrypt(bufnr)
   end
 
   describe('kind', function()
@@ -192,7 +200,7 @@ describe('tools.encrypted', function()
     local bufnr = open(file)
     vim.cmd('bdelete')
     vim.cmd.edit(file)
-    encrypted.open(bufnr)
+    decrypt(bufnr)
     vim.fn.writefile({}, log)
     vim.api.nvim_buf_set_lines(bufnr, 0, 1, false, { 'a: 2' })
     vim.cmd('write')
@@ -309,6 +317,63 @@ describe('tools.encrypted', function()
     assert.is_truthy(
       calls()[2]:find('^chezmoi encrypt %-%-output ' .. vim.pesc(file))
     )
+  end)
+
+  it(
+    'decrypts off the main loop, the ciphertext read-only meanwhile',
+    function()
+      tool('sops', { 'sleep 1', 'sed -n "s/^plain: //p" "$2"' })
+      local file = dir .. '/values.yaml'
+      h.write(file, { 'plain: a: 1', 'x: ENC[AES256_GCM,data:x]', 'sops:' })
+      vim.cmd.edit(file)
+      local bufnr = vim.api.nvim_get_current_buf()
+      local decrypted
+      local started = vim.uv.hrtime()
+      encrypted.open(bufnr, function(ok) decrypted = ok end)
+      assert.is_true((vim.uv.hrtime() - started) / 1e6 < 500)
+      assert.is_nil(decrypted)
+      assert.is_false(vim.bo[bufnr].modifiable)
+      assert.is_true(vim.wait(5000, function() return decrypted ~= nil end, 10))
+      assert.is_true(decrypted)
+      assert.is_true(vim.bo[bufnr].modifiable)
+      assert.same({ 'a: 1' }, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
+    end
+  )
+
+  it('leaves a buffer read again meanwhile as it now is', function()
+    tool('sops', { 'sleep 0.3', 'sed -n "s/^plain: //p" "$2"' })
+    local file = dir .. '/values.yaml'
+    h.write(file, { 'plain: a: 1', 'x: ENC[AES256_GCM,data:x]', 'sops:' })
+    vim.cmd.edit(file)
+    local bufnr = vim.api.nvim_get_current_buf()
+    local decrypted
+    encrypted.open(bufnr, function(ok) decrypted = ok end)
+    -- What reading the file again does once it is no longer encrypted
+    h.write(file, { 'plain now' })
+    vim.bo[bufnr].modifiable = true
+    vim.cmd('edit!')
+    assert.is_true(vim.wait(5000, function() return decrypted ~= nil end, 10))
+    assert.is_false(decrypted)
+    assert.same(
+      { 'plain now' },
+      vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    )
+    assert.are_not.equal('acwrite', vim.bo[bufnr].buftype)
+  end)
+
+  it('leaves the ciphertext when the clear text was cut', function()
+    local restore = h.stub(require('util.system'), 'MAX_BYTES', 2)
+    local file = dir .. '/values.yaml'
+    h.write(file, { 'plain: a: 1', 'x: ENC[AES256_GCM,data:x]', 'sops:' })
+    local bufnr, decrypted = open(file)
+    restore()
+    assert.is_false(decrypted)
+    assert.equals(
+      'x: ENC[AES256_GCM,data:x]',
+      vim.api.nvim_buf_get_lines(bufnr, 1, 2, false)[1]
+    )
+    assert.are_not.equal('acwrite', vim.bo[bufnr].buftype)
+    assert.is_true(vim.bo[bufnr].modifiable)
   end)
 
   it('leaves the ciphertext as it is when decryption fails', function()
@@ -454,6 +519,17 @@ describe('tools.encrypted', function()
       assert.is_true(vim.wait(5000, function() return #notes > before end, 10))
       assert.is_truthy(
         vim.tbl_contains(calls(), 'sops rotate --in-place ' .. file)
+      )
+      -- Read again, and decrypted off the main loop in turn
+      assert.is_true(
+        vim.wait(
+          5000,
+          function()
+            return vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)[1]
+              == 'rotated'
+          end,
+          10
+        )
       )
       assert.same(
         { 'rotated' },

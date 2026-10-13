@@ -98,7 +98,13 @@ local notify = require('util.notify').titled('Encrypted file')
 ---@return string
 local function failure(kind, result)
   local err = vim.trim(result.stderr or '')
-  if err == '' then err = ('exit %d'):format(result.code) end
+  if result.timed_out then
+    err = ('timed out after %d s'):format(M.TIMEOUT / 1000)
+  elseif result.cut then
+    err = 'more output than can be read'
+  elseif err == '' then
+    err = ('exit %d'):format(result.code)
+  end
   if kind == 'ansible' then
     err = err
       .. '\nAnsible Vault cannot ask for a password here: set'
@@ -201,15 +207,42 @@ function M.write(bufnr)
   return true
 end
 
+--- Run `command` off the main loop, never raising, and hand `on_done` what
+--- it did; nil when it could not start
+---@param command string[]
+---@param opts table `vim.system` options
+---@param on_done fun(result: vim.SystemCompleted?)
+local function run(command, opts, on_done)
+  require('util.system').run(
+    command,
+    vim.tbl_extend('force', { timeout = M.TIMEOUT, detach = true }, opts),
+    function(result) on_done(not result.missing and result or nil) end
+  )
+end
+
+--- The decryption each buffer waits on, so an older one finishing late
+--- leaves the buffer to the newer
+---@type table<integer, integer>
+local decrypting = {}
+local next_decryption = 0
+
 --- Open the clear text of `bufnr`, if it holds an encrypted file
+---
+--- It is read on the main loop's behalf, not on it: a slow KMS, or an agent
+--- waiting for a PIN it never gets, must not hold the editor for the whole
+--- `M.TIMEOUT`. Until the clear text is in, the ciphertext stays read-only,
+--- so nothing typed into it is lost when it is replaced.
 ---@param bufnr integer
----@return boolean decrypted
-function M.open(bufnr)
-  if vim.api.nvim_buf_line_count(bufnr) > MAX_LINES then return false end
+---@param on_done? fun(decrypted: boolean)
+function M.open(bufnr, on_done)
+  on_done = on_done or function() end
+  if vim.api.nvim_buf_line_count(bufnr) > MAX_LINES then
+    return on_done(false)
+  end
   local file = vim.api.nvim_buf_get_name(bufnr)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local kind = M.kind(lines, file)
-  if not kind then return false end
+  if not kind then return on_done(false) end
 
   -- Held back before anything of the clear text is in the buffer
   sensitive.mark(bufnr, ('decrypted with %s'):format(TOOLS[kind].name))
@@ -223,35 +256,52 @@ function M.open(bufnr)
       command[1] .. ' is not installed: left encrypted',
       vim.log.levels.WARN
     )
-    return false
-  end
-  local ok, result = pcall(
-    require('util.system').sync,
-    command,
-    { text = true, timeout = M.TIMEOUT, detach = true }
-  )
-  if not ok or result.code ~= 0 then
-    notify(
-      'Left encrypted: ' .. (ok and failure(kind, result) or tostring(result)),
-      vim.log.levels.ERROR
-    )
-    return false
+    return on_done(false)
   end
 
-  local clear =
-    vim.split((result.stdout or ''):gsub('\n$', ''), '\n', { plain = true })
-  -- No undoing back to the ciphertext
-  local undolevels = vim.bo[bufnr].undolevels
-  vim.bo[bufnr].undolevels = -1
-  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, clear)
-  vim.bo[bufnr].undolevels = undolevels
-  vim.bo[bufnr].modified = false
+  next_decryption = next_decryption + 1
+  local id = next_decryption
+  decrypting[bufnr] = id
+  vim.bo[bufnr].modifiable = false
+  run(command, { text = true }, function(result)
+    if decrypting[bufnr] ~= id then return on_done(false) end
+    decrypting[bufnr] = nil
+    if not vim.api.nvim_buf_is_valid(bufnr) then return on_done(false) end
+    vim.bo[bufnr].modifiable = true
+    -- Read again meanwhile, with something no longer this ciphertext. Not
+    -- `changedtick`: reading a file moves it on after `BufReadPost`.
+    if
+      not vim.deep_equal(lines, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
+    then
+      return on_done(false)
+    end
+    -- A cut clear text, written back, would encrypt only part of the file
+    if not result or result.code ~= 0 or result.cut then
+      notify(
+        'Left encrypted: '
+          .. (
+            result and failure(kind, result) or (command[1] .. ' did not run')
+          ),
+        vim.log.levels.ERROR
+      )
+      return on_done(false)
+    end
 
-  vim.b[bufnr].dy_encrypted = kind
-  vim.b[bufnr].dy_vault_id = kind == 'ansible' and M.vault_id(lines[1]) or nil
-  vim.bo[bufnr].buftype = 'acwrite'
-  M.guard(bufnr)
-  return true
+    local clear =
+      vim.split((result.stdout or ''):gsub('\n$', ''), '\n', { plain = true })
+    -- No undoing back to the ciphertext
+    local undolevels = vim.bo[bufnr].undolevels
+    vim.bo[bufnr].undolevels = -1
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, clear)
+    vim.bo[bufnr].undolevels = undolevels
+    vim.bo[bufnr].modified = false
+
+    vim.b[bufnr].dy_encrypted = kind
+    vim.b[bufnr].dy_vault_id = kind == 'ansible' and M.vault_id(lines[1]) or nil
+    vim.bo[bufnr].buftype = 'acwrite'
+    M.guard(bufnr)
+    on_done(true)
+  end)
 end
 
 --- Whether a buffer has held clear text this session, so the registers it
@@ -368,19 +418,6 @@ function M.hold(bufnr, group)
       end,
     })
   end
-end
-
---- Run `command` off the main loop, never raising, and hand `on_done` what
---- it did; nil when it could not start
----@param command string[]
----@param opts table `vim.system` options
----@param on_done fun(result: vim.SystemCompleted?)
-local function run(command, opts, on_done)
-  require('util.system').run(
-    command,
-    vim.tbl_extend('force', { timeout = M.TIMEOUT, detach = true }, opts),
-    function(result) on_done(not result.missing and result or nil) end
-  )
 end
 
 --- Hand `on_done` the clear text of the file of `bufnr` as it was at `rev`

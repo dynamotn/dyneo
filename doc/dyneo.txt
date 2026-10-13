@@ -481,6 +481,11 @@ chezmoi through `chezmoi encrypt`, to the recipients of its configuration.
 The clear text never reaches the file it came from, and a failed encryption
 writes nothing.
 
+Decryption runs in the background, so a slow KMS or a key waiting for its
+PIN never freezes the editor.  Until the clear text is in, the buffer shows
+the ciphertext read-only.  A decryption that fails, times out or prints more
+than can be read leaves the ciphertext as it is.
+
 The buffer is held back from every AI integration before the clear text goes
 in (|dyneo-ai-guard|), keeps no swap or undo file, and cannot be undone back
 to the ciphertext.  Ansible Vault cannot ask for a password inside Neovim:
