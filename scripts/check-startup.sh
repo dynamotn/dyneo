@@ -20,8 +20,9 @@ set -euo pipefail
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if ! command -v nvim &> /dev/null; then
-  echo "check-startup: nvim not found, skipping" >&2
-  exit 0
+  # A check that cannot run must not read as one that passed
+  echo "check-startup: nvim not found" >&2
+  exit 1
 fi
 
 workdir="$(mktemp -d)"
