@@ -278,6 +278,22 @@ describe('tools.plugin-review', function()
       assert.is_truthy(text:find('- lua/p.lua:1  reaches the network', 1, true))
     end)
 
+    it('says when the commits could not be read', function()
+      local lines = report({
+        {
+          name = 'p.nvim',
+          dir = dir,
+          from = from,
+          to = ('0'):rep(40),
+          held = false,
+          clears = 0,
+        },
+      })
+      local text = table.concat(lines, '\n')
+      assert.is_truthy(text:find('commits unavailable', 1, true))
+      assert.is_nil(text:find('0 commits', 1, true))
+    end)
+
     it('says when nothing is waiting', function()
       local lines = report({})
       assert.equals(

@@ -265,16 +265,17 @@ local function git(dir, args, callback)
   )
 end
 
---- The commits `row` would bring in, newest first, as `short date subject`
+--- The commits `row` would bring in, newest first, as `short date subject`;
+--- nil when git could not list them
 ---@param row DyPendingUpdate
----@param callback fun(commits: string[])
+---@param callback fun(commits: string[]?)
 function M.commits(row, callback)
   git(row.dir, {
     'log',
     '--no-color',
     '--format=%h %cs %s',
     row.from .. '..' .. row.to,
-  }, function(lines) callback(lines or {}) end)
+  }, function(lines) callback(lines) end)
 end
 
 --- What the commits of `row` add, flagged
@@ -390,17 +391,21 @@ local function section(row, callback)
       local state = row.held
           and ('held %d more days'):format(math.ceil(row.clears / 86400))
         or 'out of quarantine'
+      -- A failed `git log` must not read as an update with nothing in it
+      local count = commits and ('%d commits'):format(#commits)
+        or 'commits unavailable, nothing was read'
       local lines = {
         '',
-        ('## %s  %s..%s  %d commits, %s'):format(
+        ('## %s  %s..%s  %s, %s'):format(
           row.name,
           row.from:sub(1, 7),
           row.to:sub(1, 7),
-          #commits,
+          count,
           state
         ),
         '',
       }
+      commits = commits or {}
       for index, commit in ipairs(commits) do
         if index > 15 then
           table.insert(lines, ('- … and %d more'):format(#commits - 15))
