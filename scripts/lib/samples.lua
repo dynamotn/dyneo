@@ -46,7 +46,9 @@ M.names_of = {
   gowork = 'goworkspace/go.work',
   helm = 'chart/templates/sample.yaml',
   htmlangular = 'sample.component.html',
-  htmldjango = 'templates/sample.html',
+  -- `templates/*.html` is Django only next to a `manage.py`
+  htmldjango = 'sample.djhtml',
+  ['bicep-params'] = 'sample.bicepparam',
   hyprlang = 'hypr/sample.conf',
   javascriptreact = 'sample.jsx',
   ['json.openapi'] = 'openapi.json',
@@ -73,6 +75,19 @@ M.names_of = {
   ['yaml.gitlab'] = 'sample.gitlab-ci.yml',
   ['yaml.helm-values'] = 'chart/values.yaml',
   ['yaml.openapi'] = 'openapi.yaml',
+}
+
+--- `language/filetype` pairs no file name opens, and why: the sweep of
+--- every language fails on any other one it cannot open
+---@type table<string, string>
+M.unopened = {
+  ['bash/bats'] = 'Neovim opens a .bats file as `sh`',
+  ['bash/sh.install'] = 'told by the contents of a `*.install` file',
+  ['ini/ini'] = 'Neovim opens a .ini file as `dosini`',
+  ['javascript/javascript.jsx'] = 'Neovim opens a .jsx file as `javascriptreact`',
+  ['latex/plaintex'] = 'told by the contents of a .tex file',
+  ['terraform/terraform'] = 'Neovim 0.13 opens a .tf file as `tf`',
+  ['tsx/typescript.tsx'] = 'Neovim opens a .tsx file as `typescriptreact`',
 }
 
 --- Files a filetype is only given beside, written ahead of its sample:

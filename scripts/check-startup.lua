@@ -200,6 +200,16 @@ if #unmapped > 0 then
     'check-startup: no file name for ' .. table.concat(unmapped, ', ') .. '\n'
   )
 end
+-- A filetype the sweep cannot open is a language it never checked
+if sweep_all then
+  for _, pair in ipairs(unmapped) do
+    if not samples.unopened[pair] then
+      report(
+        pair .. ': no file name opens it, add one to scripts/lib/samples.lua'
+      )
+    end
+  end
+end
 if #prompts > 0 then
   io.stdout:write(
     'check-startup: cancelled prompts '
