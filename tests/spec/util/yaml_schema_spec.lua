@@ -973,6 +973,27 @@ describe('util.yaml_schema', function()
       end)
     end
 
+    it('stops walking a large tree without fd, and says so', function()
+      local executable = vim.fn.executable
+      stub(vim.fn, 'executable', function(name)
+        if name == 'fd' or name == 'fdfind' then return 0 end
+        return executable(name)
+      end)
+      stub(yaml_schema, 'MAX_WALK', 2)
+      local bufnr = open(project .. '/a.yaml', {})
+      attached(bufnr)
+      local locals = vim.tbl_filter(
+        function(i) return i.source == 'local' and i.uri ~= '' end,
+        pick(bufnr).items
+      )
+      assert.is_true(#locals < 3)
+      assert.is_truthy(
+        vim
+          .iter(notified)
+          :find(function(n) return n.msg:find('install fd', 1, true) ~= nil end)
+      )
+    end)
+
     it('formats items with their source', function()
       local bufnr = open(project .. '/a.yaml', {})
       attached(bufnr)

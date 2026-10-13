@@ -30,6 +30,10 @@ local CRDS_CACHE = vim.fn.stdpath('cache') .. '/yaml-schema/crds-catalog.json'
 local CRDS_TTL = 7 * 24 * 60 * 60
 local MODELINE = '# yaml-language-server: $schema='
 
+--- Entries the search without `fd` looks at before it stops: a few hundred
+--- milliseconds of the main loop, where a whole `$HOME` takes seconds
+M.MAX_WALK = 10000
+
 ---@class util.yaml_schema.Schema
 ---@field uri string URL, path, or the `kubernetes` keyword
 ---@field name string
@@ -468,16 +472,18 @@ local function find_local(bufnr, callback)
     }
     vim.list_extend(cmd, dirs)
     -- A project as large as `$HOME` must not hold the picker back
-    require('util.system').run(
-      cmd,
-      { timeout = 3000 },
-      function(out)
-        finish(vim.split(out.stdout or '', '\n', { trimempty = true }))
+    require('util.system').run(cmd, { timeout = 3000 }, function(out)
+      if out.timed_out or out.cut then
+        notify(
+          'Local schema files: the search was cut short, some may be missing',
+          vim.log.levels.WARN
+        )
       end
-    )
+      finish(vim.split(out.stdout or '', '\n', { trimempty = true }))
+    end)
     return
   end
-  local paths = {}
+  local paths, walked = {}, 0
   for _, dir in ipairs(vim.list_extend({ root }, dirs)) do
     for name, type in
       vim.fs.dir(dir, {
@@ -486,7 +492,19 @@ local function find_local(bufnr, callback)
         skip = function(n) return n ~= '.git' and n ~= 'node_modules' end,
       })
     do
+      walked = walked + 1
+      if walked > M.MAX_WALK then break end
       if type == 'file' then table.insert(paths, dir .. '/' .. name) end
+    end
+    if walked > M.MAX_WALK then
+      notify(
+        (
+          'Local schema files: stopped after %d entries, install fd to search'
+          .. ' the whole project'
+        ):format(M.MAX_WALK),
+        vim.log.levels.WARN
+      )
+      break
     end
   end
   finish(paths)
