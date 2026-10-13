@@ -184,14 +184,18 @@ describe('tools.jira', function()
       local restore_key = h.stub(
         jira,
         'current_key',
-        function() return 'OPS-12' end
+        function(on_done) on_done('OPS-12') end
       )
       jira.command({ fargs = { 'open' } })
       restore_key()
       assert.same({ { 'open', 'OPS-12' } }, calls)
 
       local picked
-      restore_key = h.stub(jira, 'current_key', function() return nil end)
+      restore_key = h.stub(
+        jira,
+        'current_key',
+        function(on_done) on_done(nil) end
+      )
       local restore_pick = h.stub(
         jira,
         'pick',
@@ -207,7 +211,7 @@ describe('tools.jira', function()
       local restore_key = h.stub(
         jira,
         'current_key',
-        function() return 'OPS-12' end
+        function(on_done) on_done('OPS-12') end
       )
       jira.command({ fargs = { 'open', 'OPS-99' } })
       restore_key()
@@ -280,7 +284,12 @@ describe('tools.jira', function()
         'fix/OPS-12-login-fails',
         git({ 'branch', '--show-current' })
       )
-      assert.equals('OPS-12', jira.current_key())
+      -- Read off the main loop
+      local key = false
+      jira.current_key(function(found) key = found end)
+      assert.is_false(key)
+      assert.is_true(vim.wait(5000, function() return key ~= false end))
+      assert.equals('OPS-12', key)
 
       git({ 'switch', '--quiet', 'main' })
       local before = #notes

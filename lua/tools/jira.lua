@@ -125,23 +125,17 @@ local function repository()
   return vim.fs.root(0, '.git') or vim.uv.cwd() --[[@as string]]
 end
 
---- The branch checked out, or nil outside a repository and when detached
----@return string?
-function M.current_branch()
-  if vim.fn.executable('git') ~= 1 then return nil end
-  local result = require('util.system').sync(
-    { 'git', '-C', repository(), 'branch', '--show-current' },
-    { text = true }
+--- Hand `on_done` the issue the current branch is named after: nil outside
+--- a repository, when detached, or when the branch names none
+---
+--- Read in the background: a stuck `index.lock` or a slow disk must not
+--- hold the command line.
+---@param on_done fun(key: string?)
+function M.current_key(on_done)
+  require('util.forge').branch(
+    repository(),
+    function(branch) on_done(branch and M.key_of(branch)) end
   )
-  local branch = result.code == 0 and vim.trim(result.stdout or '') or ''
-  return branch ~= '' and branch or nil
-end
-
---- The issue the current branch is named after
----@return string?
-function M.current_key()
-  local branch = M.current_branch()
-  return branch and M.key_of(branch)
 end
 
 --- Run `jira` with `args`, and hand its output to `on_done` on the main loop
@@ -226,27 +220,29 @@ function M.branch(issue)
       if not name or vim.trim(name) == '' then return end
       name = vim.trim(name)
       local dir = repository()
-      local exists = require('util.system').sync({
-        'git',
-        '-C',
-        dir,
-        'rev-parse',
-        '--verify',
-        '--quiet',
-        'refs/heads/' .. name,
-      }).code == 0
-      local args = exists and { 'switch', name } or { 'switch', '-c', name }
-      -- Asynchronous and with no deadline: `:wait()` SIGKILLs on timeout,
-      -- and a checkout killed half-way leaves `index.lock` behind
-      vim.system(
-        vim.list_extend({ 'git', '-C', dir }, args),
-        { text = true },
-        vim.schedule_wrap(function(result)
-          if result.code ~= 0 then
-            return notify(vim.trim(result.stderr or ''), vim.log.levels.ERROR)
-          end
-          notify((exists and 'Switched to ' or 'Started ') .. name)
-        end)
+      local branch_ref = 'refs/heads/' .. name
+      require('util.system').run(
+        { 'git', '-C', dir, 'rev-parse', '--verify', '--quiet', branch_ref },
+        {},
+        function(found)
+          local exists = found.code == 0
+          local args = exists and { 'switch', name } or { 'switch', '-c', name }
+          -- With no deadline: `:wait()` SIGKILLs on timeout, and a checkout
+          -- killed half-way leaves `index.lock` behind
+          vim.system(
+            vim.list_extend({ 'git', '-C', dir }, args),
+            { text = true },
+            vim.schedule_wrap(function(result)
+              if result.code ~= 0 then
+                return notify(
+                  vim.trim(result.stderr or ''),
+                  vim.log.levels.ERROR
+                )
+              end
+              notify((exists and 'Switched to ' or 'Started ') .. name)
+            end)
+          )
+        end
       )
     end
   )
@@ -438,17 +434,19 @@ end
 ---@param action DyJiraAction
 ---@param key? string Given on the command line
 function M.on_issue(action, key)
-  local from_branch = key == nil
-  key = key or M.current_key()
-  if key then
+  local function act(found, from_branch)
+    if not found then
+      return M.pick({ action = action, title = 'Jira: ' .. action })
+    end
     -- Only the branch checked out says there is one already: a key given on
     -- the command line is the issue to start one for
     if action == 'branch' and from_branch then
-      return notify('Already on a branch of ' .. key, vim.log.levels.WARN)
+      return notify('Already on a branch of ' .. found, vim.log.levels.WARN)
     end
-    return M.act(action, { key = key, type = '', status = '', summary = '' })
+    M.act(action, { key = found, type = '', status = '', summary = '' })
   end
-  M.pick({ action = action, title = 'Jira: ' .. action })
+  if key then return act(key, false) end
+  M.current_key(function(found) act(found, true) end)
 end
 
 --- The subcommands of `:DyJira`
