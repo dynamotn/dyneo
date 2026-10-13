@@ -104,6 +104,22 @@ describe('tools.c4', function()
     assert.equals(c4.out_dir(dir) .. '/index.d2', previewed)
   end)
 
+  it('asks about a code config that appeared after a draw', function()
+    fake({ 'mkdir -p "$5" && touch "$5/index.d2"' })
+    c4.show()
+    vim.wait(5000, function() return previewed ~= nil end)
+    previewed = nil
+    h.write(dir .. '/likec4.config.ts', { 'export default {}' })
+    local restore_confirm = h.stub(vim.fn, 'confirm', function() return 2 end)
+    c4.show()
+    restore_confirm()
+    assert.same({
+      'Not drawn: the workspace is not trusted to run its config',
+      vim.log.levels.WARN,
+    }, notes[#notes])
+    assert.is_nil(previewed)
+  end)
+
   it('draws no model with errors, though likec4 exits 0', function()
     fake({
       'mkdir -p "$5" && touch "$5/index.d2"',

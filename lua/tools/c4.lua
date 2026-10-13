@@ -36,15 +36,16 @@ M.ROOT_MARKERS = {
 --- an unread rest must not be a clean result
 M.SCAN_LIMIT = 20000
 
----@type table<string, string|false>
+---@type table<string, string>
 local code_config_of = {}
 
 --- The first code config under `root` that likec4 would run, as it walks:
---- no hidden entry, no `node_modules` nor `out`. False when there is none.
+--- no hidden entry, no `node_modules` nor `out`. False when there is none,
+--- and asked again next time: one pulled in later must still be trusted.
 ---@param root string
 ---@return string|false
 function M.code_config(root)
-  if code_config_of[root] ~= nil then return code_config_of[root] end
+  if code_config_of[root] then return code_config_of[root] end
   local found, seen = false, 0
   for name, kind in
     vim.fs.dir(root, {
@@ -70,7 +71,7 @@ function M.code_config(root)
       break
     end
   end
-  code_config_of[root] = found
+  if found then code_config_of[root] = found end
   return found
 end
 
