@@ -90,7 +90,9 @@ local RECHECK_DELAY = 200
 
 --- Detach Copilot from a buffer, and remember this guard is why
 ---@param bufnr integer
-M.detach_copilot = function(bufnr)
+---@param reason? string From `util.ai_policy`, when that is why rather than
+--- the buffer being sensitive
+M.detach_copilot = function(bufnr, reason)
   if not vim.api.nvim_buf_is_valid(bufnr) then return end
   local clients = vim.lsp.get_clients({ bufnr = bufnr, name = 'copilot' })
   if #clients == 0 then return end
@@ -98,6 +100,7 @@ M.detach_copilot = function(bufnr)
     vim.lsp.buf_detach_client(bufnr, client.id)
   end
   vim.b[bufnr].dy_ai_guard_detached = true
+  if reason then return refuse_local('Copilot', 'Copilot', bufnr, reason) end
   refuse('Copilot', 'Copilot', bufnr)
 end
 
@@ -129,10 +132,13 @@ M.filter_copilot = function(client)
       bufnr
       and CONTENT_METHODS[method]
       and vim.api.nvim_buf_is_valid(bufnr)
-      and (sensitive.is_sensitive(bufnr) or policy.local_only(bufnr))
     then
-      vim.schedule(function() M.detach_copilot(bufnr) end)
-      return true
+      local is_sensitive = sensitive.is_sensitive(bufnr)
+      local reason = not is_sensitive and policy.local_only(bufnr) or nil
+      if is_sensitive or reason then
+        vim.schedule(function() M.detach_copilot(bufnr, reason) end)
+        return true
+      end
     end
     return notify(self, method, params, bufnr)
   end)

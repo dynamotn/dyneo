@@ -436,6 +436,19 @@ describe('util.ai_guard', function()
         assert.same({}, sent)
       end)
 
+      it('names the project policy when that is why it detaches', function()
+        h.write(dir .. '/kept/.nvim/ai.json', { '{ "local_only": true }' })
+        local buf =
+          h.buffer({ name = dir .. '/kept/main.lua', lines = { 'local a' } })
+        assert.is_true(client:notify('textDocument/didChange', {}, buf))
+        vim.wait(500, function() return #detached > 0 end, 10)
+        assert.same({ { buf, 42 } }, detached)
+        assert.is_true(refused())
+        for _, note in ipairs(notes) do
+          assert.is_nil(note.msg:find('sensitive', 1, true), note.msg)
+        end
+      end)
+
       it('lets the close through', function()
         local buf = h.buffer({ name = secret })
         client:notify('textDocument/didClose', {}, buf)
