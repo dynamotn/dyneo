@@ -224,8 +224,6 @@ local diagnostic_goto = function(next, severity)
     vim.diagnostic.jump({
       count = (next and 1 or -1) * vim.v.count1,
       severity = severity and vim.diagnostic.severity[severity] or nil,
-      -- `float` is deprecated from 0.13 on, in favour of `on_jump`
-      float = vim.fn.has('nvim-0.13') == 0 or nil,
       on_jump = function(diagnostic, bufnr)
         if not diagnostic then return end
         vim.diagnostic.open_float({
