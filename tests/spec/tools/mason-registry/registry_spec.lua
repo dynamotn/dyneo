@@ -119,8 +119,12 @@ describe('tools.mason-registry', function()
       it('points at a language server config that exists', function()
         local lspconfig = vim.tbl_get(spec, 'neovim', 'lspconfig')
         if not lspconfig then return end
+        -- Under `after/` when it overrides what nvim-lspconfig ships
         assert.is_truthy(
-          vim.uv.fs_stat(vim.fs.joinpath(h.root, 'lsp', lspconfig .. '.lua')),
+          vim.uv.fs_stat(vim.fs.joinpath(h.root, 'lsp', lspconfig .. '.lua'))
+            or vim.uv.fs_stat(
+              vim.fs.joinpath(h.root, 'after', 'lsp', lspconfig .. '.lua')
+            ),
           'lsp/' .. lspconfig .. '.lua'
         )
       end)

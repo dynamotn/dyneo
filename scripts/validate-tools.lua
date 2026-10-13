@@ -155,10 +155,14 @@ for _, name in ipairs(names) do
 
   for _, server in ipairs(language.lsp_servers or {}) do
     local server_name = type(server) == 'string' and server or server[1]
-    -- a server the repo configures itself lives in `lsp/`
+    -- a server the repo configures itself lives in `lsp/`, or in `after/lsp/`
+    -- when it overrides nvim-lspconfig
     if
       checkable.lsp
       and vim.fn.filereadable(string.format('%s/lsp/%s.lua', root, server_name)) == 0
+      and vim.fn.filereadable(
+        string.format('%s/after/lsp/%s.lua', root, server_name)
+      ) == 0
       and #vim.api.nvim_get_runtime_file(
           'lsp/' .. server_name .. '.lua',
           false
