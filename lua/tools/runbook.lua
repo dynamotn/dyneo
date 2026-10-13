@@ -201,7 +201,14 @@ function M.ask_inputs(bufnr, names, on_values)
     local name = names[index]
     if not name then return on_values(values) end
     if values[name] ~= nil then return next_input() end
-    vim.ui.input({ prompt = name .. ': ' }, function(value)
+    -- `vim.ui.input` (Snacks) and `input()` both keep a history on disk;
+    -- `inputsecret` keeps none, and shows nothing while it is typed
+    local lower = name:lower()
+    local hidden = lower:find('pass')
+      or lower:find('secret')
+      or lower:find('token')
+      or lower:find('key')
+    local function got(value)
       if value == nil then return on_values(nil) end
       values[name] = value
       -- `vim.b` hands out copies: the whole table goes back
@@ -209,7 +216,14 @@ function M.ask_inputs(bufnr, names, on_values)
         vim.b[bufnr].dy_runbook_inputs = values
       end
       next_input()
-    end)
+    end
+    if hidden then
+      -- Empty on `<Esc>`, as on nothing typed: both end the run
+      local typed = vim.fn.inputsecret(name .. ': ')
+      got(typed ~= '' and typed or nil)
+    else
+      vim.ui.input({ prompt = name .. ': ' }, got)
+    end
   end
   next_input()
 end

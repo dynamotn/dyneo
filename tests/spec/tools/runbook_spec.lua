@@ -445,6 +445,39 @@ describe('tools.runbook', function()
         end
       )
 
+      it(
+        'asks a secret hidden, through no history, and stops on nothing',
+        function()
+          local bufnr =
+            buffer({ '```sh', 'echo "${input:db_password}"', '```' })
+          local answer = 'hunter2'
+          local restores = {
+            h.stub(vim.ui, 'input', function() error('shown in clear') end),
+            h.stub(vim.fn, 'inputsecret', function() return answer end),
+          }
+          local block =
+            runbook.block_at(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), 2)
+          local finished
+          runbook.run_block(bufnr, block, function(ok) finished = ok end)
+          settle(function() return finished ~= nil end)
+          assert.is_true(finished)
+          assert.same(
+            { '```output', 'hunter2', '```' },
+            vim.api.nvim_buf_get_lines(bufnr, 4, 7, false)
+          )
+
+          runbook.command({ fargs = { 'inputs' } })
+          answer = ''
+          finished = nil
+          runbook.run_block(bufnr, block, function(ok) finished = ok end)
+          settle(function() return finished ~= nil end)
+          assert.is_false(finished)
+          for _, restore in ipairs(restores) do
+            restore()
+          end
+        end
+      )
+
       it('runs nothing when an input is not given', function()
         local bufnr = buffer({ '```sh', 'echo ${input:x}', '```' })
         local restore = h.stub(

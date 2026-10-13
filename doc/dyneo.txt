@@ -786,8 +786,9 @@ stops it: each block run is appended, with the time, how it ended and how
 long it took, the code as written and what it printed, to a Markdown file
 under `stdpath('state')/dyneo/runbook/` that only its owner can read -- the
 timeline of an incident, written as it happens.  The code keeps its
-`${input:…}`: a value typed for one, a password or a token, is never written
-to the record.
+`${input:…}`: a value typed for one is never written to the record, and one
+whose name says `pass`, `secret`, `token` or `key` is typed hidden and kept
+out of the input history as well.
 
 7.2 Logs                                                          *dyneo-logs*
 
