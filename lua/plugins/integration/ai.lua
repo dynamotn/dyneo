@@ -317,7 +317,7 @@ return {
         '<leader>acs',
         '<cmd>ClaudeCodeTreeAdd<cr>',
         desc = 'Add file',
-        ft = { 'NvimTree', 'neo-tree', 'oil' },
+        ft = { 'snacks_picker_list' },
       },
       -- Diff management
       { '<leader>aca', '<cmd>ClaudeCodeDiffAccept<cr>', desc = 'Accept diff' },

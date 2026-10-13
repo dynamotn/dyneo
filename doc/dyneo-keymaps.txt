@@ -100,7 +100,7 @@ one of the same keys in those buffers.
 `<leader>acm`          n      Select model
 `<leader>acr`          n      Resume Claude
 `<leader>acs`          v      Send to Claude
-`<leader>acs`          n      Add file  (ft: NvimTree, neo-tree, oil)
+`<leader>acs`          n      Add file  (ft: snacks_picker_list)
 
 ==============================================================================
 <leader>av  avante
