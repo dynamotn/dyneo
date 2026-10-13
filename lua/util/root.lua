@@ -76,7 +76,21 @@ end
 
 function M.bufpath(buf) return M.realpath(vim.api.nvim_buf_get_name(buf)) end
 
-function M.cwd() return M.realpath(vim.uv.cwd()) or '' end
+--- The working directory as `getcwd` gave it, and resolved
+local cwd_seen, cwd_resolved
+
+--- The working directory, symlinks resolved
+---
+--- Asked on every statusline redraw: resolving walks each component of the
+--- path, so it is done again only once the directory itself changes.
+---@return string
+function M.cwd()
+  local cwd = vim.uv.cwd()
+  if cwd ~= cwd_seen then
+    cwd_seen, cwd_resolved = cwd, M.realpath(cwd) or ''
+  end
+  return cwd_resolved
+end
 
 function M.realpath(path)
   if path == '' or path == nil then return nil end

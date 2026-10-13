@@ -15,6 +15,22 @@ describe('util.ai_policy', function()
     cleanup()
   end)
 
+  it('resolves a path once while its answer is kept', function()
+    h.write(dir .. '/proj/main.lua', { 'x' })
+    local calls = 0
+    local realpath = vim.uv.fs_realpath
+    local restore = h.stub(vim.uv, 'fs_realpath', function(...)
+      calls = calls + 1
+      return realpath(...)
+    end)
+    policy.local_only(dir .. '/proj/main.lua')
+    local first = calls
+    policy.local_only(dir .. '/proj/main.lua')
+    restore()
+    assert.is_true(first > 0)
+    assert.equals(first, calls)
+  end)
+
   it('leaves a project that says nothing alone', function()
     h.write(dir .. '/proj/main.lua', { 'x' })
     assert.is_nil(policy.local_only(dir .. '/proj/main.lua'))

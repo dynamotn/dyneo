@@ -16,6 +16,24 @@ describe('util.root', function()
     cleanup()
   end)
 
+  it('resolves the working directory once until it changes', function()
+    vim.cmd.cd(dir)
+    local calls = 0
+    local realpath = vim.uv.fs_realpath
+    local restore = h.stub(vim.uv, 'fs_realpath', function(...)
+      calls = calls + 1
+      return realpath(...)
+    end)
+    root.cwd()
+    root.cwd()
+    vim.fn.mkdir(dir .. '/sub', 'p')
+    vim.cmd.cd(dir .. '/sub')
+    local sub = root.cwd()
+    restore()
+    assert.equals(2, calls)
+    assert.equals(realpath(dir .. '/sub'), sub)
+  end)
+
   it('finds the nearest directory holding a marker', function()
     h.write(dir .. '/project/.git/HEAD', { 'ref: refs/heads/main' })
     h.write(dir .. '/project/src/deep/file.lua', { '' })

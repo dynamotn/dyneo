@@ -22,8 +22,15 @@ M.TTL = 5000
 ---@type table<string, { at: integer, reason: string|false }>
 local cache = {}
 
+--- The resolved folder of each path asked about, kept as long as an answer:
+--- resolving it is two system calls, too many for every redraw
+---@type table<string, { at: integer, dir: string }>
+local dirs = {}
+
 --- Drop what is known about every folder, for the specs
-function M.reset() cache = {} end
+function M.reset()
+  cache, dirs = {}, {}
+end
 
 ---@param path string
 ---@return string
@@ -86,11 +93,19 @@ function M.local_only(target)
   if path == '' or path:match('^%a[%w+.-]*://') then
     path = vim.uv.cwd() or '.'
   end
-  path = resolve(path)
-  local stat = vim.uv.fs_stat(path)
-  local dir = (stat and stat.type == 'directory') and path
-    or vim.fs.dirname(path)
   local now = vim.uv.now()
+  local seen = dirs[path]
+  if not seen or now - seen.at > M.TTL then
+    local resolved = resolve(path)
+    local stat = vim.uv.fs_stat(resolved)
+    seen = {
+      at = now,
+      dir = (stat and stat.type == 'directory') and resolved
+        or vim.fs.dirname(resolved),
+    }
+    dirs[path] = seen
+  end
+  local dir = seen.dir
   local known = cache[dir]
   if not known or now - known.at > M.TTL then
     known = { at = now, reason = lookup(dir) }
