@@ -124,7 +124,7 @@ local function ask(bufnr, ctx, pipeline, job, prompt)
         if #file > M.MAX_FILE then
           file = file:sub(1, M.MAX_FILE) .. '\n(cut)'
         end
-        require('tools.ai').deliver(
+        require('tools.ai').send(
           M.build(prompt, {
             job = job.name,
             file = vim.fn.fnamemodify(ctx.file, ':~:.'),

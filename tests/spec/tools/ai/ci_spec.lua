@@ -39,7 +39,7 @@ describe('tools.ai.ci', function()
         current = function() return nil end,
       }),
       h.stub(package.loaded, 'tools.ai', {
-        deliver = function(text, what, detail)
+        send = function(text, what, detail)
           table.insert(delivered, { text = text, what = what, detail = detail })
           return true
         end,
