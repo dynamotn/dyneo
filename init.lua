@@ -1,3 +1,6 @@
+-- The bytecode cache, ahead of lazy.nvim turning it on: `config.globals`
+-- reads the whole language table before lazy.nvim loads
+vim.loader.enable()
 -- Globals shared across the configuration, with their defaults and types
 require('config.globals')
 -- Load specific configurations per machine. It runs ahead of the version
