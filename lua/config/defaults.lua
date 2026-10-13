@@ -1,9 +1,6 @@
 return {
   colorscheme = 'catppuccin',
   icons = {
-    misc = {
-      dots = '󰇘',
-    },
     ft = {
       octo = ' ',
       gh = ' ',
