@@ -8,12 +8,16 @@ local dictionaries = vim.fn.expand(
     or vim.fs.joinpath(vim.fn.stdpath('config'), '..', 'dictionaries')
 )
 
+-- Escaped for `:mkspell`: a directory with a space would split its argument
+-- list, and escaping the whole `zh` glob would stop it expanding
 local spell_files = {
-  vi = { vim.fs.joinpath(dictionaries, 'vietnamese.txt') },
-  zh = { vim.fs.joinpath(dictionaries, 'chinese', '*.txt') },
+  vi = { vim.fs.joinpath(vim.fn.fnameescape(dictionaries), 'vietnamese.txt') },
+  zh = { vim.fs.joinpath(vim.fn.fnameescape(dictionaries), 'chinese', '*.txt') },
 
-  proper = { vim.fs.joinpath(spell_dir, 'proper.txt') },
-  technical = { vim.fs.joinpath(spell_dir, 'technical.txt') },
+  proper = { vim.fs.joinpath(vim.fn.fnameescape(spell_dir), 'proper.txt') },
+  technical = {
+    vim.fs.joinpath(vim.fn.fnameescape(spell_dir), 'technical.txt'),
+  },
 }
 
 --- Build the spell file of one language from its dictionaries
