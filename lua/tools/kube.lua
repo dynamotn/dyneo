@@ -154,7 +154,24 @@ local function current()
     )
     return nil
   end
-  return M.target(file)
+  local target = M.target(file)
+  -- kustomize and helm read every file of their directory, not only this one
+  if target.kind ~= 'manifest' then
+    local root = require('util.root')
+    for _, buf in ipairs(vim.fn.getbufinfo({ bufmodified = 1 })) do
+      if buf.name ~= '' and root.contains(target.dir, buf.name) then
+        notify(
+          ('Write %s first: %s reads it from disk'):format(
+            vim.fn.fnamemodify(buf.name, ':~:.'),
+            target.kind
+          ),
+          vim.log.levels.WARN
+        )
+        return nil
+      end
+    end
+  end
+  return target
 end
 
 --- What would change in the cluster

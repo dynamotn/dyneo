@@ -615,8 +615,10 @@ The context and the namespace can be switched from any buffer too, with
 
 A manifest goes to `kubectl -f`, a kustomization to `kubectl -k`, and a file
 of a chart is rendered first and piped in, with the values file being edited
-as its values.  A diff or a render can hold Secret data, so its buffer is
-kept from every AI integration.
+as its values.  kubectl and helm read the files on disk, so a buffer with
+changes not yet written holds the command back: for a kustomization or a
+chart, any buffer of its directory.  A diff or a render can hold Secret
+data, so its buffer is kept from every AI integration.
 
 `<localleader>ke` reads the field under the cursor off the indentation --
 `spec.template.spec.containers.image` -- and the `apiVersion` and `kind` of
