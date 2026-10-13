@@ -41,6 +41,18 @@ describe('tools.war', function()
     assert.same({ 'Security 1/2', 'Cost optimization 1/2' }, war.summary(items))
   end)
 
+  it('counts only the pillars, and only a tick as done', function()
+    local items = war.items({
+      '## Security',
+      '- [x] Keys rotated',
+      '- [~] Data encrypted',
+      '## Consequences',
+      '- [x] Rotate the keys',
+      '- [ ] Encrypt the data',
+    })
+    assert.same({ 'Security 1/2' }, war.summary(items))
+  end)
+
   it('writes a review as a decision record and opens it', function()
     war.command({ fargs = { 'new' } })
     local file = vim.api.nvim_buf_get_name(0)

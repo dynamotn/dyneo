@@ -76,6 +76,7 @@ CONTENTS                                                      *dyneo-contents*
        9.9 Decision matrix .................................... |dyneo-matrix|
        9.10 Well-Architected review .............................. |dyneo-war|
        9.11 Dependency rules .................................... |dyneo-deps|
+       9.12 Threat models ..................................... |dyneo-threat|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -1355,7 +1356,10 @@ under `## Consequences`.
 
 `<leader>pAw` (|:DyWar|) reads the review open, or the latest of the
 project, says how many questions of each pillar hold, and puts the ones still
-open in the quickfix list.
+open in the quickfix list.  Only the items under the six pillar headings are
+questions, and only `[x]` holds: `[~]` is still open.  A review is a record
+whose `# N.` heading reads `Well-Architected review {date}`; one without a
+checklist is warned about, never taken to pass.
 
 9.11 Dependency rules                                             *dyneo-deps*
 
@@ -1387,6 +1391,23 @@ a clean result; so is one that exits non-zero with nothing read, since
 go-arch-lint and import-linter exit non-zero only when a rule breaks.  None
 is installed for you: `npm install -D dependency-cruiser`, `go install
 github.com/fe3dback/go-arch-lint@v1.19.0`, `pip install import-linter`.
+
+9.12 Threat models                                              *dyneo-threat*
+
+`<leader>pAT` (`:DyThreat new [{scope}]`) writes a STRIDE threat model of
+{scope} -- asked for when not given -- as a decision record (|dyneo-adr|):
+its context, for the components, the data flows between them and the trust
+boundaries they cross, then a section per category -- spoofing, tampering,
+repudiation, information disclosure, denial of service, elevation of
+privilege -- with the questions to ask of each boundary, as a checklist.
+The threats accepted and the mitigations planned go under
+`## Consequences`.
+
+`<leader>pAt` (|:DyThreat|) reads the model open, or the latest of the
+project, as |:DyWar| reads a review: how many questions of each category
+hold, and the ones still open in the quickfix list.  Only a record whose
+`# N.` heading reads `Threat model: {scope}` is a model; another record
+that mentions one is not.
 
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
@@ -1757,6 +1778,12 @@ Project ~
                                                                      *:DyDeps*
 :DyDeps                 Check the dependency rules of the project, what
                         breaks in the quickfix list.  See |dyneo-deps|.
+
+                                                                   *:DyThreat*
+:DyThreat               How far the latest threat model got, its open
+                        questions in the quickfix list.
+:DyThreat new [{scope}] Write a new STRIDE model of {scope} as a decision
+                        record.  See |dyneo-threat|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose

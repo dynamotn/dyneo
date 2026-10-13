@@ -341,12 +341,14 @@ map("n", "<leader>prs", "<cmd>DyAdr status<cr>", { desc = "Set Status" })
 map("n", "<leader>prS", "<cmd>DyAdr supersede<cr>", { desc = "Supersede This Decision" })
 map("n", "<leader>pR", "<cmd>DyRoot<cr>", { desc = "Project Roots" })
 
--- architecture work (`tools.nfr`, `tools.cidr`, `tools.war`, `tools.deps`)
+-- architecture work (`tools.nfr`, `tools.cidr`, `tools.war`, `tools.deps`, `tools.threat`)
 map("n", "<leader>pAn", "<cmd>DyNfr<cr>", { desc = "Service Levels (NFR)" })
 map("n", "<leader>pAc", "<cmd>DyCidr<cr>", { desc = "Explain IPv4 Range" })
 map("n", "<leader>pAw", "<cmd>DyWar<cr>", { desc = "Well-Architected Open Questions" })
 map("n", "<leader>pAW", "<cmd>DyWar new<cr>", { desc = "New Well-Architected Review" })
 map("n", "<leader>pAd", "<cmd>DyDeps<cr>", { desc = "Check Dependency Rules" })
+map("n", "<leader>pAt", "<cmd>DyThreat<cr>", { desc = "Threat Model Open Questions" })
+map("n", "<leader>pAT", "<cmd>DyThreat new<cr>", { desc = "New Threat Model" })
 
 -- infrastructure beyond the buffer: what a directory declares, what a
 -- certificate or a token says, logs, and the cluster in use

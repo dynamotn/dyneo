@@ -110,20 +110,29 @@ end
 ---@field lnum integer
 ---@field done boolean
 
---- The checklist items of `lines`, each with the pillar it is under
+--- The checklist items of `lines` under one of `sections` (`M.PILLARS`
+--- unless given), each with its section; another `##` heading
+--- (`Consequences`) ends the section above
 ---@param lines string[]
+---@param sections? [string, string[]][]
 ---@return DyWarItem[]
-function M.items(lines)
+function M.items(lines, sections)
+  local names = {}
+  for _, pillar in ipairs(sections or M.PILLARS) do
+    names[pillar[1]] = true
+  end
   local items, pillar = {}, nil
   for lnum, line in ipairs(lines) do
-    pillar = line:match('^##%s+(.-)%s*$') or pillar
+    local heading = line:match('^##%s+(.-)%s*$')
+    if heading then pillar = names[heading] and heading or nil end
     local mark, text = line:match('^%s*[-*]%s+%[(.)%]%s+(.*)$')
     if mark and pillar then
       table.insert(items, {
         pillar = pillar,
         text = text,
         lnum = lnum,
-        done = mark ~= ' ',
+        -- Only a tick: `[~]` and the like are still open
+        done = mark == 'x' or mark == 'X',
       })
     end
   end
@@ -158,38 +167,72 @@ end
 
 --- The project root of the current buffer
 ---@return string
-local function root()
+function M.root()
   return vim.fs.root(0, { '.git', '.adr-dir' }) or vim.uv.cwd() --[[@as string]]
 end
 
 --- Write a review and open it
 function M.new()
   local date = os.date('%Y-%m-%d') --[[@as string]]
-  local record = adr.create(adr.dir(root()), ('%s %s'):format(M.TITLE, date))
+  local record = adr.create(adr.dir(M.root()), ('%s %s'):format(M.TITLE, date))
   vim.fn.writefile(M.template(record.number, date), record.file)
   vim.cmd.edit(vim.fn.fnameescape(record.file))
   notify(('Review %d written: tick what holds'):format(record.number))
 end
 
---- The file of the review to read: the buffer's when it is one, else the
+--- A kind of checklist kept as a decision record
+---@class DyChecklistKind
+---@field pattern string A Lua pattern the whole title of a record matches
+---@field label string The title of its notifications and quickfix list
+---@field noun string What one is called: `review`
+---@field command string What writes one
+---@field sections [string, string[]][] Its headings and their questions
+
+--- The Well-Architected review, as `report` reads it
+---@type DyChecklistKind
+M.KIND = {
+  pattern = '^' .. vim.pesc(M.TITLE) .. ' %d%d%d%d%-%d%d%-%d%d$',
+  label = 'Well-Architected',
+  noun = 'review',
+  command = ':DyWar new',
+  sections = M.PILLARS,
+}
+
+--- Whether `record` is one of `kind`: its `# N. title` heading, not a
+--- mention elsewhere or a title that only starts alike, matches the kind
+---@param kind DyChecklistKind
+---@param record? DyAdr
+---@return boolean
+local function is_kind(kind, record)
+  return record ~= nil and record.title:match(kind.pattern) ~= nil
+end
+
+--- The record of `kind` to read: the buffer's when it is one, else the
 --- latest of the project
+---@param kind DyChecklistKind
 ---@return string? file
-local function review_file()
+local function record_file(kind)
   local file = vim.api.nvim_buf_get_name(0)
-  local first = vim.api.nvim_buf_get_lines(0, 0, 1, false)[1] or ''
-  if file ~= '' and first:find(M.TITLE, 1, true) then return file end
+  local buffer = file ~= ''
+    and adr.parse(vim.api.nvim_buf_get_lines(0, 0, 40, false), file)
+  if buffer and is_kind(kind, buffer) then return file end
   local latest
-  for _, record in ipairs(adr.list(adr.dir(root()))) do
-    if record.title:find(M.TITLE, 1, true) == 1 then latest = record.file end
+  for _, record in ipairs(adr.list(adr.dir(M.root()))) do
+    if is_kind(kind, record) then latest = record.file end
   end
   return latest
 end
 
---- Say how far the review got, and list its open questions
-function M.check()
-  local file = review_file()
+--- Say how far the record of `kind` got, and list its open questions
+---@param kind DyChecklistKind
+function M.report(kind)
+  local say = require('util.notify').titled(kind.label)
+  local file = record_file(kind)
   if not file then
-    return notify('No review yet: `:DyWar new` writes one', vim.log.levels.WARN)
+    return say(
+      ('No %s yet: `%s` writes one'):format(kind.noun, kind.command),
+      vim.log.levels.WARN
+    )
   end
   -- By name, not `bufnr(file)`: that is a pattern, which a loaded
   -- `<review>.md.orig` matches too
@@ -203,12 +246,19 @@ function M.check()
     end
   end
   lines = lines or vim.fn.readfile(file)
-  local items = M.items(lines)
+  local items = M.items(lines, kind.sections)
   local open = vim.tbl_filter(function(item) return not item.done end, items)
+  -- A record with nothing to tick has not been reviewed, not passed
+  if #items == 0 then
+    return say(
+      ('No checklist in %s'):format(vim.fn.fnamemodify(file, ':~:.')),
+      vim.log.levels.WARN
+    )
+  end
   local summary = table.concat(M.summary(items), '\n')
-  if #open == 0 then return notify('Every question holds\n' .. summary) end
+  if #open == 0 then return say('Every question holds\n' .. summary) end
   vim.fn.setqflist({}, ' ', {
-    title = 'Well-Architected: open questions',
+    title = kind.label .. ': open questions',
     items = vim.tbl_map(
       function(item)
         return {
@@ -221,11 +271,14 @@ function M.check()
     ),
   })
   vim.cmd('botright copen')
-  notify(
+  say(
     ('%d of %d questions open\n%s'):format(#open, #items, summary),
     vim.log.levels.WARN
   )
 end
+
+--- Say how far the latest review got, and list its open questions
+function M.check() return M.report(M.KIND) end
 
 --- `:DyWar [new]`
 ---@param args { fargs: string[] }

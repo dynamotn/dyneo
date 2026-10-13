@@ -184,6 +184,8 @@ below follow the sections of `:help dyneo`.
   checklist in a decision record; what is still open, per pillar. `:DyWar`
 - **Dependency rules** — the module boundaries of a project checked by
   dependency-cruiser, go-arch-lint or import-linter. `:DyDeps`
+- **Threat models** — STRIDE questions per category as a checklist in a
+  decision record; what is still open. `:DyThreat new Checkout`
 
 <details>
 <summary><b>42 languages · 13 frameworks · 40 tools</b> —
