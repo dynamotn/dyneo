@@ -53,9 +53,17 @@ return {
           injected = { options = { ignore_errors = true } },
         },
       })
+      -- In Lua: a sed script that joins lines is written differently for GNU
+      -- and BSD sed, and macOS has the latter
       opts.formatters.condense_blank_lines = {
-        command = 'sed',
-        args = { ':a;N;$!ba;s/\\n\\n\\+/\\n\\n/g' },
+        format = function(_, _, lines, callback)
+          local out, blank = {}, false
+          for _, line in ipairs(lines) do
+            if not (blank and line == '') then table.insert(out, line) end
+            blank = line == ''
+          end
+          callback(nil, out)
+        end,
       }
 
       -- `jupytext` converts, it does not format, so conform has no definition

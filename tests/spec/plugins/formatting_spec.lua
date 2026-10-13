@@ -58,4 +58,24 @@ describe('plugins.executor.formatting', function()
     assert.same({}, common('diff'))
     assert.is_true(vim.list_contains(common('lua'), 'trim_whitespace'))
   end)
+
+  it('condenses runs of blank lines to one, without sed', function()
+    local conform
+    for _, spec in
+      ipairs(dofile(h.root .. '/lua/plugins/executor/formatting.lua'))
+    do
+      if spec[1] == 'stevearc/conform.nvim' then conform = spec end
+    end
+    local formatter = conform.opts(nil, {}).formatters.condense_blank_lines
+    assert.is_nil(formatter.command)
+    local result
+    formatter.format(
+      nil,
+      nil,
+      { 'a', '', '', '', 'b', '', 'c', ' ', '', '' },
+      function(err, lines) result = { err = err, lines = lines } end
+    )
+    assert.is_nil(result.err)
+    assert.same({ 'a', '', 'b', '', 'c', ' ', '' }, result.lines)
+  end)
 end)
