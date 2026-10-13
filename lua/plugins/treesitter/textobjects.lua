@@ -4,6 +4,8 @@ return {
     -- option of the plugin: `config` maps those keys in every buffer whose
     -- language has a `textobjects` query.
     'nvim-treesitter/nvim-treesitter-textobjects',
+    -- `main` is the rewrite for nvim-treesitter `main`; the lockfile pins the
+    -- commit on both channels
     branch = 'main',
     event = 'VeryLazy',
     keys = {

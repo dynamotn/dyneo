@@ -8,7 +8,7 @@ return {
         backend = 'kitty',
       },
     },
-    -- `plugins.ui.snacks` loads the d2 renderer once Snacks is set up
+    -- The d2 preview is `tools.diagram.d2.snacks`, mapped from `ftplugin/d2.lua`
   },
   {
     -- Render `:help` pages: headings, tables, code blocks, tags and links

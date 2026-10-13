@@ -2,11 +2,10 @@ return {
   {
     -- Pin files and jump between them
     'ThePrimeagen/harpoon',
+    -- `harpoon2` is the current line; `master` is the old plugin. The
+    -- lockfile pins the commit on both channels
     branch = 'harpoon2',
     opts = {
-      menu = {
-        width = vim.api.nvim_win_get_width(0) - 4,
-      },
       settings = {
         save_on_toggle = true,
       },

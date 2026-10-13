@@ -68,9 +68,6 @@ local function default_opts()
     codelens = {
       enabled = false,
     },
-    folds = {
-      enabled = true,
-    },
     -- Options for `vim.lsp.buf.format`
     format = {
       formatting_options = nil,
@@ -194,7 +191,6 @@ return {
       local keys = vim.tbl_get(opts, 'servers', '*', 'keys') or {}
       opts = vim.tbl_deep_extend('keep', opts, defaults)
       opts.servers['*'].keys = vim.list_extend(defaults.servers['*'].keys, keys)
-      opts.folds.enabled = false
       opts.servers['*'].before_init = with_local_settings
       return opts
     end,
@@ -237,15 +233,6 @@ return {
             end
           end
         )
-      end
-
-      -- folds
-      if opts.folds.enabled then
-        Snacks.util.lsp.on({ method = 'textDocument/foldingRange' }, function()
-          if Plugin.set_default('foldmethod', 'expr') then
-            Plugin.set_default('foldexpr', 'v:lua.vim.lsp.foldexpr()')
-          end
-        end)
       end
 
       -- code lens
@@ -495,12 +482,7 @@ return {
       vim.schedule(
         function()
           require('mason-lspconfig').setup({
-            ensure_installed = Plugin.dedup(
-              vim.list_extend(
-                ensure_installed,
-                Plugin.opts('mason-lspconfig.nvim').ensure_installed or {}
-              )
-            ),
+            ensure_installed = Plugin.dedup(ensure_installed),
             automatic_enable = { exclude = Plugin.dedup(mason_exclude) },
           })
         end

@@ -298,9 +298,6 @@ return {
     },
     ---@param opts blink.cmp.Config|{ sources: { compat: string[] } }
     config = function(_, opts)
-      if opts.snippets and opts.snippets.preset == 'default' then
-        opts.snippets.expand = require('util.cmp').expand
-      end
       -- Run the nvim-cmp sources named in `compat` through blink.compat
       local enabled = opts.sources.default
       for _, source in ipairs(opts.sources.compat or {}) do

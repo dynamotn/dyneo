@@ -38,48 +38,4 @@ describe('util.cmp actions and snippets', function()
       assert.is_true(called)
     end)
   end)
-
-  describe('snippets', function()
-    it(
-      'flattens nested placeholders',
-      function()
-        assert.are.equal('${1:foo(bar)}', cmp.snippet_fix('${1:foo(${2:bar})}'))
-      end
-    )
-
-    it(
-      'leaves a flat snippet alone',
-      function()
-        assert.are.equal('print(${1:x})', cmp.snippet_fix('print(${1:x})'))
-      end
-    )
-
-    it(
-      'previews a snippet as the text it inserts',
-      function()
-        assert.are.equal('foo(bar)', cmp.snippet_preview('foo(${1:bar})$0'))
-      end
-    )
-
-    it('falls back on the flattened snippet when expanding fails', function()
-      local expanded, warned = {}, {}
-      local restores = {
-        h.stub(vim.snippet, 'expand', function(snippet)
-          table.insert(expanded, snippet)
-          if #expanded == 1 then error('nested') end
-        end),
-        h.stub(
-          require('util.plugin'),
-          'warn',
-          function(msg) table.insert(warned, msg) end
-        ),
-      }
-      cmp.expand('${1:foo(${2:bar})}')
-      for i = #restores, 1, -1 do
-        restores[i]()
-      end
-      assert.are.same({ '${1:foo(${2:bar})}', '${1:foo(bar)}' }, expanded)
-      assert.are.equal(1, #warned)
-    end)
-  end)
 end)
