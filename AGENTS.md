@@ -106,7 +106,9 @@ A new language or tool is an entry in `lua/config/languages.lua`.
   across sessions.
 - A non-obvious tool choice gets a comment above its entry.
 - Custom nvim-lint linters live in `lua/lint/linters/<name>.lua`; per-server
-  settings in `lsp/<server>.lua`.
+  settings in `lsp/<server>.lua`; one that must override what nvim-lspconfig
+  ships (its `cmd`, say) goes in `after/lsp/<server>.lua`, since `vim.lsp`
+  merges the runtimepath in order and the plugin's file comes after `lsp/`.
 - `after/queries/<lang>/` extends upstream queries; `queries/<lang>/` replaces
   them, and is only for overriding a broken upstream query.
 - Harper parses by the LSP `languageId`: a compound or unusual filetype is
@@ -239,7 +241,7 @@ scripts/test.sh [path]                                  # plenary-busted specs
 scripts/check-startup.sh                                # load it all, open each language
 nvim --clean --headless -l scripts/validate-tools.lua   # tool names vs conform/lint/lspconfig/Mason
 scripts/keymaps-doc.sh                                  # regenerate and check mappings
-prek run --all-files                                    # all of the above, StyLua, leaks, bench
+prek run --all-files                                    # all of the above, StyLua, private keys, bench
 ```
 
 Run at least the specs for what changed plus `check-startup.sh` for any Lua
