@@ -118,13 +118,19 @@ return {
       local forge = require('ci.forge')
       local host = forge.host
       forge.host = function()
+        -- Every remote in one call: `:CI` waits on it
+        local r = require('util.system').sync(
+          { 'git', 'config', '--get-regexp', [[^remote\..*\.url$]] },
+          { text = true, timeout = 2000 }
+        )
+        local urls = {}
+        if r.code == 0 then
+          for name, url in (r.stdout or ''):gmatch('remote%.(%S+)%.url%s+(%S+)') do
+            urls[name] = url
+          end
+        end
         for _, name in ipairs(remotes) do
-          local r = require('util.system').sync(
-            { 'git', 'remote', 'get-url', name },
-            { text = true, timeout = 2000 }
-          )
-          local url = r.code == 0 and vim.trim(r.stdout or '') or ''
-          if url ~= '' then return forge.host_of(url) or host() end
+          if urls[name] then return forge.host_of(urls[name]) or host() end
         end
         return host()
       end
