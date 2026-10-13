@@ -184,6 +184,16 @@ describe('tools.runbook', function()
         { '[stopped: signal 15]' },
         runbook.render({ code = 143, signal = 15, stdout = '', stderr = '' })
       )
+      assert.same(
+        { '[stopped after 5 min, the run took too long]' },
+        runbook.render({
+          code = 124,
+          signal = 15,
+          timed_out = true,
+          stdout = '',
+          stderr = '',
+        })
+      )
     end)
 
     it('finds the output fence of a block', function()
@@ -593,6 +603,9 @@ describe('tools.runbook', function()
     )
     assert.is_truthy(entry({ signal = 15 })[1]:find('signal 15', 1, true))
     assert.is_truthy(entry({ cut = true })[1]:find('output cut', 1, true))
+    assert.is_truthy(
+      entry({ signal = 15, timed_out = true })[1]:find('timed out', 1, true)
+    )
     assert.same({ '', '```bash', 'ls', '```' }, vim.list_slice(entry({}), 2, 5))
   end)
 end)

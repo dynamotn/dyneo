@@ -298,7 +298,7 @@ function M.fence(output, indent, info)
 end
 
 --- What a finished run shows: its output, then how it ended unless well
----@param result vim.SystemCompleted|{ cut?: boolean }
+---@param result vim.SystemCompleted|{ cut?: boolean, timed_out?: boolean }
 ---@return string[]
 function M.render(result)
   -- stdout, then stderr: `vim.system` keeps them apart, so how they
@@ -315,6 +315,14 @@ function M.render(result)
       output,
       ('[output cut at %d KiB, the run was stopped]'):format(
         M.MAX_OUTPUT / 1024
+      )
+    )
+  elseif result.timed_out then
+    -- The deadline stops it with a signal too: say which stop it was
+    table.insert(
+      output,
+      ('[stopped after %d min, the run took too long]'):format(
+        M.TIMEOUT / 60000
       )
     )
   elseif result.signal and result.signal ~= 0 then
@@ -406,6 +414,7 @@ end
 ---@field code_status integer
 ---@field signal? integer
 ---@field cut? boolean
+---@field timed_out? boolean
 ---@field started integer Seconds since the epoch
 ---@field ms integer How long it ran
 
@@ -414,6 +423,7 @@ end
 ---@return string[]
 function M.log_entry(run)
   local how = run.cut and 'output cut'
+    or run.timed_out and 'timed out'
     or ((run.signal or 0) ~= 0 and ('signal %d'):format(run.signal))
     or ('exit %d'):format(run.code_status)
   local lines = {
@@ -602,6 +612,7 @@ start = function(bufnr, block, runner, code, on_done, written)
       code_status = result.code,
       signal = result.signal,
       cut = result.cut,
+      timed_out = result.timed_out,
       started = started,
       ms = math.floor((vim.uv.hrtime() - clock) / 1e6),
     })
