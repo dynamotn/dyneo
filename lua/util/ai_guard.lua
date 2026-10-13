@@ -386,6 +386,27 @@ M.guard_sidekick = function()
   )
 end
 
+--- Refuse to translate out of a sensitive buffer: pantran sends the range
+--- or the motion to a service (Google by default), and every path of
+--- `:Pantran` goes through `_translate` with that buffer still current
+M.guard_pantran = function()
+  local ok, command = pcall(require, 'pantran.command')
+  wrap(
+    ok and command or nil,
+    '_translate',
+    'pantran translate',
+    function(translate, ...)
+      if sensitive.is_sensitive(0) then
+        return refuse('pantran', 'pantran', 0)
+      end
+      local reason = policy.local_only(0)
+      if reason then return refuse_local('pantran', 'pantran', 0, reason) end
+      log('pantran', 'sent', 0, 'translation')
+      return translate(...)
+    end
+  )
+end
+
 --- Whether a Claude Code selection comes from a sensitive file or buffer
 ---@param sel table?
 ---@return boolean
@@ -570,6 +591,7 @@ M.setup = function()
   on_load('avante.nvim', M.guard_avante)
   on_load('sidekick.nvim', M.guard_sidekick)
   on_load('claudecode.nvim', M.guard_claudecode)
+  on_load('pantran.nvim', M.guard_pantran)
 end
 
 return M

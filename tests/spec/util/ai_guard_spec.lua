@@ -13,6 +13,7 @@ describe('util.ai_guard', function()
     'sidekick.config',
     'claudecode.selection',
     'claudecode',
+    'pantran.command',
     'lazy.core.config',
   }
 
@@ -293,6 +294,22 @@ describe('util.ai_guard', function()
       assert.is_nil(
         package.loaded['claudecode.selection'].get_latest_selection()
       )
+    end)
+  end)
+
+  describe('guard_pantran', function()
+    it('refuses to translate out of a sensitive buffer', function()
+      local command = {}
+      local calls
+      command._translate, calls = fn('translated')
+      package.loaded['pantran.command'] = command
+      ai_guard.guard_pantran()
+      edit(secret)
+      assert.is_nil(command._translate('text'))
+      assert.equals(0, #calls)
+      assert.is_true(refused())
+      edit(plain)
+      assert.equals('translated', command._translate('text'))
     end)
   end)
 
