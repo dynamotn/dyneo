@@ -1,3 +1,7 @@
 [general]
 ignore=B6
 contrib=contrib-title-conventional-commits
+
+# `type(scope): subject`: the scope is a module or a language, never left out
+[title-match-regex]
+regex=^[a-z]+\([\w./-]+\)!?: \S
