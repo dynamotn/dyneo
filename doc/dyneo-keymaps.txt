@@ -38,11 +38,9 @@ one of the same keys in those buffers.
 `<leader>M`            n      MCPHub
 `<leader>S`            n      Select Scratch Buffer
 `<leader>T`            n      Todo List
-`<leader>``            n      Switch to Other Buffer
 `<leader>e`            n      Explorer Snacks (root dir)
 `<leader>h`            n      Harpoon Quick Menu
 `<leader>l`            n      Lazy
-`<leader>m`            n      Mason
 `<leader>n`            n      Notification History
 `<leader>|`            n      Split Window Right
 
@@ -549,7 +547,6 @@ one of the same keys in those buffers.
 `<leader>uR`           n      Toggle Regexplainer
 `<leader>uS`           n      Toggle Smooth Scroll
 `<leader>uT`           n      Toggle Treesitter Highlight
-`<leader>uZ`           n      Toggle Zoom Mode
 `<leader>ua`           n      Toggle Animations
 `<leader>ub`           n      Toggle Dark Background
 `<leader>uc`           n      Toggle Conceal Level

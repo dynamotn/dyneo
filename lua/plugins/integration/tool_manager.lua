@@ -44,11 +44,6 @@ return {
       },
     },
     keys = {
-      {
-        '<leader>m',
-        '<cmd>Mason<cr>',
-        desc = 'Mason',
-      },
       { '<leader>cm', '<cmd>Mason<cr>', desc = 'Mason' },
     },
     ---@param opts MasonSettings|{ ensure_installed: string[] }
