@@ -1,5 +1,4 @@
 local language = require('config.languages').r
-local cmp_util = require('util.cmp')
 
 return vim.list_contains(DyNeo.enabled_languages, 'r')
     and {
@@ -66,19 +65,6 @@ return vim.list_contains(DyNeo.enabled_languages, 'r')
           servers = {
             r_language_server = {
               root_markers = { 'DESCRIPTION', 'NAMESPACE', '.Rbuildignore' },
-            },
-          },
-        },
-      },
-      {
-        -- Completion out of the running R session comes from R.nvim's own
-        -- language server, `r_ls`, through the `lsp` source; cmp-r is
-        -- archived and no longer talks to it
-        'blink.cmp',
-        opts = {
-          sources = {
-            per_filetype = {
-              r = cmp_util.sources('r'),
             },
           },
         },
