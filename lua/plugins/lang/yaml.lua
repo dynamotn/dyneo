@@ -115,26 +115,6 @@ return condition
               },
               filetypes = language.filetypes,
             },
-            -- One server per YAML dialect, each held to its own filetype,
-            -- picked by position from the list in `config.languages`
-            gitlab_ci_ls = {
-              filetypes = { language.filetypes[2] },
-            },
-            gh_actions_ls = {
-              filetypes = { language.filetypes[3] },
-            },
-            azure_pipelines_ls = {
-              filetypes = { language.filetypes[4] },
-            },
-            docker_compose_language_service = {
-              filetypes = { language.filetypes[5] },
-            },
-            helm_ls = {
-              filetypes = { language.filetypes[6] },
-            },
-            vacuum = {
-              filetypes = { language.filetypes[7] },
-            },
           },
         },
       },

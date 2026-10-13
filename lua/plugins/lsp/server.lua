@@ -129,32 +129,6 @@ local function default_opts()
         },
       },
       stylua = { enabled = false },
-      lua_ls = {
-        settings = {
-          Lua = {
-            workspace = {
-              checkThirdParty = false,
-            },
-            codeLens = {
-              enable = true,
-            },
-            completion = {
-              callSnippet = 'Replace',
-            },
-            doc = {
-              privateName = { '^_' },
-            },
-            hint = {
-              enable = true,
-              setType = false,
-              paramType = true,
-              paramName = 'Disable',
-              semicolon = 'Disable',
-              arrayIndex = 'Disable',
-            },
-          },
-        },
-      },
     },
     -- Per server, or `*` for any: a function returning true sets the server
     -- up itself, and keeps it from `vim.lsp.config`
