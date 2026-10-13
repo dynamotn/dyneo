@@ -72,6 +72,7 @@ CONTENTS                                                      *dyneo-contents*
        9.6 AI actions ............................................ |dyneo-ai|
        9.7 Service levels ........................................ |dyneo-nfr|
        9.8 Network ranges ....................................... |dyneo-cidr|
+       9.9 Decision matrix .................................... |dyneo-matrix|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -1278,6 +1279,21 @@ fine.  The same range twice, a subnet inside another subnet, and a network
 inside another network are listed.  A range worked out with `cidrsubnet()` is
 not read, nor is an IPv6 range: a warning says how many were left out.
 
+9.9 Decision matrix                                             *dyneo-matrix*
+
+Options are weighed in a Markdown table: a row per criterion, its weight in
+the second column, a score for each option after it, and a last `**Total**`
+row.  `<localleader>m` (|:DyMatrix|) in such a table, in a Markdown buffer,
+works each total out again -- the sum of weight times score, an empty score
+counting as nought -- puts the best one in bold, and lines the columns up.
+Emphasis is read through: `**5**` is 5.  A cell that is no number (`high`,
+`4/5`) counts as nought too, and is named with its line in a warning.  A table
+with a row wider than its header is left as it is, the rows named: writing it
+again would drop the extra cells.  Outside a table it writes one to fill in,
+under the cursor; in a decision record (|dyneo-adr|), as its `## Options`
+section, just before `## Decision`, so the scores stay with the decision they
+led to.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -1627,6 +1643,10 @@ Project ~
 :DyCidr                 What the IPv4 range under the cursor holds.
 :DyCidr overlaps        List the ranges of the module that collide.  See
                         |dyneo-cidr|.
+
+                                                                   *:DyMatrix*
+:DyMatrix               Work out the totals of the decision matrix under the
+                        cursor, or write one.  See |dyneo-matrix|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose

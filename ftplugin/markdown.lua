@@ -4,3 +4,10 @@ vim.opt_local.wrap = true
 vim.opt_local.spell = true
 -- Code blocks run where they are written (`tools.runbook`)
 require('tools.runbook').attach(0)
+-- A decision matrix is a Markdown table: the mapping lives where one is
+vim.keymap.set(
+  'n',
+  '<localleader>m',
+  '<cmd>DyMatrix<cr>',
+  { buffer = true, desc = 'Decision Matrix' }
+)

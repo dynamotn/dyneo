@@ -173,6 +173,8 @@ below follow the sections of `:help dyneo`.
   downtime, error budget and requests in flight. `:DyNfr 99.9 2x99.95 rps=200`
 - **Network ranges** — the IPv4 range under the cursor read out; the subnets
   of a Terraform module that collide. `:DyCidr` · `:DyCidr overlaps`
+- **Decision matrix** — options scored against weighted criteria, totals
+  worked out, written into the decision record. `:DyMatrix`
 
 <details>
 <summary><b>42 languages · 13 frameworks · 38 tools</b> —

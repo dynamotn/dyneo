@@ -25,6 +25,7 @@
 :DyJira	dyneo.txt	/*:DyJira*
 :DyKube	dyneo.txt	/*:DyKube*
 :DyLog	dyneo.txt	/*:DyLog*
+:DyMatrix	dyneo.txt	/*:DyMatrix*
 :DyNfr	dyneo.txt	/*:DyNfr*
 :DyOpenApiDiff	dyneo.txt	/*:DyOpenApiDiff*
 :DyOpenApiRequest	dyneo.txt	/*:DyOpenApiRequest*
@@ -102,6 +103,7 @@ dyneo-layout	dyneo.txt	/*dyneo-layout*
 dyneo-lazy-install	dyneo.txt	/*dyneo-lazy-install*
 dyneo-logs	dyneo.txt	/*dyneo-logs*
 dyneo-mappings	dyneo.txt	/*dyneo-mappings*
+dyneo-matrix	dyneo.txt	/*dyneo-matrix*
 dyneo-model	dyneo.txt	/*dyneo-model*
 dyneo-nfr	dyneo.txt	/*dyneo-nfr*
 dyneo-openapi	dyneo.txt	/*dyneo-openapi*

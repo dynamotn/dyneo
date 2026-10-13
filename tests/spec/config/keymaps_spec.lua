@@ -313,7 +313,7 @@ describe('config.keymaps', function()
   end)
 
   it('maps a command acting on one kind of buffer only there', function()
-    for _, lhs in ipairs({ ' pAo' }) do
+    for _, lhs in ipairs({ ' pAm', ' pAo' }) do
       assert.same({}, map('n', lhs), lhs)
     end
   end)
