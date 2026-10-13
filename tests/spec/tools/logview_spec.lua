@@ -254,6 +254,26 @@ describe('tools.logview', function()
       assert.equals('kubectl failed: pod broke', notes[#notes])
     end)
 
+    it('keeps what a followed source printed before the deadline', function()
+      vim.fn.mkdir(dir .. '/bin', 'p')
+      h.write(dir .. '/bin/journalctl', {
+        '#!/bin/sh',
+        [[echo '{"PRIORITY":"6","MESSAGE":"tick"}']],
+        'exec sleep 30',
+      })
+      vim.fn.setfperm(dir .. '/bin/journalctl', 'rwxr-xr-x')
+      local path = vim.env.PATH
+      vim.env.PATH = dir .. '/bin:' .. path
+      local restore = h.stub(logview, 'TIMEOUT', 300)
+      logview.command({ fargs = { 'journal', '-f' } })
+      local function shown()
+        return table.concat(lines(), '\n'):find('tick', 1, true) ~= nil
+      end
+      assert.is_true(vim.wait(5000, shown, 20))
+      restore()
+      vim.env.PATH = path
+    end)
+
     it('stops a source that keeps printing, and says so', function()
       vim.fn.mkdir(dir .. '/bin', 'p')
       -- `journalctl -f`: a record a line, for as long as it is let run

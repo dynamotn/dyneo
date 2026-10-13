@@ -481,7 +481,7 @@ local function from_command(command)
       command,
       { timeout = M.TIMEOUT, max_bytes = M.MAX_BYTES },
       function(result)
-        if result.code ~= 0 and not result.cut then
+        if result.code ~= 0 and not result.cut and not result.timed_out then
           return on_lines(
             nil,
             ('%s failed: %s'):format(
