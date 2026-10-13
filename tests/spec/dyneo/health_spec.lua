@@ -215,4 +215,14 @@ describe('dyneo.health', function()
     assert.is_true(says(entries, 'info', 'infracost is not installed'))
     assert.is_false(says(entries, 'warn', 'infracost'))
   end)
+
+  it('names the CLIs the encrypted files and Kubernetes run', function()
+    local restore = h.stub(vim.fn, 'executable', function() return 0 end)
+    local entries = section(report(), 'Requirements')
+    restore()
+    for _, cli in ipairs({ 'sops', 'ansible-vault', 'kubectl', 'helm' }) do
+      assert.is_true(says(entries, 'info', cli .. ' is not installed'), cli)
+    end
+    assert.is_false(says(entries, 'info', 'hdb'))
+  end)
 end)
