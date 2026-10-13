@@ -7,6 +7,7 @@
 :DyArchitecture	dyneo.txt	/*:DyArchitecture*
 :DyAsyncApiDiff	dyneo.txt	/*:DyAsyncApiDiff*
 :DyBreaking	dyneo.txt	/*:DyBreaking*
+:DyC4	dyneo.txt	/*:DyC4*
 :DyCiLint	dyneo.txt	/*:DyCiLint*
 :DyCiStatus	dyneo.txt	/*:DyCiStatus*
 :DyCidr	dyneo.txt	/*:DyCidr*

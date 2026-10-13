@@ -1154,9 +1154,19 @@ model file under the root -- as it is typed.  The server runs a
 `likec4.config.{js,ts,...}` it finds under the root, so in a root holding
 one it starts only once you said it may, asked once a session; a JSON
 config needs no asking.  A Structurizr workspace (`workspace.dsl`) gets its
-grammar.  Their pictures come from their own tools: `likec4 start` previews
-a model in the browser and `likec4 gen d2` turns it into D2, which previews
-here; Structurizr exports PlantUML, Mermaid or D2 the same way.
+grammar.
+
+In a LikeC4 buffer, `<localleader>p` (|:DyC4|) draws a view of the workspace
+here: `likec4 gen d2` writes every view as D2 into a cache of its own, never
+into the workspace, and the view picked -- or the only one -- goes to the D2
+preview above.  likec4 reads the files on disk, so a buffer not yet written
+is refused, and it runs a code config as the server does, so in a root
+holding one it asks first, again on each run until you say it may.  A model
+with errors is not drawn: likec4 still writes what it could, and its errors
+are shown instead.  The root of a workspace is the nearest directory with a
+config of any name (`.likec4rc`, `likec4.config.json`, `.ts`, ...), else the
+repository.  Install it once with `:MasonInstall likec4` (Node 22).
+Structurizr exports PlantUML or Mermaid, not D2, with its own tool.
 
 9.5 Integrations                                          *dyneo-integrations*
 
@@ -1820,6 +1830,10 @@ Project ~
                         questions in the quickfix list.
 :DyThreat new [{scope}] Write a new STRIDE model of {scope} as a decision
                         record.  See |dyneo-threat|.
+
+                                                                       *:DyC4*
+:DyC4 [{view}]          Draw {view} of the LikeC4 workspace of the buffer,
+                        or one picked, through D2.  See |dyneo-diagram|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose

@@ -296,7 +296,7 @@ describe('lsp', function()
     local config, root, asked, answer, restore_confirm
 
     before_each(function()
-      h.unload('util.trust')
+      h.unload('util.trust', 'tools.c4')
       config = load('likec4', dir)
       root = dir .. '/model'
       h.write(root .. '/likec4.config.json', { '{}' })

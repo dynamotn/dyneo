@@ -472,6 +472,7 @@ local function requirements()
     oasdiff = '`:DyOpenApiDiff` (`:MasonInstall oasdiff`)',
     asyncapi = '`:DyAsyncApiDiff` (`:MasonInstall asyncapi-cli`)',
     ['graphql-inspector'] = '`:DyBreaking` on GraphQL (`:MasonInstall graphql-inspector`)',
+    likec4 = '`:DyC4`, a LikeC4 view drawn here (`:MasonInstall likec4`)',
     depcruise = '`:DyDeps` in a JavaScript project (`npm install -D dependency-cruiser`)',
     ['go-arch-lint'] = '`:DyDeps` in a Go project',
     ['lint-imports'] = '`:DyDeps` in a Python project (`pip install import-linter`)',
