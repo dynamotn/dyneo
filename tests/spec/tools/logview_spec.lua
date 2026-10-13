@@ -196,6 +196,21 @@ describe('tools.logview', function()
       assert.is_truthy(notes[#notes]:find('^jq failed'))
     end)
 
+    it('reads only the end of a file past the size cap', function()
+      h.write(file, { 'first record', 'second record', 'third record' })
+      local restore = h.stub(logview, 'MAX_BYTES', 20)
+      local read, err, cut = logview.read_tail(file)
+      restore()
+      assert.is_nil(err)
+      assert.is_true(cut)
+      assert.same({ 'third record' }, read)
+      assert.same(
+        { 'first record', 'second record', 'third record' },
+        (logview.read_tail(file))
+      )
+      assert.is_nil(logview.read_tail(dir .. '/missing.log'))
+    end)
+
     it('reloads from its source, keeping the level asked for', function()
       logview.command({ fargs = { file } })
       local bufnr = vim.api.nvim_get_current_buf()

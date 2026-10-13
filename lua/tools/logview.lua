@@ -549,10 +549,40 @@ function M.command(args)
     return notify('Cannot read ' .. file, vim.log.levels.ERROR)
   end
   M.open(vim.fn.fnamemodify(file, ':~:.'), function(on_lines)
-    local ok, lines = pcall(vim.fn.readfile, file, '', -M.MAX_LINES)
-    if not ok then return on_lines(nil, tostring(lines)) end
+    local lines, err, cut = M.read_tail(file)
+    if not lines then return on_lines(nil, err) end
+    if cut then
+      notify(
+        ('Read the last %d MiB only'):format(M.MAX_BYTES / 1024 / 1024),
+        vim.log.levels.WARN
+      )
+    end
     on_lines(lines)
   end)
+end
+
+--- The lines of the last `M.MAX_BYTES` of `file`, and whether its start was
+--- left out
+---
+--- `readfile()` with a negative count still reads the whole file to find its
+--- end: a log of a few GiB would hold the editor until it is through.
+---@param file string
+---@return string[]? lines
+---@return string? err
+---@return boolean? cut
+function M.read_tail(file)
+  local handle, err = io.open(file, 'rb')
+  if not handle then return nil, err end
+  local size = handle:seek('end')
+  local cut = size > M.MAX_BYTES
+  handle:seek('set', cut and size - M.MAX_BYTES or 0)
+  local data = handle:read('*a') or ''
+  handle:close()
+  local lines = vim.split(data:gsub('\r\n', '\n'), '\n', { plain = true })
+  if lines[#lines] == '' then table.remove(lines) end
+  -- The first line of a cut read is the end of a record
+  if cut then table.remove(lines, 1) end
+  return lines, nil, cut
 end
 
 --- The subcommands of `:DyLog`, before a file name

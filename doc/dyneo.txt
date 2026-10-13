@@ -788,8 +788,8 @@ to the record.
 id, whatever the source names them.  `<leader>il` reads the file of the
 buffer, `<leader>ij` the journal, and `<leader>ip` starts the command line
 for a pod.  JSON lines, logfmt and plain text are read line by line, and the
-level is coloured.  At most the last 20000 lines of a file are read, and
-2000 of the journal or of a pod.  In the buffer:
+level is coloured.  At most the last 20000 lines of a file are read, out of
+its last 8 MiB, and 2000 of the journal or of a pod.  In the buffer:
 
     `<localleader>l`   Show only a level and louder
     `<localleader>i`   Show only the request under the cursor; again for all
