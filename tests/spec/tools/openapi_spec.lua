@@ -346,6 +346,23 @@ describe('tools.openapi', function()
       cleanup()
     end)
 
+    it('keeps the FileType hook of plugin/openapi.lua', function()
+      vim.cmd('runtime plugin/openapi.lua')
+      local hooks = { group = 'dy_openapi', event = 'FileType' }
+      local before = #vim.api.nvim_get_autocmds(hooks)
+      local dir, cleanup = h.tmpdir()
+      h.write(dir .. '/openapi.yaml', YAML)
+      local path = vim.env.PATH
+      vim.env.PATH = dir .. '/no-bin'
+      local restore = h.stub(vim, 'notify', function() end)
+      openapi.compare(0, 'HEAD', dir .. '/openapi.yaml', 'old', { 'new' }, true)
+      restore()
+      vim.env.PATH = path
+      cleanup()
+      assert.is_true(before > 0)
+      assert.equals(before, #vim.api.nvim_get_autocmds(hooks))
+    end)
+
     it('removes its copies when oasdiff cannot start', function()
       local dir, cleanup = h.tmpdir()
       h.write(dir .. '/openapi.yaml', YAML)

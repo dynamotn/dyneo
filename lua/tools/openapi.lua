@@ -593,8 +593,13 @@ function M.compare(bufnr, rev, file, base_text, current, modified)
   for _, path in ipairs(written) do
     M._leftover[path] = true
   end
+  -- A group of its own: `dy_openapi` holds the `FileType` hook of
+  -- `plugin/openapi.lua`, which clearing it would remove
   vim.api.nvim_create_autocmd('VimLeavePre', {
-    group = vim.api.nvim_create_augroup('dy_openapi', { clear = true }),
+    group = vim.api.nvim_create_augroup(
+      'dy_openapi_leftover',
+      { clear = true }
+    ),
     callback = function()
       for path in pairs(M._leftover) do
         vim.fn.delete(path)
