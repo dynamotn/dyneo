@@ -180,6 +180,7 @@ describe('tools.logview', function()
 
     it('narrows to what a jq expression selects', function()
       if vim.fn.executable('jq') ~= 1 then
+        assert(not vim.env.CI, 'no jq on CI')
         return pending('jq is not installed')
       end
       logview.command({ fargs = { file } })

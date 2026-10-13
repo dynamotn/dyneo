@@ -475,6 +475,7 @@ describe('tools.openapi', function()
 
   it('reads YAML through yq', function()
     if vim.fn.executable('yq') ~= 1 then
+      assert(not vim.env.CI, 'no yq on CI')
       return pending('yq is not installed')
     end
     local bufnr = h.buffer({ lines = YAML, filetype = 'yaml.openapi' })

@@ -206,6 +206,7 @@ describe('tools.architecture', function()
 
   it('reads the manifests of a directory through yq', function()
     if vim.fn.executable('yq') ~= 1 then
+      assert(not vim.env.CI, 'no yq on CI')
       return pending('yq is not installed')
     end
     local dir, cleanup = h.tmpdir()

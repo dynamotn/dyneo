@@ -124,7 +124,11 @@ describe('tools.inspect', function()
     describe('with openssl', function()
       local cert
       before_each(function()
-        if vim.fn.executable('openssl') ~= 1 then return end
+        if vim.fn.executable('openssl') ~= 1 then
+          -- On every CI runner: missing there, these cases would test nothing
+          assert(not vim.env.CI, 'no openssl on CI')
+          return
+        end
         local result = vim
           .system({
             'openssl',

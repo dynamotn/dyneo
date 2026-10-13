@@ -392,6 +392,7 @@ describe('lsp', function()
 
     it('asks git whether a file is ignored', function()
       if vim.fn.executable('git') == 0 then
+        assert(not vim.env.CI, 'no git on CI')
         pending('git is not installed')
         return
       end

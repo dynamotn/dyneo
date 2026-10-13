@@ -66,6 +66,10 @@ jobs:
       # `per_machine/config.lua` is rendered by chezmoi and is not in the
       # repository; one is written here only to pick the channel, the way a
       # machine on it would, and everything else stays at its default.
+      # The image has jq, yq, openssl and git, which specs run for real and
+      # fail without on CI; fd it lacks, and Ubuntu names it `fdfind`
+      - name: Install fd
+        run: sudo apt-get install -y --no-install-recommends fd-find
       - name: Link configuration
         run: |
           mkdir -p "$HOME/.config"

@@ -900,6 +900,7 @@ describe('util.yaml_schema', function()
         elseif
           vim.fn.executable('fd') == 0 and vim.fn.executable('fdfind') == 0
         then
+          assert(not vim.env.CI, 'no fd on CI')
           return pending('fd is not installed')
         end
         local bufnr = open(project .. '/a.yaml', {})
