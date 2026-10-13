@@ -43,6 +43,7 @@
 :DySudoWrite	dyneo.txt	/*:DySudoWrite*
 :DyTfPlan	dyneo.txt	/*:DyTfPlan*
 :DyTfState	dyneo.txt	/*:DyTfState*
+:DyWar	dyneo.txt	/*:DyWar*
 :DyYamlSchema	dyneo.txt	/*:DyYamlSchema*
 DyNeo.ai	dyneo.txt	/*DyNeo.ai*
 DyNeo.bundle_languages	dyneo.txt	/*DyNeo.bundle_languages*
@@ -126,5 +127,6 @@ dyneo-tfplan	dyneo.txt	/*dyneo-tfplan*
 dyneo-tfstate	dyneo.txt	/*dyneo-tfstate*
 dyneo-troubleshooting	dyneo.txt	/*dyneo-troubleshooting*
 dyneo-update	dyneo.txt	/*dyneo-update*
+dyneo-war	dyneo.txt	/*dyneo-war*
 dyneo-workspace	dyneo.txt	/*dyneo-workspace*
 dyneo.txt	dyneo.txt	/*dyneo.txt*

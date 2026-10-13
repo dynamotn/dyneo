@@ -175,6 +175,8 @@ below follow the sections of `:help dyneo`.
   of a Terraform module that collide. `:DyCidr` · `:DyCidr overlaps`
 - **Decision matrix** — options scored against weighted criteria, totals
   worked out, written into the decision record. `:DyMatrix`
+- **Well-Architected review** — the questions of the six pillars as a
+  checklist in a decision record; what is still open, per pillar. `:DyWar`
 
 <details>
 <summary><b>42 languages · 13 frameworks · 38 tools</b> —

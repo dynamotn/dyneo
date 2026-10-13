@@ -73,6 +73,7 @@ CONTENTS                                                      *dyneo-contents*
        9.7 Service levels ........................................ |dyneo-nfr|
        9.8 Network ranges ....................................... |dyneo-cidr|
        9.9 Decision matrix .................................... |dyneo-matrix|
+       9.10 Well-Architected review .............................. |dyneo-war|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -1294,6 +1295,20 @@ under the cursor; in a decision record (|dyneo-adr|), as its `## Options`
 section, just before `## Decision`, so the scores stay with the decision they
 led to.
 
+9.10 Well-Architected review                                       *dyneo-war*
+
+`<leader>pAW` (`:DyWar new`) writes a review of the workload as a decision
+record (|dyneo-adr|), numbered and dated beside the decisions it leads to: a
+section per pillar -- operational excellence, security, reliability,
+performance efficiency, cost optimization and sustainability -- and in each
+the questions the AWS, Azure and Google frameworks ask, as a checklist.
+Tick what holds, add questions of your own, and write what is fixed first
+under `## Consequences`.
+
+`<leader>pAw` (|:DyWar|) reads the review open, or the latest of the
+project, says how many questions of each pillar hold, and puts the ones still
+open in the quickfix list.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -1647,6 +1662,12 @@ Project ~
                                                                    *:DyMatrix*
 :DyMatrix               Work out the totals of the decision matrix under the
                         cursor, or write one.  See |dyneo-matrix|.
+
+                                                                      *:DyWar*
+:DyWar                  How far the latest Well-Architected review got,
+                        its open questions in the quickfix list.
+:DyWar new              Write a new review as a decision record.  See
+                        |dyneo-war|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose
