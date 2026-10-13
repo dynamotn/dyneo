@@ -174,7 +174,9 @@ end
 --- Write a review and open it
 function M.new()
   local date = os.date('%Y-%m-%d') --[[@as string]]
-  local record = adr.create(adr.dir(M.root()), ('%s %s'):format(M.TITLE, date))
+  local dir, err = adr.dir(M.root())
+  if not dir then return notify(err, vim.log.levels.ERROR) end
+  local record = adr.create(dir, ('%s %s'):format(M.TITLE, date))
   vim.fn.writefile(M.template(record.number, date), record.file)
   vim.cmd.edit(vim.fn.fnameescape(record.file))
   notify(('Review %d written: tick what holds'):format(record.number))
@@ -211,13 +213,16 @@ end
 --- latest of the project
 ---@param kind DyChecklistKind
 ---@return string? file
+---@return string? err Why the project's records cannot be read
 local function record_file(kind)
   local file = vim.api.nvim_buf_get_name(0)
   local buffer = file ~= ''
     and adr.parse(vim.api.nvim_buf_get_lines(0, 0, 40, false), file)
   if buffer and is_kind(kind, buffer) then return file end
+  local dir, err = adr.dir(M.root())
+  if not dir then return nil, err end
   local latest
-  for _, record in ipairs(adr.list(adr.dir(M.root()))) do
+  for _, record in ipairs(adr.list(dir)) do
     if is_kind(kind, record) then latest = record.file end
   end
   return latest
@@ -227,7 +232,8 @@ end
 ---@param kind DyChecklistKind
 function M.report(kind)
   local say = require('util.notify').titled(kind.label)
-  local file = record_file(kind)
+  local file, err = record_file(kind)
+  if err then return say(err, vim.log.levels.ERROR) end
   if not file then
     return say(
       ('No %s yet: `%s` writes one'):format(kind.noun, kind.command),

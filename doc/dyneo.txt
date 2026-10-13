@@ -1118,7 +1118,8 @@ found for the buffer.
 |:DyAdr| keeps the architecture decisions of a project as adr-tools does: one
 Markdown file per decision, numbered `0001-<title>.md` and on, in the
 directory a `.adr-dir` file at the root names, else `docs/adr`, `doc/adr`,
-`docs/decisions` or `adr` when one exists, else `docs/adr`.  A record has a
+`docs/decisions` or `adr` when one exists, else `docs/adr`.  A `.adr-dir`
+naming a directory outside the project is refused.  A record has a
 title, a date, a status -- proposed, accepted, deprecated, superseded -- and
 its context, decision and consequences.  A decision that replaces another
 links both ways: the old one says what superseded it, the new one what it

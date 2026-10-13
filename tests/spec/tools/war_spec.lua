@@ -95,6 +95,19 @@ describe('tools.war', function()
     assert.equals(#war.items(war.template(1, 'd')), #vim.fn.getqflist())
   end)
 
+  it('writes no review outside the project', function()
+    local outside = vim.fs.dirname(dir) .. '/' .. vim.fs.basename(dir) .. '-x'
+    h.write(dir .. '/.adr-dir', { '../' .. vim.fs.basename(outside) })
+    war.command({ fargs = { 'new' } })
+    war.check()
+    assert.equals(0, vim.fn.isdirectory(outside))
+    assert.equals(dir .. '/README.md', vim.api.nvim_buf_get_name(0))
+    assert.same({
+      '`.adr-dir` points outside the project: ../' .. vim.fs.basename(outside),
+      '`.adr-dir` points outside the project: ../' .. vim.fs.basename(outside),
+    }, notes)
+  end)
+
   it('says when there is no review yet', function()
     war.check()
     assert.equals('No review yet: `:DyWar new` writes one', notes[1])

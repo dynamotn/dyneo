@@ -120,14 +120,44 @@ local function root()
   return vim.fs.root(0, { '.git', '.adr-dir' }) or vim.uv.cwd() --[[@as string]]
 end
 
---- The directory of the records of the project at `base`
----@param base string
+--- `path` with its symlinks resolved, as far as it exists
+---@param path string
 ---@return string
+local function resolved(path)
+  local rest = ''
+  while true do
+    local real = vim.uv.fs_realpath(path)
+    if real then return real .. rest end
+    local parent = vim.fs.dirname(path)
+    if parent == path then return path .. rest end
+    rest = '/' .. vim.fs.basename(path) .. rest
+    path = parent
+  end
+end
+
+--- The directory of the records of the project at `base`; nil with why when
+--- its `.adr-dir` points outside it
+---@param base string
+---@return string? dir
+---@return string? err
 function M.dir(base)
   local marker = vim.fs.joinpath(base, '.adr-dir')
   if vim.fn.filereadable(marker) == 1 then
     local line = vim.trim(vim.fn.readfile(marker)[1] or '')
-    if line ~= '' then return vim.fs.joinpath(base, line) end
+    if line ~= '' then
+      local dir = vim.fs.normalize(vim.fs.joinpath(base, line))
+      -- A cloned repository chooses the line: it must not have records
+      -- written, or directories made, outside it
+      if
+        not require('util.root').contains(
+          resolved(vim.fs.normalize(base)),
+          resolved(dir)
+        )
+      then
+        return nil, ('`.adr-dir` points outside the project: %s'):format(line)
+      end
+      return dir
+    end
   end
   for _, dir in ipairs(M.DIRS) do
     local path = vim.fs.joinpath(base, dir)
@@ -201,7 +231,9 @@ end
 ---@param title? string
 function M.new(title)
   with_title(title, function(text)
-    local record = M.create(M.dir(root()), text)
+    local dir, err = M.dir(root())
+    if not dir then return notify(err, vim.log.levels.ERROR) end
+    local record = M.create(dir, text)
     vim.cmd.edit(vim.fn.fnameescape(record.file))
     notify(('Recorded %d. %s'):format(record.number, record.title))
   end)
@@ -268,7 +300,9 @@ end
 
 --- Pick a record of the project and open it
 function M.pick()
-  local records = M.list(M.dir(root()))
+  local dir, err = M.dir(root())
+  if not dir then return notify(err, vim.log.levels.ERROR) end
+  local records = M.list(dir)
   if #records == 0 then
     return notify('No decision recorded yet: `:DyAdr new` starts one')
   end

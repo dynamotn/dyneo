@@ -56,6 +56,21 @@ describe('tools.adr', function()
     assert.equals(dir .. '/docs/decisions', adr.dir(dir))
     h.write(dir .. '/.adr-dir', { 'architecture/decisions' })
     assert.equals(dir .. '/architecture/decisions', adr.dir(dir))
+    h.write(dir .. '/.adr-dir', { './adr/../decisions/' })
+    assert.equals(dir .. '/decisions', adr.dir(dir))
+  end)
+
+  it('refuses a directory outside the project', function()
+    local outside = '../' .. vim.fs.basename(dir) .. '-other'
+    h.write(dir .. '/.adr-dir', { outside })
+    local found, err = adr.dir(dir)
+    assert.is_nil(found)
+    assert.equals('`.adr-dir` points outside the project: ' .. outside, err)
+    local elsewhere, clean = h.tmpdir()
+    vim.uv.fs_symlink(elsewhere, dir .. '/link')
+    h.write(dir .. '/.adr-dir', { 'link/adr' })
+    assert.is_nil(adr.dir(dir))
+    clean()
   end)
 
   it(
@@ -106,6 +121,17 @@ describe('tools.adr', function()
         vim.api.nvim_buf_get_lines(0, 0, 1, false)[1]
       )
       assert.equals('Recorded 1. Use Postgres', notes[1])
+    end)
+
+    it('writes nothing outside the project', function()
+      local outside = vim.fs.dirname(dir) .. '/' .. vim.fs.basename(dir) .. '-x'
+      h.write(dir .. '/.adr-dir', { '../' .. vim.fs.basename(outside) })
+      adr.command({ fargs = { 'new', 'Escape' } })
+      adr.command({ fargs = { 'list' } })
+      assert.equals(0, vim.fn.isdirectory(outside))
+      assert.equals(dir .. '/README.md', vim.api.nvim_buf_get_name(0))
+      assert.equals(2, #notes)
+      assert.is_truthy(notes[1]:find('outside the project', 1, true))
     end)
 
     it('asks for the title when it is not given', function()
