@@ -738,19 +738,4 @@ function M.command(args)
   actions[sub]()
 end
 
---- The mappings of a Markdown buffer
----@param bufnr integer
-function M.attach(bufnr)
-  local function map(lhs, rhs, desc)
-    vim.keymap.set('n', lhs, rhs, { buffer = bufnr, desc = desc })
-  end
-  map('<localleader>r', M.run, 'Run Block (Runbook)')
-  map('<localleader>R', function() M.run_all() end, 'Run All Blocks (Runbook)')
-  map('<localleader>F', M.run_from, 'Run From Here (Runbook)')
-  map('<localleader>L', M.record, 'Record Runs (Runbook)')
-  map('<localleader>x', M.clear, 'Clear Outputs (Runbook)')
-  map('<localleader>s', M.stop, 'Stop Running (Runbook)')
-  map('<localleader>I', M.forget_inputs, 'Forget Inputs (Runbook)')
-end
-
 return M

@@ -384,9 +384,13 @@ describe('tools.runbook', function()
       assert.equals('sh', runbook.block_at(lines, 4).lang)
     end)
 
-    it('sets its mappings on a buffer', function()
+    it('sets its mappings on a Markdown buffer, loading nothing', function()
       local bufnr = buffer({})
-      runbook.attach(bufnr)
+      vim.api.nvim_set_current_buf(bufnr)
+      package.loaded['tools.runbook'] = nil
+      dofile(h.root .. '/ftplugin/markdown.lua')
+      assert.is_nil(package.loaded['tools.runbook'])
+      runbook = require('tools.runbook')
       local lhs = vim.tbl_map(
         function(map) return map.desc end,
         vim.api.nvim_buf_get_keymap(bufnr, 'n')
