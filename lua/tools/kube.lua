@@ -95,6 +95,12 @@ local function run(command, dir, stdin, on_done)
       if result.missing then
         return notify(result.stderr, vim.log.levels.ERROR)
       end
+      -- A child stopped at the output cap exits 0: what it printed is only
+      -- the start of a render, a diff or a list, never the whole of it
+      if result.cut then
+        local failure = require('util.system').failure(result, command[1])
+        return notify(failure, vim.log.levels.ERROR)
+      end
       on_done(result)
     end
   )

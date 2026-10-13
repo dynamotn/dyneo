@@ -176,6 +176,9 @@ function M.failure(result, name)
   if result.timed_out or result.code == M.TIMED_OUT then
     return ('%s gave no answer in time'):format(name)
   end
+  if result.cut then
+    return ('%s printed more than can be read, and was stopped'):format(name)
+  end
   local err = vim.trim(result.stderr or '')
   if err ~= '' then return err end
   return ('%s exited %d'):format(name, result.code)

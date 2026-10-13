@@ -160,6 +160,19 @@ describe('util.system', function()
         system.failure({ code = 1, signal = 0, stderr = 'boom\n' }, 'git')
       )
     end)
+
+    it(
+      'says a run stopped at the output cap was cut',
+      function()
+        assert.are.equal(
+          'helm printed more than can be read, and was stopped',
+          system.failure(
+            { code = 0, signal = 15, stderr = '', cut = true },
+            'helm'
+          )
+        )
+      end
+    )
   end)
 
   describe('each', function()

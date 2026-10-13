@@ -273,6 +273,23 @@ describe('tools.kube', function()
       assert.equals('stdin: kind: Service', calls[3])
     end)
 
+    it('sends nothing when the render was cut at the output cap', function()
+      fake('helm', 'kind: Service', 0)
+      fake('kubectl', 'service/web created (server dry run)', 0)
+      local restore = h.stub(require('util.system'), 'MAX_BYTES', 4)
+      vim.cmd.edit(dir .. '/chart/values-prod.yaml')
+      kube.dry_run()
+      settle(1)
+      restore()
+      assert.equals(
+        'helm printed more than can be read, and was stopped',
+        notes[1]
+      )
+      for _, call in ipairs(logged()) do
+        assert.is_nil(call:find('kubectl', 1, true))
+      end
+    end)
+
     --- A kubectl whose context is `prod-cluster`, namespace `web`
     local function kubectl()
       h.write(dir .. '/bin/kubectl', {

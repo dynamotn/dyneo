@@ -728,7 +728,7 @@ function M.run(mode)
     command,
     { cwd = dir, timeout = M.TIMEOUT },
     function(result)
-      if result.code ~= 0 then return failed('plan', result) end
+      if result.code ~= 0 or result.cut then return failed('plan', result) end
       require('util.system').run(
         { bin, 'show', '-json', planfile },
         { cwd = dir, timeout = M.TIMEOUT, max_bytes = M.MAX_PLAN },

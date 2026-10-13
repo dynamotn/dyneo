@@ -124,7 +124,8 @@ function M.headless(text, root, label, on_done)
     -- A CLI that wants to ask something must not take over the terminal
     detach = true,
   }, function(result)
-    if result.code ~= 0 then
+    -- A cut answer is not a shorter message: it is a broken one
+    if result.code ~= 0 or result.cut then
       return notify(system.failure(result, cmd[1]), vim.log.levels.ERROR)
     end
     if vim.trim(result.stdout) == '' then
