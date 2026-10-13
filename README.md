@@ -4,7 +4,8 @@
 
 # DyNeo
 
-**Neovim, turned into a workstation for infrastructure, security and data.**
+**Neovim, turned into a workstation for infrastructure, architecture,
+security and data.**
 
 One table per language · nothing installed until a file asks ·
 a supply chain on a leash
