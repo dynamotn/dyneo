@@ -135,6 +135,10 @@ jobs:
         run: ./scripts/test.sh
       - name: Validate tool names
         run: nvim --clean --headless -l scripts/validate-tools.lua
+      # A dead or conflicting mapping fails here, and so does a reference the
+      # commit forgot to regenerate, or a mapping that differs on `stable`
+      - name: Keymap reference
+        run: ./scripts/keymaps-doc.sh && git diff --exit-code doc/
       - name: Check startup
         run: ./scripts/check-startup.sh
         env:
