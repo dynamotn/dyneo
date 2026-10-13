@@ -224,10 +224,6 @@ vim.api.nvim_create_autocmd('VimLeavePre', {
   desc = 'Stop every DuckDB run on leaving',
 })
 
---- Buffers whose hiding stops their run
----@type table<integer, true>
-local watched = {}
-
 --- What a buffer says when it was hidden before its run was done
 M.STOPPED = 'Stopped: the window closed before duckdb was done'
 
@@ -240,27 +236,25 @@ function M.run_into(bufnr, script, opts)
   opts = opts or {}
   local scratch = require('util.scratch')
   M.stop(bufnr)
-  if not watched[bufnr] then
-    watched[bufnr] = true
-    -- Hidden, not only unloaded: the result window keeps its buffer
-    vim.api.nvim_create_autocmd({ 'BufHidden', 'BufUnload' }, {
-      group = group,
-      buffer = bufnr,
-      callback = function(args)
-        if args.event == 'BufUnload' then watched[bufnr] = nil end
-        if not M.jobs[bufnr] then return end
-        M.stop(bufnr)
-        if args.event == 'BufHidden' then
-          vim.schedule(function()
-            if vim.api.nvim_buf_is_valid(bufnr) then
-              scratch.set(bufnr, { M.STOPPED })
-            end
-          end)
-        end
-      end,
-      desc = 'Stop the DuckDB run of the buffer',
-    })
-  end
+  -- Hidden, not only unloaded: the result window keeps its buffer. Cleared
+  -- first: an unloaded buffer keeps its autocmds until it is wiped out
+  vim.api.nvim_clear_autocmds({ group = group, buffer = bufnr })
+  vim.api.nvim_create_autocmd({ 'BufHidden', 'BufUnload' }, {
+    group = group,
+    buffer = bufnr,
+    callback = function(args)
+      if not M.jobs[bufnr] then return end
+      M.stop(bufnr)
+      if args.event == 'BufHidden' then
+        vim.schedule(function()
+          if vim.api.nvim_buf_is_valid(bufnr) then
+            scratch.set(bufnr, { M.STOPPED })
+          end
+        end)
+      end
+    end,
+    desc = 'Stop the DuckDB run of the buffer',
+  })
   scratch.set(bufnr, {
     ('Running duckdb%s…'):format(opts.title and (' on ' .. opts.title) or ''),
   })
