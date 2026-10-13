@@ -42,12 +42,15 @@ end
 
 local function setup_project_rtp()
   local directory = require('util.root').get() .. '/.nvim'
-  if directory == project_rtp then return end
+  -- Asked before the folder already on the runtimepath is kept: `:trust`
+  -- may have taken it back
+  local trusted = is_trusted(directory)
+  if directory == project_rtp and trusted then return end
   if project_rtp then
     vim.opt.rtp:remove(project_rtp)
     project_rtp = nil
   end
-  if is_trusted(directory) then
+  if trusted then
     vim.opt.rtp:append(directory)
     project_rtp = directory
   end

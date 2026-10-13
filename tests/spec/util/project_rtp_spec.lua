@@ -87,6 +87,29 @@ describe('util.project_rtp', function()
     assert.are.equal(2, reads)
   end)
 
+  it('drops the folder of this project once :trust takes it back', function()
+    vim.fn.mkdir(dir .. '/.nvim', 'p')
+    local verdict, mtime = '', 1
+    local trust = vim.fn.stdpath('state') .. '/trust'
+    local fs_stat = vim.uv.fs_stat
+    table.insert(
+      restores,
+      h.stub(vim.uv, 'fs_stat', function(path, ...)
+        if path == trust then return { mtime = { sec = mtime, nsec = 0 } } end
+        return fs_stat(path, ...)
+      end)
+    )
+    table.insert(
+      restores,
+      h.stub(vim.secure, 'read', function() return verdict end)
+    )
+    local project_rtp = require('util.project_rtp')
+    assert.equals(dir .. '/.nvim', project_rtp.startup_path())
+    verdict, mtime = nil, 2
+    assert.is_nil(project_rtp.startup_path())
+    assert.is_false(vim.list_contains(vim.opt.rtp:get(), dir .. '/.nvim'))
+  end)
+
   it('hands lazy.nvim a trusted folder to start with', function()
     vim.fn.mkdir(dir .. '/.nvim', 'p')
     table.insert(restores, h.stub(vim.secure, 'read', function() return '' end))
