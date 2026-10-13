@@ -61,6 +61,13 @@ describe('tools.code_actions.ltcc', function()
       assert.are.same({}, actions)
     end)
 
+    it('skips a match that leaves its replacements out', function()
+      local without = match(1, 0, 3, {})
+      without.replacements = nil
+      local actions = on_output({ row = 1, bufnr = 0, output = { without } })
+      assert.are.same({}, actions)
+    end)
+
     it('skips the placeholder for replacements not shown', function()
       local actions = on_output({
         row = 1,

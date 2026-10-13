@@ -24,8 +24,10 @@ return h.make_builtin({
       local actions = {}
 
       for _, m in ipairs(params.output) do
+        -- `"replacements": null` decodes to `vim.NIL`, and a match may leave
+        -- the key out
         if
-          m.replacements ~= vim.NIL
+          type(m.replacements) == 'table'
           and params.row == m.moreContext.line_number
         then
           local row = m.moreContext.line_number - 1
