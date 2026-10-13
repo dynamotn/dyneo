@@ -35,9 +35,14 @@ local input_token = function(token_name)
     return
   end
   local path = token_path .. '/' .. token_name
-  vim.fn.writefile({ token }, path)
-  -- `writefile` leaves the file world-readable, which a token should not be
-  vim.uv.fs_chmod(path, tonumber('600', 8))
+  -- Created private: `writefile` would leave it world-readable first
+  local fd = vim.uv.fs_open(path, 'w', tonumber('600', 8))
+  if not fd then
+    vim.notify('Token not saved: cannot write ' .. path, vim.log.levels.ERROR)
+    return
+  end
+  vim.uv.fs_write(fd, token .. '\n')
+  vim.uv.fs_close(fd)
 end
 
 local cmd = {
