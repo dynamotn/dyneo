@@ -726,7 +726,9 @@ function M.run(mode)
 
   require('util.system').run(
     command,
-    { cwd = dir, timeout = M.TIMEOUT },
+    -- Never a prompt (a credential helper, say) fighting the editor for the
+    -- terminal
+    { cwd = dir, timeout = M.TIMEOUT, env = { TF_INPUT = '0' }, detach = true },
     function(result)
       if result.code ~= 0 or result.cut then return failed('plan', result) end
       require('util.system').run(
