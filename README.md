@@ -177,6 +177,8 @@ below follow the sections of `:help dyneo`.
   worked out, written into the decision record. `:DyMatrix`
 - **Well-Architected review** — the questions of the six pillars as a
   checklist in a decision record; what is still open, per pillar. `:DyWar`
+- **Dependency rules** — the module boundaries of a project checked by
+  dependency-cruiser, go-arch-lint or import-linter. `:DyDeps`
 
 <details>
 <summary><b>42 languages · 13 frameworks · 38 tools</b> —

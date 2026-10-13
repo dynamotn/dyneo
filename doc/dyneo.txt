@@ -74,6 +74,7 @@ CONTENTS                                                      *dyneo-contents*
        9.8 Network ranges ....................................... |dyneo-cidr|
        9.9 Decision matrix .................................... |dyneo-matrix|
        9.10 Well-Architected review .............................. |dyneo-war|
+       9.11 Dependency rules .................................... |dyneo-deps|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -1309,6 +1310,37 @@ under `## Consequences`.
 project, says how many questions of each pillar hold, and puts the ones still
 open in the quickfix list.
 
+9.11 Dependency rules                                             *dyneo-deps*
+
+Which module may use which is a rule a project writes down for a tool to
+check.  `<leader>pAd` (|:DyDeps|) finds the one the project of the buffer is
+set up for and runs it from the root, off the main loop, for up to two
+minutes; every rule broken goes in the quickfix list.  The configuration
+nearest the buffer wins, so a service set up for one tool inside a
+repository set up for another is checked by its own.  Each of these tools
+loads the configuration and code of the project, so the first run in a
+project asks whether it may; a yes holds for the session, a no is asked
+again on the next run.
+
+    dependency-cruiser  `.dependency-cruiser.{js,cjs,mjs,ts,cts,mts,json}`;
+                        the copy in `node_modules/.bin` first, over `src/`
+                        when there is one.  Its `baseline` report lists the
+                        violations alone and names modules, not lines.
+    go-arch-lint        `.go-arch-lint.yml`; each import at its line, the
+                        files no component holds, and with `deepScan` each
+                        component handed one it may not use, where it is
+                        handed.  Warnings past its limit are counted.
+    import-linter       `.importlinter`, or `[tool.importlinter]` in
+                        `pyproject.toml` or `[importlinter]` in `setup.cfg`;
+                        the copy in `.venv/bin` first; each import of a
+                        broken contract at its line.
+
+A run whose report cannot be read is said to be a failure, never taken for
+a clean result; so is one that exits non-zero with nothing read, since
+go-arch-lint and import-linter exit non-zero only when a rule breaks.  None
+is installed for you: `npm install -D dependency-cruiser`, `go install
+github.com/fe3dback/go-arch-lint@v1.19.0`, `pip install import-linter`.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -1668,6 +1700,10 @@ Project ~
                         its open questions in the quickfix list.
 :DyWar new              Write a new review as a decision record.  See
                         |dyneo-war|.
+
+                                                                     *:DyDeps*
+:DyDeps                 Check the dependency rules of the project, what
+                        breaks in the quickfix list.  See |dyneo-deps|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose

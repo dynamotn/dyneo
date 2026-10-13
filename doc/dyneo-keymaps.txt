@@ -349,6 +349,7 @@ one of the same keys in those buffers.
 
 `<leader>pAW`          n      New Well-Architected Review
 `<leader>pAc`          n      Explain IPv4 Range
+`<leader>pAd`          n      Check Dependency Rules
 `<leader>pAn`          n      Service Levels (NFR)
 `<leader>pAw`          n      Well-Architected Open Questions
 

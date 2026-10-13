@@ -10,6 +10,7 @@
 :DyCidr	dyneo.txt	/*:DyCidr*
 :DyCron	dyneo.txt	/*:DyCron*
 :DyData	dyneo.txt	/*:DyData*
+:DyDeps	dyneo.txt	/*:DyDeps*
 :DyEncryptedDiff	dyneo.txt	/*:DyEncryptedDiff*
 :DyEncryptedKeys	dyneo.txt	/*:DyEncryptedKeys*
 :DyEncryptedRotate	dyneo.txt	/*:DyEncryptedRotate*
@@ -81,6 +82,7 @@ dyneo-contents	dyneo.txt	/*dyneo-contents*
 dyneo-cron	dyneo.txt	/*dyneo-cron*
 dyneo-data	dyneo.txt	/*dyneo-data*
 dyneo-data-files	dyneo.txt	/*dyneo-data-files*
+dyneo-deps	dyneo.txt	/*dyneo-deps*
 dyneo-detection	dyneo.txt	/*dyneo-detection*
 dyneo-development	dyneo.txt	/*dyneo-development*
 dyneo-diagram	dyneo.txt	/*dyneo-diagram*
