@@ -9,7 +9,8 @@ describe('tools.nfr', function()
   end)
 
   it('reads components, copies and load', function()
-    local spec = assert(nfr.parse({ '99.9', '2x99.5', 'rps=200', 'p99=1.5s' }))
+    local spec =
+      assert(nfr.parse({ '99.9%', '2x99.5', 'rps=200', 'latency=1.5s' }))
     assert.same(
       { { 99.9, 1 }, { 99.5, 2 } },
       vim.tbl_map(
@@ -32,6 +33,8 @@ describe('tools.nfr', function()
       { 'latency=fast', '99' },
       { 'foo=1' },
       { 'rps=10' },
+      { 'rps=10', 'p99=1s' },
+      { 'latency=10ms' },
       {},
     }) do
       local spec, err = nfr.parse(terms)
@@ -55,6 +58,22 @@ describe('tools.nfr', function()
     assert.equals('43m 12s', nfr.duration(43 * 60 + 12))
     assert.equals('8h 45m', nfr.duration(8 * 3600 + 45 * 60 + 36))
     assert.equals('1d 2h', nfr.duration(86400 + 2 * 3600))
+    assert.equals('< 1s', nfr.duration(0.3))
+    assert.equals('0s', nfr.duration(0))
+  end)
+
+  it('never rounds what is down away', function()
+    assert.same({
+      'Availability 99.9999999999%',
+      'Down < 1s a week',
+      'Down < 1s a month',
+      'Down < 1s a year',
+      'In flight: not worked out without the load, rps=',
+    }, nfr.report(assert(nfr.parse({ '3x99.99', 'latency=1s' }))))
+    assert.equals(
+      'Requests in flight need the load too: add rps=',
+      select(2, nfr.parse({ 'latency=10ms' }))
+    )
   end)
 
   it(
@@ -63,15 +82,97 @@ describe('tools.nfr', function()
       assert.same({
         'Availability 99.9%',
         'Down 10m 5s a week',
-        'Down 43m 12s a month',
+        'Down 43m 50s a month',
         'Down 8h 45m a year',
-        'Error budget 259200 requests a month',
+        'Error budget 262980 requests a month',
         'In flight 20.0 requests at once',
       }, nfr.report(
         assert(nfr.parse({ '99.9', 'rps=100', 'latency=200ms' }))
       ))
     end
   )
+
+  it('sizes bandwidth, storage and instances from the load', function()
+    assert.same(
+      {
+        'Peak 600 requests a second',
+        'Bandwidth 400 KB/s (3.2 Mbit/s), 1.05 TB a month, 1.2 MB/s at peak',
+        'Storage 1.04 TB to keep 30d',
+        'Instances 3 at peak, 4 to lose one (N+1)',
+      },
+      nfr.report(assert(nfr.parse({
+        'rps=200',
+        'size=2KB',
+        'retain=30d',
+        'capacity=250',
+        'peak=3',
+      })))
+    )
+    assert.equals('999 B', nfr.bytes(999))
+    assert.equals('1.5 GB', nfr.bytes(1.5e9))
+  end)
+
+  it(
+    'takes no instance more than the peak needs',
+    function()
+      assert.equals(
+        'Instances 1 at peak, 2 to lose one (N+1)',
+        nfr.report(assert(nfr.parse({ 'rps=100', 'peak=1.1', 'capacity=110' })))[2]
+      )
+    end
+  )
+
+  it('reads a lower-case b as bits, and binary units', function()
+    assert.equals(12.5e6, nfr.parse({ 'rps=1', 'size=100Mb' }).size)
+    assert.equals(100e6, nfr.parse({ 'rps=1', 'size=100MB' }).size)
+    assert.equals(2048, nfr.parse({ 'rps=1', 'size=2KiB' }).size)
+    assert.equals(250, nfr.parse({ 'rps=1', 'size=2kb' }).size)
+    assert.is_nil(nfr.parse({ 'rps=1', 'size=2mb' }))
+  end)
+
+  it('rolls over to the next unit, and never writes an exponent', function()
+    assert.equals('1 KB', nfr.bytes(999.7))
+    assert.equals('1 MB', nfr.bytes(999999))
+    assert.equals('315 ZB', nfr.bytes(3.15e23))
+    assert.equals('3150000 ZB', nfr.bytes(3.15e27))
+    assert.equals('3.2 Mbit/s', nfr.bits(400e3))
+    assert.equals(
+      'Peak 1200000 requests a second',
+      nfr.report(assert(nfr.parse({ 'rps=400000', 'peak=3', 'size=1B' })))[1]
+    )
+  end)
+
+  it('says what needs the load, and refuses nothing to size', function()
+    for term, err in pairs({
+      ['size=2KB'] = 'size needs the load too: add rps=',
+      ['retain=30d'] = 'retain needs the load too: add rps=',
+      ['capacity=500'] = 'capacity needs the load too: add rps=',
+      ['peak=3'] = 'peak needs the load too: add rps=',
+    }) do
+      assert.same({ nil, err }, { nfr.parse({ '99.9', term }) })
+    end
+    for _, terms in ipairs({
+      { 'rps=1', 'size=0KB' },
+      { 'rps=1', 'size=1KB', 'retain=0d' },
+      { 'rps=0', 'capacity=500' },
+      { 'rps=0', 'size=1KB' },
+    }) do
+      local spec, err = nfr.parse(terms)
+      assert.is_nil(spec)
+      assert.is_truthy(err:find('above 0'), err)
+    end
+  end)
+
+  it('refuses a retention without a size, and bad sizes', function()
+    for _, terms in ipairs({
+      { 'rps=1', 'latency=1', 'retain=30d' },
+      { 'rps=1', 'size=2XB' },
+      { 'rps=1', 'size=1KB', 'retain=30m' },
+      { 'rps=1', 'capacity=0' },
+    }) do
+      assert.is_nil(nfr.parse(terms))
+    end
+  end)
 
   it('notifies the report, or why there is none', function()
     local notes = {}

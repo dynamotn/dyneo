@@ -1280,17 +1280,35 @@ inside the project: the guard covers what Neovim hands them.
 9.7 Service levels                                                 *dyneo-nfr*
 
 `<leader>pAn` (|:DyNfr|) works out what a system promises from the parts a
-request goes through, one after the other.  Each term is one part: `99.9` a
-component up 99.9% of the time, `2x99.95` two redundant copies of one of
-which either is enough, `rps=200` the load and `latency=150ms` (or `p99=`,
-in `us`, `ms` or `s`; `ms` when no unit is given) how long a request takes: >vim
+request goes through, one after the other.  Each term is one part: `99.9`
+(or `99.9%`) a component up 99.9% of the time, `2x99.95` two redundant
+copies of one of which either is enough, `rps=200` the load and
+`latency=150ms` the mean time a request takes, in `us`, `ms` or `s` (`ms`
+when no unit is given): >vim
 
     :DyNfr 99.95 2x99.9 99.99 rps=200 latency=150ms
 <
 reads out the availability of the whole, the downtime it allows a week, a
-30-day month and a year, the requests it may fail a month (its error
-budget), and how many are in flight at once by Little's law.  Without terms
-it asks for them.
+month and a year, the requests it may fail a month (its error budget), and
+how many are in flight at once by Little's law, which holds for the mean
+latency only, not a percentile.  A year is 365.25 days and a month a twelfth
+of it.  Downtime under a second reads `< 1s`, and an availability below 100%
+keeps the digits that show it.  Without terms it asks for them.
+
+The same load sizes the system, and each of these terms needs `rps=` above
+0.  `size=2KB` is what a request carries, in bytes when no unit is given,
+read case by case: `B`, `KB`, `MB`, `GB`, `TB` are decimal as bandwidth is
+sold, `KiB`, `MiB`, `GiB`, `TiB` binary, and a lower-case `b` is bits, so
+`100Mb` is 12.5 MB and `2kb` 250 B.  `retain=30d` (`h`, `d`, `w` or `y`) is
+how long each is kept, `capacity=500` the requests a second one instance
+serves, and `peak=3` how many times the average the busiest hour brings: >vim
+
+    :DyNfr rps=200 size=2KB retain=30d capacity=250 peak=3
+<
+reads out the peak rate, the bandwidth on average (in bytes and in bits a
+second, as links are sold), over a month and at peak, the storage that keeps
+every request that long, and the instances the peak takes -- and one more,
+so that losing one is survived.
 
 9.8 Network ranges                                                *dyneo-cidr*
 
@@ -1718,7 +1736,8 @@ Project ~
 
                                                                       *:DyNfr*
 :DyNfr [{term}...]      Availability, downtime, error budget and requests in
-                        flight of a chain of components.  See |dyneo-nfr|.
+                        flight of a chain of components; bandwidth, storage
+                        and instances of a load.  See |dyneo-nfr|.
 
                                                                      *:DyCidr*
 :DyCidr                 What the IPv4 range under the cursor holds.

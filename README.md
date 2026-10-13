@@ -173,8 +173,9 @@ below follow the sections of `:help dyneo`.
   into D2 to preview inline. `likec4 gen d2`
 - **AsyncAPI** — documents checked against their schema; the changes that
   break a consumer since a revision. `:DyAsyncApiDiff`
-- **Service levels** — the availability of a chain of components, its
-  downtime, error budget and requests in flight. `:DyNfr 99.9 2x99.95 rps=200`
+- **Service levels and capacity** — the availability of a chain of
+  components, its downtime and error budget; the bandwidth, storage and
+  instances a load takes. `:DyNfr 99.9 2x99.95 rps=200 size=2KB capacity=250`
 - **Network ranges** — the IPv4 range under the cursor read out; the subnets
   of a Terraform module that collide. `:DyCidr` · `:DyCidr overlaps`
 - **Decision matrix** — options scored against weighted criteria, totals
