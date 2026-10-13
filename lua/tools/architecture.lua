@@ -438,7 +438,9 @@ function M.read(on_graph)
   if ft == 'terraform' or ft == 'tf' or file:match('%.tf$') then
     local files = {}
     for _, path in ipairs(files_of(dir, { '%.tf$', '%.tofu$' })) do
-      files[path] = vim.fn.readfile(path)
+      -- A dangling link is listed too
+      local ok, lines = pcall(vim.fn.readfile, path)
+      if ok then files[path] = lines end
     end
     return on_graph(
       M.terraform(files),
