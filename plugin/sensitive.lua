@@ -27,6 +27,11 @@ vim.api.nvim_create_autocmd({ 'BufReadPre', 'BufNewFile' }, {
 
 -- `backup` and `writebackup` are global: off for the one write only
 local backup_saved
+local restore_backup = function()
+  if not backup_saved then return end
+  vim.o.backup, vim.o.writebackup = backup_saved[1], backup_saved[2]
+  backup_saved = nil
+end
 vim.api.nvim_create_autocmd(
   { 'BufWritePre', 'FileWritePre', 'FileAppendPre' },
   {
@@ -37,6 +42,9 @@ vim.api.nvim_create_autocmd(
       -- not the values forced off for it
       backup_saved = backup_saved or { vim.o.backup, vim.o.writebackup }
       vim.o.backup, vim.o.writebackup = false, false
+      -- A failed write fires no `*WritePost`: the write is synchronous, so
+      -- the next loop turn is after it either way
+      vim.schedule(restore_backup)
     end,
   }
 )
@@ -44,10 +52,6 @@ vim.api.nvim_create_autocmd(
   { 'BufWritePost', 'FileWritePost', 'FileAppendPost' },
   {
     group = augroup('sensitive_restore_backup'),
-    callback = function()
-      if not backup_saved then return end
-      vim.o.backup, vim.o.writebackup = backup_saved[1], backup_saved[2]
-      backup_saved = nil
-    end,
+    callback = restore_backup,
   }
 )
