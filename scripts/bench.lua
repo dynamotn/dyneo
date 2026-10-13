@@ -111,7 +111,10 @@ local function run_once(scenario)
       env = { XDG_CONFIG_HOME = workdir .. '/config' },
       text = true,
     })
-    :wait()
+    -- A configuration that hangs on start must fail the hook, not hold it
+    :wait(
+      60000
+    )
   local wall = (vim.uv.hrtime() - started) / 1e6
   if result.code ~= 0 then
     error(

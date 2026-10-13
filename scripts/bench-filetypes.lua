@@ -197,7 +197,10 @@ local function run_once(sample)
       },
       text = true,
     })
-    :wait()
+    -- A filetype that hangs fails the run below, rather than holding it
+    :wait(
+      60000
+    )
   local ft, open, ready, reopen, plugins = (result.stdout or ''):match(
     'bench%-ft\t(%S*)\t(%S+)\t(%S+)\t(%S+)\t(%S+)\t'
   )
