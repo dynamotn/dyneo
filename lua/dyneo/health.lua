@@ -471,6 +471,7 @@ local function requirements()
     hdb = 'debugging Haskell (`cabal install haskell-debugger`)',
     oasdiff = '`:DyOpenApiDiff` (`:MasonInstall oasdiff`)',
     asyncapi = '`:DyAsyncApiDiff` (`:MasonInstall asyncapi-cli`)',
+    ['graphql-inspector'] = '`:DyBreaking` on GraphQL (`:MasonInstall graphql-inspector`)',
     depcruise = '`:DyDeps` in a JavaScript project (`npm install -D dependency-cruiser`)',
     ['go-arch-lint'] = '`:DyDeps` in a Go project',
     ['lint-imports'] = '`:DyDeps` in a Python project (`pip install import-linter`)',

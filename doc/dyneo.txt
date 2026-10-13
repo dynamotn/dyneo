@@ -59,6 +59,7 @@ CONTENTS                                                      *dyneo-contents*
        7.6 Cron schedules ....................................... |dyneo-cron|
        7.7 Querying JSON and YAML .............................. |dyneo-query|
        7.8 AsyncAPI documents ............................... |dyneo-asyncapi|
+       7.9 Protobuf and GraphQL contracts ................... |dyneo-breaking|
     8. Data and machine learning ................................ |dyneo-data|
        8.1 Data files ..................................... |dyneo-data-files|
        8.2 SQL and databases ..................................... |dyneo-sql|
@@ -921,6 +922,36 @@ analytics, which report each command and facts about the document to New
 Relic, turned off.  Install it once with `:MasonInstall asyncapi-cli` (it
 needs Node 24).
 
+7.9 Protobuf and GraphQL contracts                            *dyneo-breaking*
+
+The two contracts between services left after |dyneo-openapi| and
+|dyneo-asyncapi|.  In a `.proto` or `.graphql` buffer, `<localleader>d`
+(|:DyBreaking|) compares the schema with itself at `HEAD`, or at any revision
+given, and lists each change that breaks a client in the quickfix list.
+
+    Protobuf  `buf breaking`, run from the root of the repository on the
+              directory of the `buf.yaml` above the file, against the same
+              directory at the revision.  buf reads the module's files on
+              disk, so while any buffer under the module is not written
+              the run is refused, naming it.  buf runs the check plugins
+              its `buf.yaml` lists, so the first run in a module asks
+              whether it may; a yes holds for the session.  Each change is
+              at its line, with the rule it breaks; a deleted file is
+              put on the buffer.
+    GraphQL   `graphql-inspector diff`, the schema files beside the buffer
+              (`.graphql`, `.graphqls`, `.gql`) at the revision against
+              the same files now, the buffer as it is, written or not.  A
+              schema split over files is compared as one, so a type moved
+              between them is no removal; files in other directories are
+              not read.  The tool names types and fields, not lines, so
+              each change is put on its field, else on its type, in the
+              file that defines it, else on the first line of the buffer.
+              Install it once with `:MasonInstall graphql-inspector`.
+
+A revision is a name, a hash or a `~`/`^` path; anything else is refused,
+since buf reads options from it.  A run that fails is reported as such,
+never as nothing breaking.
+
 ------------------------------------------------------------------------------
 8. DATA AND MACHINE LEARNING                                      *dyneo-data*
 
@@ -1722,6 +1753,11 @@ Operations ~
 :DyAsyncApiDiff [{rev}]
                         The breaking changes of this AsyncAPI document since
                         {rev}, `HEAD` unless given.  See |dyneo-asyncapi|.
+
+                                                                 *:DyBreaking*
+:DyBreaking [{rev}]     The breaking changes of this Protobuf or GraphQL
+                        schema since {rev}, `HEAD` unless given.  See
+                        |dyneo-breaking|.
 
                                                                      *:DyCron*
 :DyCron                 The schedule on the cursor line in words, with its
