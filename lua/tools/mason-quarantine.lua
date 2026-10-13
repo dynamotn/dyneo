@@ -64,20 +64,10 @@ local function forward(service, own)
   })
 end
 
---- The wait when `DyNeo.quarantine_window` says nothing, the same week the npm,
---- bun, pnpm and uv configurations give the rest of these dotfiles
-local DEFAULT_WINDOW = 7 * 24 * 60 * 60
-
---- The window every side of the quarantine is held to
----
---- Read on each question rather than kept, so `per_machine` has the say it
---- has over every other global -- and so `:checkhealth dyneo` reports what is
---- in force rather than what was in force when this module first loaded.
+--- The window every side of the quarantine is held to: the one the plugin
+--- quarantine reads, so the two never disagree
 ---@return integer
-function M.window()
-  local configured = (rawget(_G, 'DyNeo') or {}).quarantine_window
-  return type(configured) == 'number' and configured or DEFAULT_WINDOW
-end
+function M.window() return require('tools.lazy-quarantine').window() end
 
 --- Seconds since the epoch of a UTC timestamp as the GitHub API writes them
 ---
