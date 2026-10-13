@@ -49,6 +49,8 @@ describe('ftdetect', function()
     { '/p/molecule/default/converge.yml', 'yaml.ansible' },
     { '/p/openapi.yaml', 'yaml.openapi' },
     { '/p/openapi-v2.json', 'json.openapi' },
+    { '/p/model/landscape.c4', 'likec4' },
+    { '/p/model/views.likec4', 'likec4' },
     { '/p/.gitlab-ci.yml', 'yaml.gitlab' },
     { '/p/.github/workflows/ci.yml', 'yaml.gh-action' },
     { '/p/.forgejo/workflows/ci.yml', 'yaml.gh-action' },

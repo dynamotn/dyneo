@@ -38,6 +38,9 @@ vim.filetype.add({
     end,
     promql = 'promql',
     bean = 'beancount',
+    -- LikeC4 models; `.dsl`, Structurizr's, Neovim already knows
+    c4 = 'likec4',
+    likec4 = 'likec4',
     snippets = 'snippets',
     dbml = 'dbml',
     d2 = 'd2',

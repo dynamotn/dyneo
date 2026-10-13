@@ -288,7 +288,7 @@ repository, so:
 ------------------------------------------------------------------------------
 4. LANGUAGES                                                 *dyneo-languages*
 
-108 entries over 142 filetypes: 56 programming languages and frameworks, 52
+110 entries over 144 filetypes: 56 programming languages and frameworks, 54
 tools and markup languages.  The authoritative list is
 `lua/config/languages.lua`, and each entry is a `DyLangSpec`: >lua
 
@@ -1096,6 +1096,16 @@ D2 diagrams render inline on kitty-graphics terminals, zellij included.
 `<leader>cp` previews the diagram under the cursor; Markdown and Typst get
 their own preview on the same key.  The diagram of what a directory
 declares is drawn by |dyneo-architecture|.
+
+C4 models are written as code.  A LikeC4 model (`.c4`, `.likec4`) gets its
+grammar and its language server, which checks the whole workspace -- every
+model file under the root -- as it is typed.  The server runs a
+`likec4.config.{js,ts,...}` it finds under the root, so in a root holding
+one it starts only once you said it may, asked once a session; a JSON
+config needs no asking.  A Structurizr workspace (`workspace.dsl`) gets its
+grammar.  Their pictures come from their own tools: `likec4 start` previews
+a model in the browser and `likec4 gen d2` turns it into D2, which previews
+here; Structurizr exports PlantUML, Mermaid or D2 the same way.
 
 9.5 Integrations                                          *dyneo-integrations*
 

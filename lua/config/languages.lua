@@ -1880,6 +1880,21 @@ return {
     formatters = { 'kdlfmt' },
     autopairs = block_comment_autopairs,
   },
+  -- C4 models as code. The grammar is not nvim-treesitter's: it has none.
+  likec4 = {
+    filetypes = { 'likec4' },
+    parser = {
+      'likec4',
+      install_info = {
+        url = 'https://github.com/kremovtort/tree-sitter-likec4',
+        revision = '2f9b3a1f9cce6de990b9144c881583a013102fc9',
+        queries = 'queries',
+      },
+    },
+    -- Validates the whole workspace, formats and previews nothing: the
+    -- `likec4` CLI does the rest
+    lsp_servers = { 'likec4' },
+  },
   make = {
     filetypes = { 'config', 'automake', 'make' },
     parser = 'make',
@@ -2018,6 +2033,19 @@ return {
     },
     null_ls = {
       { 'regal', type = 'code_actions', command = 'regal' },
+    },
+  },
+  -- C4 models in the Structurizr DSL. No language server is released yet,
+  -- so the parser is all there is.
+  structurizr = {
+    filetypes = { 'structurizr' },
+    parser = {
+      'structurizr',
+      install_info = {
+        url = 'https://github.com/josteink/tree-sitter-structurizr',
+        revision = '82b63b2d13d5020d48f0e66621c9ed4d826d6a37',
+        queries = 'queries',
+      },
     },
   },
   systemd = {

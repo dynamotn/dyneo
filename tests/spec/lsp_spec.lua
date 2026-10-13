@@ -70,6 +70,21 @@ describe('lsp', function()
     end)
   end
 
+  it('starts the binary its own Mason package installs', function()
+    local registry = h.root .. '/lua/tools/mason-registry/'
+    for _, file in ipairs(vim.fn.glob(registry .. '*.lua', false, true)) do
+      local spec = dofile(file)
+      local server = type(spec) == 'table'
+        and vim.tbl_get(spec, 'neovim', 'lspconfig')
+      if server and vim.uv.fs_stat(h.root .. '/lsp/' .. server .. '.lua') then
+        local cmd = load(server, dir).cmd
+        if type(cmd) == 'table' then
+          assert.is_not_nil((spec.bin or {})[cmd[1]], server .. ': ' .. cmd[1])
+        end
+      end
+    end
+  end)
+
   it('termuxls only claims shell dialects', function()
     for _, ft in ipairs(load('termuxls', dir).filetypes) do
       assert.truthy(ft:match('^sh%.'), ft)
@@ -274,6 +289,55 @@ describe('lsp', function()
           }, { { 1, 4, message } })
         )
       end)
+    end)
+  end)
+
+  describe('likec4', function()
+    local config, root, asked, answer, restore_confirm
+
+    before_each(function()
+      h.unload('util.trust')
+      config = load('likec4', dir)
+      root = dir .. '/model'
+      h.write(root .. '/likec4.config.json', { '{}' })
+      h.write(root .. '/views/a.c4', {})
+      h.write(root .. '/node_modules/x/likec4.config.js', {})
+      asked, answer = 0, 2
+      restore_confirm = h.stub(vim.fn, 'confirm', function()
+        asked = asked + 1
+        return answer
+      end)
+    end)
+    after_each(function()
+      restore_confirm()
+      vim.cmd('silent! %bwipeout!')
+    end)
+
+    ---@return string?
+    local function root_of()
+      vim.cmd.edit(root .. '/views/a.c4')
+      local found
+      config.root_dir(0, function(path) found = path end)
+      return found
+    end
+
+    it('starts on a JSON config without asking', function()
+      assert.equals(root, root_of())
+      assert.equals(0, asked)
+    end)
+
+    it('asks once before a root whose code config it would run', function()
+      h.write(root .. '/sub/likec4.config.ts', {})
+      assert.is_nil(root_of())
+      assert.is_nil(root_of())
+      assert.equals(1, asked)
+    end)
+
+    it('starts once a code config is trusted', function()
+      h.write(root .. '/likec4.config.mjs', {})
+      answer = 1
+      assert.equals(root, root_of())
+      assert.equals(1, asked)
     end)
   end)
 

@@ -169,6 +169,8 @@ below follow the sections of `:help dyneo`.
 
 ### 🏛 Architecture — `<leader>pA`
 
+- **C4 models** — LikeC4 with its language server, Structurizr DSL; turned
+  into D2 to preview inline. `likec4 gen d2`
 - **Service levels** — the availability of a chain of components, its
   downtime, error budget and requests in flight. `:DyNfr 99.9 2x99.95 rps=200`
 - **Network ranges** — the IPv4 range under the cursor read out; the subnets
@@ -181,8 +183,8 @@ below follow the sections of `:help dyneo`.
   dependency-cruiser, go-arch-lint or import-linter. `:DyDeps`
 
 <details>
-<summary><b>42 languages · 13 frameworks · 38 tools</b> —
-131 filetypes in all</summary>
+<summary><b>42 languages · 13 frameworks · 40 tools</b> —
+133 filetypes in all</summary>
 
 **Languages** — Arduino, AWK, Bash, C/C++, C#, Clojure, CSS/Less, Cucumber,
 Dart, Elixir, Erlang, Fish, GDScript, GDShader, Gleam, Go, GraphQL, Haskell,
@@ -195,9 +197,9 @@ Rails, Rust, Svelte, Symfony, Templ, Vue
 
 **Tools & markup** — Ansible, Beancount, Bicep, CMake, CSV/TSV, CUE, D2, DBML,
 Dockerfile, Git, GoTemplate/Helm, Groovy, HTTP, Hurl, Hyprlang, Jinja, jq,
-JSON/JSONL, Jsonnet, Just, KDL, Make, Markdown, Mermaid, Nextflow, Nginx, Nix,
-Prisma, PromQL, Protobuf, Rego, Snakemake, SystemD, Terraform, Terragrunt, TOML,
-Treesitter, XML, YAML, Yuck
+JSON/JSONL, Jsonnet, Just, KDL, LikeC4, Make, Markdown, Mermaid, Nextflow,
+Nginx, Nix, Prisma, PromQL, Protobuf, Rego, Snakemake, Structurizr, SystemD,
+Terraform, Terragrunt, TOML, Treesitter, XML, YAML, Yuck
 
 </details>
 
