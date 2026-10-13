@@ -209,14 +209,6 @@ function M.statuscolumn()
   return package.loaded.snacks and require('snacks.statuscolumn').get() or ''
 end
 
-local CREATE_UNDO = vim.api.nvim_replace_termcodes('<c-G>u', true, true, true)
---- Break the undo sequence when in insert mode
-function M.create_undo()
-  if vim.api.nvim_get_mode().mode == 'i' then
-    vim.api.nvim_feedkeys(CREATE_UNDO, 'n', false)
-  end
-end
-
 --- Global values of the options plugins may set per window, taken before any
 --- plugin runs, so `set_default` can tell a default from a user choice
 ---@type table<string, any>

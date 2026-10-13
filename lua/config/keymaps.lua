@@ -300,9 +300,7 @@ Snacks.toggle.scroll():map("<leader>uS")
 Snacks.toggle.profiler():map("<leader>dpp")
 Snacks.toggle.profiler_highlights():map("<leader>dph")
 
-if vim.lsp.inlay_hint then
-  Snacks.toggle.inlay_hints():map("<leader>uh")
-end
+Snacks.toggle.inlay_hints():map("<leader>uh")
 
 -- lazygit
 if vim.fn.executable("lazygit") == 1 then

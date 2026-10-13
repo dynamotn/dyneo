@@ -585,7 +585,4 @@ function M.read_tail(file)
   return lines, nil, cut
 end
 
---- The subcommands of `:DyLog`, before a file name
-M.SUBCOMMANDS = { 'journal', 'kube' }
-
 return M

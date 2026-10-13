@@ -120,7 +120,7 @@ return {
             function() return ' ' .. os.date('%R') end,
           },
         },
-        extensions = { 'neo-tree', 'lazy', 'fzf' },
+        extensions = { 'lazy' },
       }
 
       -- Symbols around the cursor from Trouble, unless a buffer turns them
@@ -259,12 +259,6 @@ return {
           return vim.trim(ret)
         end,
         offsets = {
-          {
-            filetype = 'neo-tree',
-            text = 'Neo-tree',
-            highlight = 'Directory',
-            text_align = 'left',
-          },
           {
             filetype = 'snacks_layout_box',
           },
