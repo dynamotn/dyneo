@@ -288,6 +288,30 @@ describe('tools.lazy-quarantine', function()
       assert.are.equal(5, math.floor(rows[1].clears / DAY))
     end)
 
+    it('counts the wait from when it first saw an old-dated tip', function()
+      -- The tip is dated 15 days back, but this machine first sees it now
+      local dir, commits, cleanup = repository({ 30 * DAY, 20 * DAY, 15 * DAY })
+      local quarantine = require('tools.lazy-quarantine')
+      quarantine.target(
+        { dir = dir, name = 'spec.nvim' },
+        { branch = 'main', commit = commits[2] },
+        nil,
+        now - 10 * DAY
+      )
+      Config.plugins = {
+        ['spec.nvim'] = {
+          name = 'spec.nvim',
+          dir = dir,
+          _ = { installed = true },
+        },
+      }
+      local rows = quarantine.held(now)
+      cleanup()
+      assert.are.equal(1, #rows)
+      assert.are.equal(commits[2]:sub(1, 7), rows[1].held)
+      assert.are.equal(7, math.floor(rows[1].clears / DAY + 0.5))
+    end)
+
     it('says nothing about a plugin that is up to date', function()
       local dir, _, cleanup = repository({ 30 * DAY, 8 * DAY })
       Config.plugins = {

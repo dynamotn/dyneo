@@ -246,6 +246,26 @@ local function watched(dir, commit, now)
   return newest > 0 and list[1] or nil
 end
 
+--- Seconds until a target lazy.nvim proposes clears the window
+---
+--- Its commit date has to age. So does the time this machine first saw it
+--- as the tip, when it saw another tip before: `M.target` then holds on to
+--- that one until the new tip has been watched for a window.
+---@param dir string
+---@param commit string
+---@param now integer
+---@return integer
+local function clears(dir, commit, now)
+  local since = committed_at(dir, commit) or now
+  local tips = load_cache().tips[dir] or {}
+  for index, tip in ipairs(tips) do
+    if tip.commit == commit and index > 1 then
+      since = math.max(since, tip.at)
+    end
+  end
+  return math.max(0, math.floor(since + M.window() - now + 0.5))
+end
+
 --- Whether a failing git was reported this session
 local warned = false
 
@@ -420,15 +440,11 @@ function M.held(now)
       if ok and target and target.commit then
         local held = M.target(plugin, target, releases_of(plugin), now)
         if held and held.commit ~= target.commit then
-          local committed = committed_at(plugin.dir, target.commit) or now
           table.insert(rows, {
             name = name,
             held = held.tag or held.commit:sub(1, 7),
             available = target.tag or target.commit:sub(1, 7),
-            clears = math.max(
-              0,
-              math.floor(committed + M.window() - now + 0.5)
-            ),
+            clears = clears(plugin.dir, target.commit, now),
           })
         end
       end
@@ -475,14 +491,13 @@ function M.pending(now)
       head = head and head.commit
       if head and head ~= target.commit then
         local held = M.target(plugin, target, releases_of(plugin), now)
-        local committed = committed_at(plugin.dir, target.commit) or now
         table.insert(rows, {
           name = name,
           dir = plugin.dir,
           from = head,
           to = target.commit,
           held = held ~= nil and held.commit ~= target.commit,
-          clears = math.max(0, math.floor(committed + M.window() - now + 0.5)),
+          clears = clears(plugin.dir, target.commit, now),
         })
       end
     end
