@@ -156,7 +156,12 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
           -- Attach the jdtls for each java buffer. HOWEVER, this plugin loads
           -- depending on filetype, so this autocmd doesn't run for the first file.
           -- For that, we call directly below.
+          -- One group for both, cleared each time this runs, so `:Lazy reload`
+          -- does not attach jdtls twice
+          local group =
+            vim.api.nvim_create_augroup('dyneo_jdtls', { clear = true })
           vim.api.nvim_create_autocmd('FileType', {
+            group = group,
             pattern = language.filetypes,
             callback = attach_jdtls,
           })
@@ -165,6 +170,7 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
           -- https://github.com/mfussenegger/nvim-jdtls#nvim-dap-configuration
           -- https://neovim.io/doc/user/lsp.html#LspAttach
           vim.api.nvim_create_autocmd('LspAttach', {
+            group = group,
             callback = function(args)
               local client = vim.lsp.get_client_by_id(args.data.client_id)
               if client and client.name == 'jdtls' then

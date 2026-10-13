@@ -34,6 +34,10 @@ return vim.list_contains(DyNeo.enabled_languages, 'cmake')
           end
           check()
           vim.api.nvim_create_autocmd('DirChanged', {
+            group = vim.api.nvim_create_augroup(
+              'dyneo_cmake',
+              { clear = true }
+            ),
             callback = function()
               if not loaded then check() end
             end,

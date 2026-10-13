@@ -296,6 +296,10 @@ return {
       -- Redraw once a buffer comes or goes, which a restored session
       -- otherwise misses
       vim.api.nvim_create_autocmd({ 'BufAdd', 'BufDelete' }, {
+        group = vim.api.nvim_create_augroup(
+          'dyneo_bufferline',
+          { clear = true }
+        ),
         callback = function()
           vim.schedule(function() pcall(nvim_bufferline) end)
         end,
