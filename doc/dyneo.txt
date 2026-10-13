@@ -283,12 +283,12 @@ repository, so:
 ------------------------------------------------------------------------------
 4. LANGUAGES                                                 *dyneo-languages*
 
-103 entries over 126 filetypes: 42 languages, 13 frameworks, 38 tools and
-markup languages.  The authoritative list is `lua/config/languages.lua`, and
-each entry is a `DyLangSpec`: >lua
+108 entries over 142 filetypes: 56 programming languages and frameworks, 52
+tools and markup languages.  The authoritative list is
+`lua/config/languages.lua`, and each entry is a `DyLangSpec`: >lua
 
     ---@field filetypes string[]
-    ---@field parser string|DyParserSpec
+    ---@field parser? string|DyParserSpec
     ---@field injected_parsers? string[]
     ---@field ext? string
     ---@field lsp_servers? (string|DyLspSpec)[]

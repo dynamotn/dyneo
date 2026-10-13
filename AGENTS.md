@@ -247,10 +247,10 @@ change, and say which ran. A broken startup is the user's real editor broken:
 in `mode: symlink` the tree is what Neovim loads.
 
 Both channels are in daily use, so run these checks on each of them. The
-channel follows the Neovim that starts (`latest` on 0.13, `stable` on 0.12):
-the plain commands above test `latest`; for `stable`, run the same commands
-under the released Neovim from mise, with its own data directory (as the
-user's `nvims` does), so its plugins and lockfile never touch `latest`'s:
+channel follows the Neovim that starts (`latest` on a nightly, `stable` on a
+release): the plain commands above test `latest`; for `stable`, run the same
+commands under the released Neovim from mise, with its own data directory (as
+the user's `nvims` does), so its plugins and lockfile never touch `latest`'s:
 
 ```sh
 export NVIM_APPNAME=nvim-stable   # in fish: set -lx NVIM_APPNAME nvim-stable

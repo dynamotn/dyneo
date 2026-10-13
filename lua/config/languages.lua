@@ -1,17 +1,19 @@
 --- One language, framework or tool: everything installed and set up for its
 --- filetypes. An entry is keyed by its name, which `DyNeo.enabled_languages`
 --- and `DyNeo.bundle_languages` list. Two keys are pseudo-languages, never
---- filetypes: `['*']` holds what serves every buffer (its tools come before a
---- language's own, its dial augends join every group), and `['_']` what
---- serves a filetype no language claims.
+--- filetypes: `['*']` holds what serves every buffer (conform and nvim-lint
+--- run its tools after a language's own, and its dial augends follow every
+--- group's), and `['_']` the formatters and linters of a buffer whose
+--- filetype has none of its own, claimed by a language or not.
 ---@class DyLangSpec
 ---@field filetypes string[] The filetypes of the language, each claimed by
 --- this language alone. Opening one installs everything below, once
 --- (`util.lazy_install`). A dialect that reuses another language's parser
 --- (`arduino` on `cpp`) lists only its own filetypes.
----@field parser string|DyParserSpec The nvim-treesitter parser, registered
+---@field parser? string|DyParserSpec The nvim-treesitter parser, registered
 --- for every filetype of the language: a name nvim-treesitter knows, or a
---- `DyParserSpec` for one it does not know or gets from elsewhere.
+--- `DyParserSpec` for one it does not know or gets from elsewhere. None
+--- registers nothing, for a language with no grammar to install.
 ---@field injected_parsers? string[] Parsers this language's injection
 --- queries name outright, nvim-treesitter's as well as the ones in
 --- `queries/` and `after/queries/`. An injection whose parser is missing is
@@ -41,7 +43,7 @@
 --- as `typescript.tsx`. A language neogen knows needs no entry.
 ---@field dial? fun(augend: Augend): Augend[] Extra `<C-a>`/`<C-x>` cycles,
 --- given `dial.augend`. They form the dial group of the language's name,
---- after the ones of `['*']`.
+--- ahead of the ones of `['*']`.
 ---@field autopairs? fun(filetypes: string[], rule: Rule, cond: CondOpts, ts_cond: table): Rule[]
 --- Extra nvim-autopairs rules, given the language's filetypes and
 --- nvim-autopairs' `rule`, `conds` and `ts-conds` modules.
@@ -550,8 +552,9 @@ return {
   -- the `nvim-lint` setup in `plugins.executor.linting` reach for it when
   -- the filetype's own list is empty. A tool whose command is not on
   -- `$PATH` is dropped from that list, so a declared language with nothing
-  -- installed falls back here too, not only a filetype no entry names. Only `formatters` and `linters` are read;
-  -- servers and `null_ls` sources have no such fallback.
+  -- installed falls back here too, not only a filetype no entry names. Only
+  -- `formatters` and `linters` are read; servers and `null_ls` sources have
+  -- no such fallback.
   ---@diagnostic disable-next-line: missing-fields
   ['_'] = {
     filetypes = { '_' },
