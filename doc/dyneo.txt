@@ -334,6 +334,14 @@ the dybatpho style of every shell filetype -- are built in
 `lua/util/neogen.lua`; a convention neogen ships serves only the filetypes it
 has none for, such as `typescript.tsx`.
 
+`dap` names the adapters of a language, installed by mason-nvim-dap or, for
+the ones it lacks, from Mason directly.  Three need more than the adapter:
+Elixir's `mix_task` is set up by hand, since mason-nvim-dap's handler sets up
+nothing for it; `:FlutterRun` goes through nvim-dap, so breakpoints hold; and
+Vue, Svelte, Astro and Angular get a `Launch Chrome` configuration beside
+Node's, whose URL is offered from the port of the nearest Vite, Angular,
+Next, Nuxt, Astro, Gatsby, webpack or Vue CLI config.
+
 4.1 Tooling that installs itself                          *dyneo-lazy-install*
 
 One |FileType| autocmd, one table of handlers (`lua/util/lazy_install.lua`).
