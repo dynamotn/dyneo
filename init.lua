@@ -9,13 +9,7 @@ require('config.globals')
 -- is new enough.
 require('per_machine')
 
--- `latest` runs plugins at their newest commit, and those follow Neovim's
--- nightly. On their tagged releases nothing needs more than 0.12: that is
--- the floor several of them enforce themselves (nvim-treesitter `main`,
--- rustaceanvim, avante, native Copilot through
--- `vim.lsp.inline_completion`), and every 0.13 check found in them has a
--- fallback.
-local version = DyNeo.plugin_channel == 'stable' and '0.12.0' or '0.13.0'
+local version = DyNeo.neovim_floor()
 if vim.fn.has('nvim-' .. version) == 1 then
   -- Load lazy.nvim and the plugins
   require('config.lazy')

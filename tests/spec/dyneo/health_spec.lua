@@ -46,6 +46,8 @@ end
 describe('dyneo.health', function()
   local dir, cleanup
   before_each(function()
+    -- The version gate is `DyNeo.neovim_floor`, declared by `config.globals`
+    h.globals()
     dir, cleanup = h.tmpdir()
   end)
   after_each(function() cleanup() end)

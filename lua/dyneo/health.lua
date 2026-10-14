@@ -407,7 +407,7 @@ end
 ---@return DyHealthEntry[]
 local function neovim()
   local stable = DyNeo.plugin_channel == 'stable'
-  local version = stable and '0.12.0' or '0.13.0'
+  local version = DyNeo.neovim_floor()
   local channel = stable and 'stable' or 'latest'
   if vim.fn.has('nvim-' .. version) == 1 then
     return {

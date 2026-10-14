@@ -42,6 +42,19 @@ DyNeo.used_full_plugins = false
 --- starts writing `lazy-lock.json`.
 DyNeo.plugin_channel = vim.version().prerelease and 'latest' or 'stable'
 
+--- The Neovim a channel needs, as `init.lua` and `:checkhealth dyneo` both
+--- gate on it. On their tagged releases nothing
+--- needs more than 0.12: that is the floor several plugins enforce themselves
+--- (nvim-treesitter `main`, rustaceanvim, avante, native Copilot through
+--- `vim.lsp.inline_completion`), and every 0.13 check found in them has a
+--- fallback. `latest` runs plugins at their newest commit, and those follow
+--- Neovim's nightly. A function, so a `per_machine` override of the channel
+--- is seen.
+---@return string
+function DyNeo.neovim_floor()
+  return DyNeo.plugin_channel == 'stable' and '0.12.0' or '0.13.0'
+end
+
 ---@type integer Seconds a release has to have been out before it may be
 --- installed, by Mason (`tools.mason-quarantine`) or by lazy.nvim
 --- (`tools.lazy-quarantine`) alike. It is the same week `min-release-age`
