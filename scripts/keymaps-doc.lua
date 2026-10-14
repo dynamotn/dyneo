@@ -148,6 +148,11 @@ local function mode_list(modes)
   return ret
 end
 
+--- The filetype whose `ftplugin/` file is being sourced, for the scope of
+--- what it maps
+---@type string?
+local sourcing_ft
+
 -- Mappings this tree makes outside of any `keys`
 local set = vim.keymap.set
 ---@diagnostic disable-next-line: duplicate-set-field
@@ -169,7 +174,9 @@ vim.keymap.set = function(mode, lhs, rhs, opts)
           lhs = normalize(lhs),
           modes = mode_list(mode),
           desc = opts.desc,
-          scope = opts.buffer and 'buffer' or '',
+          scope = sourcing_ft and 'ft: ' .. sourcing_ft
+            or opts.buffer and 'buffer'
+            or '',
           from = file,
         })
       end
@@ -241,6 +248,21 @@ local function attach(bufnr)
         pcall(opts.on_attach, bufnr)
       end
     end
+  end
+end
+
+--- Source every `ftplugin/<ft>.lua` of this tree in a buffer of its own, for
+--- the `<localleader>` keys they map: sourced rather than set as the
+--- filetype, which would start that filetype's servers and plugins too
+local function source_ftplugins()
+  local files =
+    vim.fn.glob(vim.fs.joinpath(root, 'ftplugin', '*.lua'), true, true)
+  table.sort(files)
+  for _, file in ipairs(files) do
+    local bufnr = vim.api.nvim_create_buf(true, false)
+    sourcing_ft = vim.fn.fnamemodify(file, ':t:r')
+    vim.api.nvim_buf_call(bufnr, function() pcall(vim.cmd.source, file) end)
+    sourcing_ft = nil
   end
 end
 
@@ -436,6 +458,7 @@ vim.api.nvim_create_autocmd('VimEnter', {
     -- servers and parsers out of it.
     pcall(vim.cmd.edit, vim.fn.fnameescape(vim.fn.tempname()))
     attach(vim.api.nvim_get_current_buf())
+    source_ftplugins()
     vim.defer_fn(function()
       local problems = {}
       local ok, err = pcall(function()

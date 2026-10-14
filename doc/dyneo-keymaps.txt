@@ -155,6 +155,7 @@ one of the same keys in those buffers.
 `<leader>cn`           n      Generate Annotations (Neogen)
 `<leader>co`           n      Organize Imports  (LSP)
 `<leader>co`           n      Organize Imports  (LSP: vtsls)
+`<leader>cp`           n      Preview D2 diagram  (ft: d2)
 `<leader>cp`           n      Markdown Preview  (ft: markdown, markdown.mdx)
 `<leader>cp`           n      Toggle Typst Preview  (ft: typst)
 `<leader>cr`           n      Rename  (LSP)
@@ -662,6 +663,7 @@ one of the same keys in those buffers.
 `[d`                   n      Prev Diagnostic
 `[e`                   n      Prev Error
 `[h`                   n      Prev Hunk  (buffer)
+`[j`                   nox    Previous Cell  (ft: python)
 `[n`                   n      Prev Failed Test
 `[p`                   n      Put Indented Before Cursor (Linewise)
 `[q`                   n      Previous Trouble/Quickfix Item
@@ -682,6 +684,7 @@ one of the same keys in those buffers.
 `]d`                   n      Next Diagnostic
 `]e`                   n      Next Error
 `]h`                   n      Next Hunk  (buffer)
+`]j`                   nox    Next Cell  (ft: python)
 `]n`                   n      Next Failed Test
 `]p`                   n      Put Indented After Cursor (Linewise)
 `]q`                   n      Next Trouble/Quickfix Item
@@ -801,8 +804,12 @@ Other keys
 `<c-w><space>`         n      Window Hydra Mode (which-key)
 `<esc>`                ins    Escape and Clear hlsearch
 `<localleader>A`       n      Run All Chunks  (ft: quarto)
+`<localleader>F`       n      Run From Here (Runbook)  (ft: markdown)
+`<localleader>I`       n      Forget Inputs (Runbook)  (ft: markdown)
+`<localleader>L`       n      Record Runs (Runbook)  (ft: markdown)
 `<localleader>R`       n      Flutter Restart  (ft: dart)
 `<localleader>R`       n      REPL (Buffer)  (ft: haskell)
+`<localleader>R`       n      Run All Blocks (Runbook)  (ft: markdown)
 `<localleader>U`       n      Upgrade All Crates  (ft: toml)
 `<localleader>a`       n      Run Chunks Above  (ft: quarto)
 `<localleader>b`       n      CMake Build  (ft: cmake, c, cpp)
@@ -812,8 +819,10 @@ Other keys
 `<localleader>e`       n      Evaluate All  (ft: haskell)
 `<localleader>f`       n      Send File to REPL  (ft: python)
 `<localleader>g`       n      CMake Generate  (ft: cmake, c, cpp)
+`<localleader>g`       n      Write Commit Message (AI)  (ft: gitcommit)
 `<localleader>h`       n      Hoogle Signature  (ft: haskell)
 `<localleader>i`       n      Interrupt REPL  (ft: python)
+`<localleader>m`       n      Decision Matrix  (ft: markdown)
 `<localleader>mc`      n      Metals compile cascade  (ft: scala)
 `<localleader>mh`      n      Metals hover worksheet  (ft: scala)
 `<localleader>p`       n      Preview Document  (ft: quarto)
@@ -823,7 +832,9 @@ Other keys
 `<localleader>r`       n      CMake Run  (ft: cmake, c, cpp)
 `<localleader>r`       n      Flutter Run  (ft: dart)
 `<localleader>r`       n      REPL (Package)  (ft: haskell)
+`<localleader>r`       n      Run Block (Runbook)  (ft: markdown)
 `<localleader>r`       n      Toggle REPL  (ft: python)
+`<localleader>s`       n      Stop Running (Runbook)  (ft: markdown)
 `<localleader>s`       n      Send Line to REPL  (ft: python)
 `<localleader>s`       x      Send Selection to REPL  (ft: python)
 `<localleader>s`       n      Run Line  (ft: quarto)
@@ -831,6 +842,7 @@ Other keys
 `<localleader>t`       n      CMake Build Type  (ft: cmake, c, cpp)
 `<localleader>v`       n      Toggle Table View  (ft: csv, tsv, psv)
 `<localleader>v`       n      Select Virtualenv  (ft: python)
+`<localleader>x`       n      Clear Outputs (Runbook)  (ft: markdown)
 `<localleader>x`       n      Xcodebuild actions  (ft: swift)
 `<localleader>xT`      n      Run this test class  (ft: swift)
 `<localleader>xb`      n      Build project  (ft: swift)
