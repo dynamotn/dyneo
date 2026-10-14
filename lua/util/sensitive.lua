@@ -315,8 +315,14 @@ M.is_sensitive = function(bufnr)
     return true
   end
   local name = vim.api.nvim_buf_get_name(bufnr)
-  if by_name[name] == nil then by_name[name] = M.is_sensitive_path(name) end
-  if by_name[name] then return true end
+  local by_path = by_name[name]
+  if by_path == nil then
+    by_path = M.is_sensitive_path(name)
+    -- A name with no file behind it yet may get one later, as a symlink into
+    -- a sensitive directory even: its answer is kept once there is a file
+    if by_path or vim.uv.fs_stat(name) then by_name[name] = by_path end
+  end
+  if by_path then return true end
   if M.marked(bufnr) then return true end
   if M.is_allowed(bufnr) then return false end
   local found, partial = secrets_in_buffer(bufnr)

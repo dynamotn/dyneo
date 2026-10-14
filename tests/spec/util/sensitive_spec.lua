@@ -170,6 +170,7 @@ describe('util.sensitive', function()
     end)
 
     it('resolves the path of a buffer once, not on every question', function()
+      h.write(dir .. '/main.lua', { 'a' })
       local bufnr = h.buffer({ name = dir .. '/main.lua', lines = { 'a' } })
       local calls = 0
       local realpath = vim.uv.fs_realpath
@@ -181,6 +182,14 @@ describe('util.sensitive', function()
       sensitive.is_sensitive(bufnr)
       restore()
       assert.are.equal(1, calls)
+    end)
+
+    it('asks again about a name that had no file behind it', function()
+      local bufnr = h.buffer({ name = dir .. '/notes.txt', lines = { 'a' } })
+      assert.is_false(sensitive.is_sensitive(bufnr))
+      h.write(dir .. '/id_rsa', { 'key' })
+      vim.uv.fs_symlink(dir .. '/id_rsa', dir .. '/notes.txt')
+      assert.is_true(sensitive.is_sensitive(bufnr))
     end)
 
     it('asks about the current buffer for nil and 0', function()
