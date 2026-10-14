@@ -10,7 +10,7 @@ vim.api.nvim_create_user_command(
 -- `:e!` and a session restored. Without this the buffer comes up empty, and
 -- a `:w` would empty the file.
 vim.api.nvim_create_autocmd('BufReadCmd', {
-  group = vim.api.nvim_create_augroup('dy_hex', { clear = true }),
+  group = vim.api.nvim_create_augroup('dy_hex_read', { clear = true }),
   pattern = 'dyhex://*',
   callback = function(args) require('tools.hex').read(args.buf) end,
 })
