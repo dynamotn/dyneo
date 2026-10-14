@@ -13,8 +13,8 @@ return {
     local root = vim.fs.root(bufnr, c4.ROOT_MARKERS)
       or (name ~= '' and vim.fs.dirname(name))
     if not root then return end
-    if c4.trusted('likec4', root, 'Start the LikeC4 server', true) then
-      on_dir(root)
-    end
+    c4.trusted('likec4', root, 'Start the LikeC4 server', true, function(yes)
+      if yes then on_dir(root) end
+    end)
   end,
 }

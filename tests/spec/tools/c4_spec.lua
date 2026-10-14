@@ -104,6 +104,19 @@ describe('tools.c4', function()
     assert.equals(c4.out_dir(dir) .. '/index.d2', previewed)
   end)
 
+  it('walks a large root a chunk at a time, off the main loop', function()
+    c4.SCAN_CHUNK = 2
+    for i = 1, 5 do
+      h.write(dir .. '/model/' .. i .. '.c4', { 'model {}' })
+    end
+    h.write(dir .. '/zz/likec4.config.ts', { 'export default {}' })
+    local found
+    c4.code_config(dir, function(config) found = config end)
+    assert.is_nil(found)
+    assert.is_true(vim.wait(1000, function() return found ~= nil end))
+    assert.equals('zz/likec4.config.ts', found)
+  end)
+
   it('asks about a code config that appeared after a draw', function()
     fake({ 'mkdir -p "$5" && touch "$5/index.d2"' })
     c4.show()

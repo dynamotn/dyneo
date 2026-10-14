@@ -36,61 +36,71 @@ M.ROOT_MARKERS = {
 --- an unread rest must not be a clean result
 M.SCAN_LIMIT = 20000
 
+--- Entries walked in one turn of the main loop: the walk yields between
+--- them, so a large root never holds the editor
+M.SCAN_CHUNK = 500
+
 ---@type table<string, string>
 local code_config_of = {}
 
 --- The first code config under `root` that likec4 would run, as it walks:
---- no hidden entry, no `node_modules` nor `out`. False when there is none,
---- and asked again next time: one pulled in later must still be trusted.
+--- no hidden entry, no `node_modules` nor `out`, handed to `on_done`. False
+--- when there is none, and asked again next time: one pulled in later must
+--- still be trusted.
 ---@param root string
----@return string|false
-function M.code_config(root)
-  if code_config_of[root] then return code_config_of[root] end
-  local found, seen = false, 0
-  for name, kind in
-    vim.fs.dir(root, {
-      depth = math.huge,
-      skip = function(dir)
-        local base = vim.fs.basename(dir)
-        return not vim.startswith(base, '.')
-          and base ~= 'node_modules'
-          and base ~= 'out'
-      end,
-    })
-  do
-    seen = seen + 1
-    if seen > M.SCAN_LIMIT then
-      found = 'any likec4.config.* among its files'
-      break
+---@param on_done fun(config: string|false)
+function M.code_config(root, on_done)
+  if code_config_of[root] then return on_done(code_config_of[root]) end
+  local next_entry = vim.fs.dir(root, {
+    depth = math.huge,
+    skip = function(dir)
+      local base = vim.fs.basename(dir)
+      return not vim.startswith(base, '.')
+        and base ~= 'node_modules'
+        and base ~= 'out'
+    end,
+  })
+  local seen = 0
+  local function step()
+    for _ = 1, M.SCAN_CHUNK do
+      local name, kind = next_entry()
+      if not name then return on_done(false) end
+      seen = seen + 1
+      if seen > M.SCAN_LIMIT then
+        code_config_of[root] = 'any likec4.config.* among its files'
+        return on_done(code_config_of[root])
+      end
+      if
+        kind == 'file'
+        and vim.list_contains(M.CODE_CONFIGS, vim.fs.basename(name))
+      then
+        code_config_of[root] = name
+        return on_done(name)
+      end
     end
-    if
-      kind == 'file'
-      and vim.list_contains(M.CODE_CONFIGS, vim.fs.basename(name))
-    then
-      found = name
-      break
-    end
+    vim.schedule(step)
   end
-  if found then code_config_of[root] = found end
-  return found
+  step()
 end
 
---- Whether `root` may run the code config it holds, if any, asked once;
---- `sticky` keeps a refusal for the session, as a server start does
+--- Whether `root` may run the code config it holds, if any, asked once and
+--- handed to `on_done`; `sticky` keeps a refusal for the session, as a
+--- server start does
 ---@param purpose string
 ---@param root string
 ---@param action string What runs it: `Start the LikeC4 server`
----@param sticky? boolean
----@return boolean
-function M.trusted(purpose, root, action, sticky)
-  local config = M.code_config(root)
-  if not config then return true end
-  local question = ('%s in %s?\nIt runs %s as you.'):format(
-    action,
-    vim.fn.fnamemodify(root, ':~'),
-    config
-  )
-  return require('util.trust').ask(purpose, root, question, sticky)
+---@param sticky boolean?
+---@param on_done fun(yes: boolean)
+function M.trusted(purpose, root, action, sticky, on_done)
+  M.code_config(root, function(config)
+    if not config then return on_done(true) end
+    local question = ('%s in %s?\nIt runs %s as you.'):format(
+      action,
+      vim.fn.fnamemodify(root, ':~'),
+      config
+    )
+    on_done(require('util.trust').ask(purpose, root, question, sticky))
+  end)
 end
 
 --- What likec4 says went wrong in `stderr`, colours removed: each `ERR`
@@ -183,12 +193,22 @@ function M.show(view)
   if not root then
     return notify('This buffer is in no LikeC4 workspace', vim.log.levels.WARN)
   end
-  if not M.trusted('c4', root, 'Draw the LikeC4 views') then
-    return notify(
-      'Not drawn: the workspace is not trusted to run its config',
-      vim.log.levels.WARN
-    )
-  end
+  M.trusted('c4', root, 'Draw the LikeC4 views', nil, function(yes)
+    if not yes then
+      return notify(
+        'Not drawn: the workspace is not trusted to run its config',
+        vim.log.levels.WARN
+      )
+    end
+    M.draw(root, view)
+  end)
+end
+
+--- Generate every view of the workspace at `root` and preview `view`, or
+--- one picked
+---@param root string
+---@param view? string
+function M.draw(root, view)
   local out = M.out_dir(root)
   -- Views since removed must not linger: the directory is this tool's alone
   vim.fn.delete(out, 'rf')
