@@ -54,7 +54,7 @@ local BYTES = {
 }
 
 --- Seconds in one of each retention unit
-local SPANS = { h = 3600, d = 86400, w = 7 * 86400, y = 365 * 86400 }
+local SPANS = { h = 3600, d = 86400, w = 7 * 86400, y = YEAR }
 
 ---@class DyNfrComponent
 ---@field availability number A fraction, `0.999`
