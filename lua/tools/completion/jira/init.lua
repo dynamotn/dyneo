@@ -115,8 +115,8 @@ local function search(word, on_items)
   --- Read the body of each issue and fill it into the items standing for
   --- it, then hand everything over
   ---
-  --- One read per issue, not per row: the two queries overlap, and an
-  --- issue found by both used to be read twice.
+  --- One read per issue, not per row: the two queries overlap, so an
+  --- issue found by both would be read twice.
   ---@param items table[]
   ---@param by_key table<string, table[]> Issue key to the items using it
   local function describe(items, by_key)

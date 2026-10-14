@@ -1,11 +1,11 @@
 --- A record of what each AI integration was handed, and what it was refused
 ---
 --- `util.ai_guard` decides, at the one place each integration reads a buffer
---- or a path, whether it may. Those decisions used to leave nothing behind:
---- what was stopped said so once in a notification, and what went out said
---- nothing at all. This keeps them -- which integration, which file, when,
---- and whether it went out or was turned down -- so what left the editor can
---- be looked back on, not only what was kept in.
+--- or a path, whether it may. A notification says once what was stopped,
+--- and nothing says what went out. This keeps those decisions -- which
+--- integration, which file, when, and whether it went out or was turned
+--- down -- so what left the editor can be looked back on, not only what was
+--- kept in.
 ---
 --- Only the name of what was handed over is kept, and a line range at most,
 --- never its text: a log of what reached an AI must not become one more copy

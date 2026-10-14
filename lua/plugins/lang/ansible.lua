@@ -28,7 +28,7 @@ return vim.list_contains(DyNeo.enabled_languages, 'ansible')
                 ansible = {
                   python = { interpreterPath = mason_ansible_python() },
                   -- nvim-lint runs ansible-lint already; the server running
-                  -- it too showed each finding twice
+                  -- it too would show each finding twice
                   validation = { lint = { enabled = false } },
                 },
               },

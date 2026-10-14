@@ -38,8 +38,8 @@ vim.api.nvim_create_autocmd(
     group = augroup('sensitive_no_backup'),
     callback = function(event)
       if not leaves_no_copy(event.match) then return end
-      -- A write that failed never restored them: keep what was saved then,
-      -- not the values forced off for it
+      -- Two writes before a restore, as when the first failed: keep what the
+      -- first saved, not the values it forced off
       backup_saved = backup_saved or { vim.o.backup, vim.o.writebackup }
       vim.o.backup, vim.o.writebackup = false, false
       -- A failed write fires no `*WritePost`: the write is synchronous, so

@@ -18,7 +18,7 @@ return vim.list_contains(DyNeo.enabled_languages, 'bash')
                   globPattern = '**/*@(.sh|.inc|.bash|.command)',
                   -- dyshellint runs ShellCheck already, and the shellcheck
                   -- null-ls source offers its fixes; the server's own run
-                  -- only listed every finding a second time
+                  -- would only list every finding a second time
                   shellcheckPath = '',
                 },
               },

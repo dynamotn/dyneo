@@ -1,10 +1,10 @@
 --- Language servers and tools of a buffer, for the statusline
 ---
---- The statusline used to spell out every server and tool the filetype
---- expects, which crowds it as soon as a language brings more than a couple.
---- It now only counts how many are up, and the full list, with the state of
---- each candidate and what can be done about it, lives in a picker opened by
---- a click on the count or by a key.
+--- Spelling out every server and tool the filetype expects crowds the
+--- statusline as soon as a language brings more than a couple. So it only
+--- counts how many are up, and the full list, with the state of each
+--- candidate and what can be done about it, lives in a picker opened by a
+--- click on the count or by a key.
 
 local languages = require('util.languages')
 

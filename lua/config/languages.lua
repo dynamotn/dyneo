@@ -638,7 +638,7 @@ return {
     parser = 'cpp',
     injected_parsers = { 'doxygen', 'printf', 're2c' },
     -- clang-tidy runs inside clangd (`--clang-tidy`); nvim-lint running it as
-    -- well reported every finding twice
+    -- well would report every finding twice
     lsp_servers = { 'clangd', 'harper_ls' },
     formatters = { 'clang-format' },
     dap = { 'codelldb' },
@@ -1122,7 +1122,7 @@ return {
     injected_parsers = { 'printf' },
     ext = 'py',
     -- The `ruff` server publishes ruff's diagnostics itself; running it as a
-    -- linter too listed each of them twice
+    -- linter too would list each of them twice
     lsp_servers = { 'pyright', 'ruff', 'harper_ls' },
     formatters = {
       { 'ruff_fix', command = 'ruff' },

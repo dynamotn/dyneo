@@ -6,6 +6,6 @@ return {
   },
   root_markers = { 'promql-lsp.yaml' },
   -- The config file is read from the root, and the server exits without
-  -- one; it used to start, and die, on every other YAML buffer
+  -- one: started on any other YAML buffer, it would die at once
   workspace_required = true,
 }
