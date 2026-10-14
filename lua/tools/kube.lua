@@ -158,8 +158,12 @@ local function current()
   -- kustomize and helm read every file of their directory, not only this one
   if target.kind ~= 'manifest' then
     local root = require('util.root')
+    local dir = root.realpath(target.dir) or target.dir
     for _, buf in ipairs(vim.fn.getbufinfo({ bufmodified = 1 })) do
-      if buf.name ~= '' and root.contains(target.dir, buf.name) then
+      if
+        buf.name ~= ''
+        and root.contains(dir, root.realpath(buf.name) or buf.name)
+      then
         notify(
           ('Write %s first: %s reads it from disk'):format(
             vim.fn.fnamemodify(buf.name, ':~:.'),
