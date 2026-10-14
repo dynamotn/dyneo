@@ -17,6 +17,15 @@ local tools_of = {}
 ---@type table<integer, { name: string, answers: table<string, boolean> }>
 local enabled_of = {}
 
+--- Every language name, sorted: `pairs` order differs between sessions, and
+--- what is built from the list must not
+---@return string[]
+M.names = function()
+  local names = vim.tbl_keys(languages_list)
+  table.sort(names)
+  return names
+end
+
 --- Return whether `server` would attach to `bufnr`, as its spec decides
 ---@param server DyLspSpec
 ---@param bufnr integer

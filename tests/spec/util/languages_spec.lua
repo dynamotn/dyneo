@@ -240,4 +240,12 @@ describe('util.languages', function()
       assert.is_table(languages.get_tools_by_filetype('no-such-filetype'))
     end)
   end)
+  it('names every language in sorted order', function()
+    local names = languages.names()
+    assert.same({ '*', '_' }, { names[1], names[2] })
+    assert.is_true(vim.list_contains(names, 'lua'))
+    for i = 2, #names do
+      assert.is_true(names[i - 1] < names[i])
+    end
+  end)
 end)

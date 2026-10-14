@@ -290,7 +290,8 @@ return {
       -- Servers some entry gives filetypes of its own: their shipped
       -- default is what that entry narrows them from
       local narrowed = {} ---@type table<string, true>
-      for _, language in pairs(languages) do
+      for _, name in ipairs(require('util.languages').names()) do
+        local language = languages[name]
         -- '*' and '_' are pseudo filetypes, not something a server attaches to
         if
           not vim.list_contains(language.filetypes, '*')
@@ -446,7 +447,8 @@ return {
         end
       end
 
-      for name, language in pairs(languages) do
+      for _, name in ipairs(require('util.languages').names()) do
+        local language = languages[name]
         for _, lsp_server in ipairs(language.lsp_servers or {}) do
           local server
           if type(lsp_server) == 'table' then

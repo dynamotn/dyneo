@@ -57,7 +57,9 @@ return {
 
       -- Setup treesitter parser to work with defined filetypes
       local parsers = require('nvim-treesitter.parsers')
-      for name, language in pairs(require('config.languages')) do
+      local languages = require('config.languages')
+      for _, name in ipairs(require('util.languages').names()) do
+        local language = languages[name]
         if language.parser then
           -- Get my config
           local parser_name = ''

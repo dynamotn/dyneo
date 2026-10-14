@@ -132,7 +132,9 @@ return {
     -- debugger.
     init = function()
       local dap_util = require('util.dap')
-      for name, language in pairs(require('config.languages')) do
+      local languages = require('config.languages')
+      for _, name in ipairs(require('util.languages').names()) do
+        local language = languages[name]
         if
           language.dap and vim.list_contains(DyNeo.enabled_languages, name)
         then
@@ -158,7 +160,9 @@ return {
       -- Extra configuration for the handlers, see mason-nvim-dap's README
       opts.handlers = opts.handlers or {}
       opts.ensure_installed = opts.ensure_installed or {}
-      for name, language in pairs(require('config.languages')) do
+      local languages = require('config.languages')
+      for _, name in ipairs(require('util.languages').names()) do
+        local language = languages[name]
         if language.dap and vim.list_contains(DyNeo.bundle_languages, name) then
           for _, spec in ipairs(language.dap) do
             if dap_util.is_mapped(spec) then
