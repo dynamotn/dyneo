@@ -76,6 +76,19 @@ describe('util.system', function()
     end
   )
 
+  it('stops a command at the cap and says it was cut', function()
+    local result = system.sync({ 'sh', '-c', 'yes' }, { max_bytes = 1000 })
+    assert.is_true(result.cut)
+    assert.is_false(result.timed_out)
+    assert.are.equal(1000, #result.stdout + #result.stderr)
+  end)
+
+  it('keeps a stream the caller turned off out of the result', function()
+    local result = system.sync({ 'sh', '-c', 'echo out' }, { stdout = false })
+    assert.is_nil(result.stdout)
+    assert.is_false(result.cut)
+  end)
+
   describe('run', function()
     --- Run `cmd` and wait for its result, on the main loop
     local function run(cmd, opts)
@@ -140,6 +153,29 @@ describe('util.system', function()
       end
     )
 
+    it('does not take a quick exit 124 for the deadline', function()
+      local result = run({ 'sh', '-c', 'exit 124' }, { timeout = 5000 })
+      assert.are.equal(124, result.code)
+      assert.is_false(result.timed_out)
+      assert.are.equal('sh exited 124', system.failure(result, 'sh'))
+    end)
+
+    it('lets go of its deadline timer once the command ends', function()
+      local timers = {}
+      local new_timer = vim.uv.new_timer
+      local restore = h.stub(vim.uv, 'new_timer', function()
+        local timer = new_timer()
+        table.insert(timers, timer)
+        return timer
+      end)
+      run({ 'true' }, { timeout = 60000 })
+      restore()
+      assert.is_true(#timers > 0)
+      for _, timer in ipairs(timers) do
+        assert.is_true(timer:is_closing())
+      end
+    end)
+
     it('feeds stdin and works in the directory given', function()
       local result = run(
         { 'sh', '-c', 'cat; pwd' },
@@ -195,6 +231,32 @@ describe('util.system', function()
       assert.are.equal(2, most)
       assert.are.same({ 1, 2, 3, 4, 5 }, seen)
       assert.are.equal(1, ended)
+    end)
+
+    it('goes on past a worker that raises', function()
+      local ended, notes = false, {}
+      local restore = h.stub(
+        vim,
+        'notify',
+        function(msg) table.insert(notes, msg) end
+      )
+      system.each({ 1, 2, 3 }, 1, function(item, done)
+        if item == 2 then error('boom') end
+        done()
+      end, function() ended = true end)
+      vim.wait(100, function() return #notes > 0 end)
+      restore()
+      assert.is_true(ended)
+      assert.is_truthy(notes[1]:find('boom', 1, true))
+    end)
+
+    it('runs one at a time for a limit below 1', function()
+      local seen = {}
+      system.each({ 1, 2 }, 0, function(item, done)
+        table.insert(seen, item)
+        done()
+      end)
+      assert.are.same({ 1, 2 }, seen)
     end)
 
     it('ends at once for nothing to do', function()

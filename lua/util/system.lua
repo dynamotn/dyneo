@@ -72,10 +72,17 @@ end
 function M.run(cmd, opts, on_done)
   opts = opts or {}
   local answered = false
+  ---@type uv.uv_timer_t?
+  local guard
   ---@param result table
   local function finish(result)
     if answered then return end
     answered = true
+    -- A command that ends in time leaves no timer behind until its deadline
+    if guard and not guard:is_closing() then
+      guard:stop()
+      guard:close()
+    end
     vim.schedule(function() on_done(result) end)
   end
   local function never_started(reason)
@@ -113,6 +120,8 @@ function M.run(cmd, opts, on_done)
   end
 
   local timeout = opts.timeout or M.RUN_TIMEOUT
+  -- Loop time, the clock the deadline's own timer runs on
+  local began = vim.uv.now()
   local ok, started = pcall(vim.system, cmd, {
     cwd = opts.cwd,
     env = opts.env,
@@ -124,7 +133,11 @@ function M.run(cmd, opts, on_done)
     stdout = reader('stdout'),
     stderr = reader('stderr'),
   }, function(completed)
-    local timed_out = not cut and completed.code == M.TIMED_OUT
+    -- 124 is also a command's own exit code, `timeout(1)`'s say: only one
+    -- that was killed, or ran until the deadline, was stopped by it
+    local timed_out = not cut
+      and completed.code == M.TIMED_OUT
+      and (completed.signal ~= 0 or vim.uv.now() - began >= timeout)
     -- The deadline stops the command itself; a detached one leaves what it
     -- started behind unless the group goes too
     if timed_out and opts.detach and process and process.pid then
@@ -148,9 +161,8 @@ function M.run(cmd, opts, on_done)
   -- The exit is only reported once the output closes, and something the
   -- command started can keep it open long past the deadline: the answer is
   -- given without it then, and whatever comes after is dropped
-  local guard = assert(vim.uv.new_timer())
+  guard = assert(vim.uv.new_timer())
   guard:start(timeout + M.GRACE, 0, function()
-    guard:close()
     if answered then return end
     stop(started, opts.detach)
     finish({
@@ -173,9 +185,9 @@ end
 function M.failure(result, name)
   name = name or 'the command'
   if result.missing then return result.stderr end
-  if result.timed_out or result.code == M.TIMED_OUT then
-    return ('%s gave no answer in time'):format(name)
-  end
+  local timed_out = result.timed_out
+  if timed_out == nil then timed_out = result.code == M.TIMED_OUT end
+  if timed_out then return ('%s gave no answer in time'):format(name) end
   if result.cut then
     return ('%s printed more than can be read, and was stopped'):format(name)
   end
@@ -195,23 +207,40 @@ end
 ---@param worker fun(item: T, done: fun())
 ---@param on_done? fun()
 function M.each(items, limit, worker, on_done)
+  -- Below 1 nothing would ever start, and `on_done` never be called
+  limit = math.max(1, math.floor(tonumber(limit) or 1))
   local next_index, running, finished = 0, 0, 0
-  local function start()
+  local start
+  local function step(item)
+    local called = false
+    local function done()
+      if called then return end
+      called = true
+      running = running - 1
+      finished = finished + 1
+      if finished == #items then
+        if on_done then on_done() end
+      else
+        start()
+      end
+    end
+    -- A worker that raises counts as done, or the rest would wait for it
+    -- forever; the error is still said
+    local ok, err = pcall(worker, item, done)
+    if not ok then
+      vim.schedule(
+        function()
+          vim.notify(('util.system.each: %s'):format(err), vim.log.levels.ERROR)
+        end
+      )
+      done()
+    end
+  end
+  start = function()
     while running < limit and next_index < #items do
       next_index = next_index + 1
       running = running + 1
-      local called = false
-      worker(items[next_index], function()
-        if called then return end
-        called = true
-        running = running - 1
-        finished = finished + 1
-        if finished == #items then
-          if on_done then on_done() end
-        else
-          start()
-        end
-      end)
+      step(items[next_index])
     end
   end
   if #items == 0 then
@@ -223,6 +252,11 @@ end
 
 ---@class DySyncOpts: vim.SystemOpts
 ---@field timeout? integer Milliseconds, `M.TIMEOUT` unless given
+---@field max_bytes? integer Output kept, `M.MAX_BYTES` unless given
+
+---@class DySyncResult: vim.SystemCompleted
+---@field cut boolean Stopped once its output passed `max_bytes`
+---@field timed_out boolean Stopped at the deadline
 
 --- Run `cmd` and wait for it, for no longer than `opts.timeout`
 ---
@@ -230,26 +264,61 @@ end
 --- result -- `code` 127 or `M.TIMED_OUT`, the reason in `stderr` -- never as
 --- an error. One started with `detach` leads a process group of its own, and
 --- the whole group is killed on a timeout, so nothing it started is left
---- running.
+--- running. Output read past `max_bytes` stops the command, as `run` does,
+--- and the result says it was `cut`.
 ---@param cmd string[]
 ---@param opts? DySyncOpts
----@return vim.SystemCompleted
+---@return DySyncResult
 function M.sync(cmd, opts)
   opts = vim.deepcopy(opts or {})
   local timeout = opts.timeout or M.TIMEOUT
   -- The deadline is the wait's: a `timeout` in the options as well would
   -- have the process killed and still leave the wait without a result
   opts.timeout = nil
+  local max = opts.max_bytes or M.MAX_BYTES
+  opts.max_bytes = nil
+
+  ---@type vim.SystemObj?
+  local obj
+  local size, cut = 0, false
+  ---@type table<string, string[]>
+  local kept = {}
+  -- Streams the caller reads itself, or turned off, are left as they are
+  for _, name in ipairs({ 'stdout', 'stderr' }) do
+    if opts[name] == nil or opts[name] == true then
+      kept[name] = {}
+      opts[name] = function(_, data)
+        if not data or cut then return end
+        if opts.text then data = data:gsub('\r\n', '\n') end
+        size = size + #data
+        if size > max then
+          cut = true
+          data = data:sub(1, #data - (size - max))
+          if obj then pcall(obj.kill, obj, 'sigterm') end
+        end
+        table.insert(kept[name], data)
+      end
+    end
+  end
+
   ---@type vim.SystemCompleted?
   local result
-  local started, obj = pcall(
+  local started
+  started, obj = pcall(
     vim.system,
     cmd,
     opts,
     function(completed) result = completed end
   )
   if not started then
-    return { code = M.MISSING, signal = 0, stdout = '', stderr = tostring(obj) }
+    return {
+      code = M.MISSING,
+      signal = 0,
+      stdout = '',
+      stderr = tostring(obj),
+      cut = false,
+      timed_out = false,
+    }
   end
   -- Not `obj:wait()`: past the deadline it kills the command and then waits
   -- as long again for the output something it started still holds open.
@@ -261,7 +330,14 @@ function M.sync(cmd, opts)
     nil,
     true
   )
-  if ok and result then return result end
+  if ok and result then
+    for name, chunks in pairs(kept) do
+      result[name] = table.concat(chunks)
+    end
+    ---@cast result DySyncResult
+    result.cut, result.timed_out = cut, false
+    return result
+  end
   if opts.detach and obj.pid then pcall(vim.uv.kill, -obj.pid, 'sigkill') end
   pcall(obj.kill, obj, 'sigkill')
   return {
@@ -269,6 +345,8 @@ function M.sync(cmd, opts)
     signal = 9,
     stdout = '',
     stderr = ok and ('timed out after %d ms'):format(timeout) or tostring(err),
+    cut = cut,
+    timed_out = true,
   }
 end
 
