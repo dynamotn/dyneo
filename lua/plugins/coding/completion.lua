@@ -1,6 +1,5 @@
 return {
   'dynamotn/blink-cmp-fuzzy-path', -- Fuzzy path source
-  'mikavilpas/blink-ripgrep.nvim', -- Ripgrep
   'Kaiser-Yang/blink-cmp-dictionary', -- Dictionary source
   'hrsh7th/cmp-calc', -- Math calculation
   {
@@ -64,7 +63,6 @@ return {
       'blink-cmp-zellij',
       'blink-cmp-kitty',
       'cmp-dynamic',
-      'blink-ripgrep.nvim',
       'blink-emoji.nvim',
       'blink-nerdfont.nvim',
     },
@@ -122,11 +120,6 @@ return {
           kitty = {
             module = 'blink-cmp-kitty',
             name = 'kitty',
-          },
-          -- ripgrep all files in folder
-          ripgrep = {
-            module = 'blink-ripgrep',
-            name = 'ripgrep',
           },
           emoji = {
             module = 'blink-emoji',
@@ -350,7 +343,6 @@ return {
           Snippets = '「SNIP」',
           LSP = '「LSP」',
           Buffer = '「BUF」',
-          ripgrep = '「FILE」',
           dictionary = '「DICT」',
           calc = '「CALC」',
           tmux = '「MUX」',

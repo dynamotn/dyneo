@@ -48,9 +48,9 @@ M.sources = function(filetype)
   }
 
   if filetype == 'comment' then
-    return { 'buffer', 'ripgrep', 'dictionary', 'emoji', 'nerdfont', 'dynamic' }
+    return { 'buffer', 'dictionary', 'emoji', 'nerdfont', 'dynamic' }
   elseif filetype == 'dap' then
-    return { 'dap', 'buffer', 'ripgrep' }
+    return { 'dap', 'buffer' }
   elseif vim.list_contains({ 'gitcommit', 'gitrebase', 'octo' }, filetype) then
     return {
       'git',

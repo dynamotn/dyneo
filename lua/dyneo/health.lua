@@ -487,7 +487,7 @@ local function requirements()
   local entries = {}
   local required = { 'git', 'curl', 'tar', 'unzip', 'gzip' }
   local optional = {
-    rg = 'the pickers and the ripgrep completion source',
+    rg = 'the pickers',
     fd = 'the file pickers',
     lazygit = 'the `<leader>gg` git UI',
     gh = 'the GitHub API, which the Mason quarantine asks first',

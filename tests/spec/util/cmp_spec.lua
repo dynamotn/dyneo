@@ -35,7 +35,7 @@ describe('util.cmp', function()
       'gives the comment sources',
       function()
         assert.same(
-          { 'buffer', 'ripgrep', 'dictionary', 'emoji', 'nerdfont', 'dynamic' },
+          { 'buffer', 'dictionary', 'emoji', 'nerdfont', 'dynamic' },
           cmp.sources('comment')
         )
       end
@@ -43,7 +43,7 @@ describe('util.cmp', function()
 
     it(
       'gives the dap sources',
-      function() assert.same({ 'dap', 'buffer', 'ripgrep' }, cmp.sources('dap')) end
+      function() assert.same({ 'dap', 'buffer' }, cmp.sources('dap')) end
     )
 
     for _, ft in ipairs({ 'gitcommit', 'gitrebase', 'octo' }) do
