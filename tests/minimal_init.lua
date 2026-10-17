@@ -5,13 +5,46 @@
 -- the plugin specs are not loaded. Plenary (the test runner) and lazy.nvim
 -- (whose `lazy.core` modules `util.plugin` builds on) are taken from
 -- lazy.nvim's install directory when the configuration has been started once
--- on this machine, and cloned next to the tests otherwise.
+-- on this machine, and otherwise fetched next to the tests at the commit
+-- `lazy-lock.json` names.
 --
 --   nvim --headless --noplugin -u tests/minimal_init.lua \
 --     -c "PlenaryBustedDirectory tests/spec {minimal_init = 'tests/minimal_init.lua'}"
 
 local root = vim.fs.dirname(vim.fs.dirname(debug.getinfo(1, 'S').source:sub(2)))
 root = vim.fs.normalize(vim.fn.fnamemodify(root, ':p'))
+
+--- The commit `lazy-lock.json` pins `name` to, so a clone tests against what
+--- the configuration runs and not whatever the branch has moved on to
+---@param name string
+---@return string
+local function locked_commit(name)
+  local ok, lock = pcall(
+    vim.json.decode,
+    table.concat(vim.fn.readfile(vim.fs.joinpath(root, 'lazy-lock.json')), '')
+  )
+  local commit = ok and lock[name] and lock[name].commit
+  if not commit then
+    io.stderr:write(
+      'minimal_init: no commit for ' .. name .. ' in lazy-lock.json\n'
+    )
+    os.exit(1)
+  end
+  return commit
+end
+
+--- Run git, and quit with its output when it fails
+---@param args string[]
+local function git(args)
+  local out = vim.fn.system(vim.list_extend({ 'git' }, args))
+  if vim.v.shell_error ~= 0 then
+    io.stderr:write(
+      ('minimal_init: git %s failed\n%s'):format(table.concat(args, ' '), out)
+    )
+    os.exit(1)
+  end
+  return vim.trim(out)
+end
 
 ---@param name string Directory name under lazy.nvim's root
 ---@param url string Where to clone it from when it is missing
@@ -21,19 +54,16 @@ local function dependency(name, url)
     vim.fs.joinpath(vim.fn.stdpath('data') --[[@as string]], 'lazy', name)
   if vim.uv.fs_stat(installed) then return installed end
   local local_copy = vim.fs.joinpath(root, '.tests', name)
+  local commit = locked_commit(name)
   if not vim.uv.fs_stat(local_copy) then
-    local out = vim.fn.system({
-      'git',
-      'clone',
-      '--depth=1',
-      '--filter=blob:none',
-      url,
-      local_copy,
-    })
-    if vim.v.shell_error ~= 0 then
-      io.stderr:write('minimal_init: failed to clone ' .. url .. '\n' .. out)
-      os.exit(1)
-    end
+    git({ 'init', '--quiet', local_copy })
+    git({ '-C', local_copy, 'remote', 'add', 'origin', url })
+  end
+  -- A fresh repository has no `HEAD` yet, which is not an error here
+  local head = vim.fn.system({ 'git', '-C', local_copy, 'rev-parse', 'HEAD' })
+  if vim.trim(head) ~= commit then
+    git({ '-C', local_copy, 'fetch', '--quiet', '--depth=1', 'origin', commit })
+    git({ '-C', local_copy, 'checkout', '--quiet', '--detach', 'FETCH_HEAD' })
   end
   return local_copy
 end
