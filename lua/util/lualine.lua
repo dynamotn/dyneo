@@ -60,6 +60,48 @@ function M.format(component, text, hl_group)
     .. component:get_default_hl()
 end
 
+--- The path `pretty_path` shows, by the path, the root, the cwd and what it
+--- is relative to: worked out on every redraw otherwise, a `realpath` each
+--- time. Emptied whole once it holds `M.PATH_CACHE_SIZE` entries.
+---@type table<string, string>
+local shown_paths, shown_count = {}, 0
+
+--- The most entries the cache of shown paths holds
+M.PATH_CACHE_SIZE = 200
+
+--- `path` relative to the cwd or the root, as `pretty_path` shows it
+---@param path string Normalized absolute path
+---@param root string
+---@param cwd string
+---@param relative 'cwd'|'root'
+---@return string
+local function shown_path(path, root, cwd, relative)
+  -- Compare on a lowered copy on Windows, and show the path as it was
+  local norm_path = path
+
+  if vim.fn.has('win32') == 1 then
+    norm_path = norm_path:lower()
+    root = root:lower()
+    cwd = cwd:lower()
+  end
+
+  local skip = relative == 'cwd' and under(cwd, norm_path)
+    or under(root, norm_path)
+  if not skip then
+    -- A symlink into the project (chezmoi's `mode: symlink` home) is under
+    -- the root only once resolved, the root being a resolved path itself
+    local real = vim.uv.fs_realpath(path)
+    if real and real ~= path then
+      path = require('util.plugin').norm(real)
+      norm_path = vim.fn.has('win32') == 1 and path:lower() or path
+      skip = relative == 'cwd' and under(cwd, norm_path)
+        or under(root, norm_path)
+    end
+  end
+  if skip then path = path:sub(skip + 1) end
+  return path
+end
+
 --- Path of the buffer, relative to the cwd or the root, cut to its last
 --- `length` parts
 ---@param opts? {relative: 'cwd'|'root', modified_hl: string?, directory_hl: string?, filename_hl: string?, modified_sign: string?, readonly_icon: string?, length: number?}
@@ -84,29 +126,16 @@ function M.pretty_path(opts)
     local root = Root.get({ normalize = true })
     local cwd = Root.cwd()
 
-    -- Compare on a lowered copy on Windows, and show the path as it was
-    local norm_path = path
-
-    if vim.fn.has('win32') == 1 then
-      norm_path = norm_path:lower()
-      root = root:lower()
-      cwd = cwd:lower()
-    end
-
-    local skip = opts.relative == 'cwd' and under(cwd, norm_path)
-      or under(root, norm_path)
-    if not skip then
-      -- A symlink into the project (chezmoi's `mode: symlink` home) is under
-      -- the root only once resolved, the root being a resolved path itself
-      local real = vim.uv.fs_realpath(path)
-      if real and real ~= path then
-        path = require('util.plugin').norm(real)
-        norm_path = vim.fn.has('win32') == 1 and path:lower() or path
-        skip = opts.relative == 'cwd' and under(cwd, norm_path)
-          or under(root, norm_path)
+    local key = table.concat({ path, root, cwd, opts.relative }, '\0')
+    local shown = shown_paths[key]
+    if not shown then
+      shown = shown_path(path, root, cwd, opts.relative)
+      if shown_count >= M.PATH_CACHE_SIZE then
+        shown_paths, shown_count = {}, 0
       end
+      shown_paths[key], shown_count = shown, shown_count + 1
     end
-    if skip then path = path:sub(skip + 1) end
+    path = shown
 
     local sep = package.config:sub(1, 1)
     local parts = vim.split(path, '[\\/]')

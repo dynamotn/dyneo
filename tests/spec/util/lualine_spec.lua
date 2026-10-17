@@ -128,6 +128,30 @@ describe('util.lualine', function()
       vim.bo.modified = false
     end)
 
+    it('resolves a path outside the root once, not on every redraw', function()
+      root, cwd = dir .. '/proj', dir .. '/proj'
+      vim.fn.mkdir(root, 'p')
+      h.write(dir .. '/elsewhere/a.lua', { '' })
+      vim.cmd.edit(dir .. '/elsewhere/a.lua')
+      local calls = 0
+      local realpath = vim.uv.fs_realpath
+      table.insert(
+        restores,
+        h.stub(vim.uv, 'fs_realpath', function(...)
+          calls = calls + 1
+          return realpath(...)
+        end)
+      )
+      local pretty = lualine.pretty_path()
+      local first = pretty(component())
+      assert.are.equal(first, pretty(component()))
+      assert.are.equal(1, calls)
+      -- A new root is a new question
+      root, cwd = dir .. '/other', dir .. '/other'
+      pretty(component())
+      assert.are.equal(2, calls)
+    end)
+
     it('is empty for a buffer with no file', function()
       vim.cmd.enew()
       assert.are.equal('', lualine.pretty_path()(component()))
