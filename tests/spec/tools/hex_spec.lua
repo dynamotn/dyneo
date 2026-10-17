@@ -127,6 +127,22 @@ describe('tools.hex', function()
       assert.is_false(vim.bo[bufnr].modified)
     end)
 
+    it(
+      'dumps no buffer that holds a secret, and marks a dump of one',
+      function()
+        local token = 'ghp_' .. ('a1B2'):rep(9)
+        local path = file('notes.txt', 'token = ' .. token .. '\n')
+        vim.cmd.edit(path)
+        local source = vim.api.nvim_get_current_buf()
+        hex.open()
+        assert.are.equal(source, vim.api.nvim_get_current_buf())
+        assert.is_truthy(notes[#notes]:find('Not dumped', 1, true))
+
+        vim.cmd.edit(vim.fn.fnameescape('dyhex://' .. path))
+        assert.is_truthy(require('util.sensitive').marked(0))
+      end
+    )
+
     it('writes nothing when the dump does not parse', function()
       local path = file('b.bin', 'AB')
       vim.cmd.edit(path)

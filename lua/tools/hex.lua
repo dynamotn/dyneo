@@ -130,6 +130,14 @@ function M.open()
   end
   local _, err = check(path)
   if err then return notify(err, vim.log.levels.WARN) end
+  -- Sixteen bytes a line, a credential is split where no pattern finds it
+  local sensitive = require('util.sensitive')
+  if sensitive.is_sensitive(0) then
+    return notify(
+      'Not dumped: ' .. table.concat(sensitive.reasons(0), '; '),
+      vim.log.levels.WARN
+    )
+  end
   -- `:edit` finds a dump already open by its whole name, and reads a new
   -- one through the `BufReadCmd` of `plugin/hex.lua`
   vim.cmd.edit(vim.fn.fnameescape('dyhex://' .. path))
@@ -172,6 +180,16 @@ function M.read(bufnr)
   if not file then return notify(err, vim.log.levels.ERROR) end
   local bytes = file:read('*a')
   file:close()
+  -- Opened without `:DyHex` (a session, `:e dyhex://...`): the file's text
+  -- is looked at here, since the dump hides it from every later check
+  local sensitive = require('util.sensitive')
+  for line in bytes:gmatch('[^\n]+') do
+    local rule = sensitive.secret_format(line)
+    if rule then
+      sensitive.mark(bufnr, ('hex dump of a file holding a %s'):format(rule))
+      break
+    end
+  end
 
   -- Loading the dump is no edit: undoing it would empty the buffer, and a
   -- `:w` then empty the file
