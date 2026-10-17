@@ -129,6 +129,12 @@ describe('tools.query', function()
     assert.is_true(require('util.sensitive').is_sensitive(q.result))
   end)
 
+  it('holds back every result, which can read the environment', function()
+    json_buffer({ '{}' })
+    local q = assert(query.open('$ENV'))
+    assert.is_true(require('util.sensitive').is_sensitive(q.result))
+  end)
+
   it('closes both windows and stops listening', function()
     json_buffer({ '{}' })
     local q = assert(query.open())

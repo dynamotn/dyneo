@@ -156,11 +156,13 @@ function M.open(expr)
     return notify(tool .. ' is not installed', vim.log.levels.ERROR)
   end
   local sensitive = require('util.sensitive').is_sensitive(source)
+  -- Held back from AI whatever the document: an expression reads the
+  -- environment (jq `$ENV`, `env`; yq `env()`) and yq `load()` any file
   local result = require('util.scratch').open({}, {
     split = 'vertical',
     filetype = tool == 'jq' and 'json' or 'yaml',
     sensitive = sensitive and 'the result of a query of a sensitive buffer'
-      or nil,
+      or 'the result of a query, which can read the environment and files',
   })
   vim.cmd('aboveleft 1new')
   local expr_buf = vim.api.nvim_get_current_buf()
