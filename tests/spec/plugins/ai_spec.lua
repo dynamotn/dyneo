@@ -11,6 +11,32 @@ describe('plugins.integration.ai', function()
     error('no spec for ' .. name)
   end
 
+  it('builds Avante before its optional adapters', function()
+    local build = spec_of('yetone/avante.nvim').build
+    assert.are.equal('make', build[1])
+  end)
+
+  it(
+    'warns rather than fails when the agy ACP server cannot install',
+    function()
+      local notes = {}
+      local restores = {
+        h.stub(vim, 'notify', function(msg) table.insert(notes, msg) end),
+        h.stub(
+          vim.uv,
+          'os_uname',
+          function() return { sysname = 'Plan9', machine = 'mips' } end
+        ),
+      }
+      local ok = pcall(spec_of('yetone/avante.nvim').build[3])
+      for _, restore in ipairs(restores) do
+        restore()
+      end
+      assert.is_true(ok)
+      assert.are.equal(1, #notes)
+    end
+  )
+
   it('asks before an ACP agent reads, searches or edits', function()
     local approved =
       spec_of('yetone/avante.nvim').opts.behaviour.auto_approve_tool_permissions

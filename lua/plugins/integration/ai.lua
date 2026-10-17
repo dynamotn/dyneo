@@ -6,15 +6,21 @@ local agy_acp = {
 }
 agy_acp.cmd = agy_acp.dir .. '/agy_acp_server.par'
 
---- Download Google's ACP server for Antigravity into `agy_acp.dir`
+--- Download Google's ACP server for Antigravity into `agy_acp.dir`. It is
+--- optional, so a failure is a warning: an error would stop the build steps
+--- after it.
 local function install_agy_acp()
+  local warn = function(msg)
+    require('util.notify').titled('AI')(
+      'agy ACP server: ' .. msg,
+      vim.log.levels.WARN
+    )
+  end
   local uname = vim.uv.os_uname()
   local system = ({ Darwin = 'macos', Linux = 'linux' })[uname.sysname]
   local arch = ({ arm64 = 'arm64', aarch64 = 'arm64', x86_64 = 'x86_64' })[uname.machine]
   if not system or not arch then
-    error(
-      'agy ACP server: no build for ' .. uname.sysname .. ' ' .. uname.machine
-    )
+    return warn('no build for ' .. uname.sysname .. ' ' .. uname.machine)
   end
   local url = string.format(
     'https://dl.google.com/agy-extensions/releases/%s/agy-acp-server-%s-%s-%s.zip',
@@ -33,7 +39,7 @@ local function install_agy_acp()
     local result =
       require('util.system').sync(cmd, { text = true, timeout = 5 * 60 * 1000 })
     if result.code ~= 0 then
-      error(table.concat(cmd, ' ') .. ': ' .. (result.stderr or ''))
+      return warn(table.concat(cmd, ' ') .. ': ' .. (result.stderr or ''))
     end
   end
   vim.fn.delete(zip)
@@ -333,13 +339,15 @@ return {
     -- LLMs & Agents
     'yetone/avante.nvim',
     build = {
-      -- The ACP adapters Avante talks to Claude Code and Codex through. They
-      -- come first: a failed step stops the rest, and `make` is the slow one.
+      -- Avante itself first: the ACP adapters after it are optional, and a
+      -- machine without npm or unzip still gets a working Avante.
+      'make',
+      -- The ACP adapters Avante talks to Claude Code and Codex through. A
+      -- failed shell step is logged and the next one still runs.
       vim.fn.executable('mise') == 1
           and 'mise use -g npm:@zed-industries/claude-agent-acp@latest npm:@zed-industries/codex-acp@latest'
         or 'npm install -g @zed-industries/claude-agent-acp@latest @zed-industries/codex-acp@latest',
       install_agy_acp,
-      'make',
     },
     cmd = {
       'AvanteAsk',
