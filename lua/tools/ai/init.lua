@@ -121,7 +121,6 @@ function M.headless(text, root, label, on_done)
       return notify('Kept from AI: ' .. reason, vim.log.levels.WARN)
     end
     local system = require('util.system')
-    record('sent', root, label)
     notify(('Writing the %s with %s...'):format(label, cmd[1]))
     system.run(cmd, {
       cwd = root,
@@ -131,8 +130,13 @@ function M.headless(text, root, label, on_done)
       -- A CLI that wants to ask something must not take over the terminal
       detach = true,
     }, function(result)
+      local failed = result.code ~= 0 or result.cut
+      -- Logged once it ran: a command that never started was handed nothing
+      if not result.missing then
+        record('sent', root, failed and (label .. ' (failed)') or label)
+      end
       -- A cut answer is not a shorter message: it is a broken one
-      if result.code ~= 0 or result.cut then
+      if failed then
         return notify(system.failure(result, cmd[1]), vim.log.levels.ERROR)
       end
       if vim.trim(result.stdout) == '' then

@@ -229,6 +229,17 @@ describe('tools.ai', function()
       assert.equals('written\n', answer)
       assert.same({ { 'sent', 'commit message' } }, audit)
     end)
+
+    it('logs what the command did, once it has run', function()
+      h.write(DyNeo.ai.commit_command[1], { '#!/bin/sh', 'exit 3' })
+      run('diff')
+      assert.same({ { 'sent', 'commit message (failed)' } }, audit)
+
+      audit = {}
+      DyNeo.ai.commit_command = { dir .. '/bin/none' }
+      run('diff')
+      assert.same({}, audit)
+    end)
   end)
 
   describe('status', function()
