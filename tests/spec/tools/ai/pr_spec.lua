@@ -77,6 +77,7 @@ describe('tools.ai.pr', function()
     local bufnr = vim.api.nvim_get_current_buf()
     assert.equals('markdown', vim.bo[bufnr].filetype)
     assert.is_true(vim.bo[bufnr].modifiable)
+    assert.equals('hide', vim.bo[bufnr].bufhidden)
     assert.same(
       { '# feat(a): add two', '', 'Adds two.' },
       vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)

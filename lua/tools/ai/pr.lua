@@ -54,6 +54,8 @@ function M.show(answer)
     split = 'vertical',
     modifiable = true,
   })
+  -- Edited before it is pasted: closing its window must not lose the edits
+  vim.bo[bufnr].bufhidden = 'hide'
   vim.keymap.set('n', '<localleader>y', function()
     local text =
       table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
