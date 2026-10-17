@@ -1,6 +1,28 @@
 local language = require('config.languages').markdown
 local cmp_util = require('util.cmp')
 
+local obsidian_wanted = DyNeo.used_full_plugins
+  or DyNeo.enabled_plugins.obsidian
+--- The vaults that exist on this machine, asked only when obsidian.nvim is
+--- wanted at all
+local obsidian_vaults = obsidian_wanted
+    and vim.tbl_filter(
+      function(vault) return vim.fn.isdirectory(vault.path) == 1 end,
+      DyNeo.obsidian.vaults()
+    )
+  or {}
+-- A note being read or created in a vault loads obsidian.nvim; any other
+-- Markdown file leaves it be. `*` crosses folders in an autocmd pattern.
+local obsidian_events = {} ---@type string[]
+for _, vault in ipairs(obsidian_vaults) do
+  local pattern = vim.fs.normalize(vault.path):gsub('[,*?{}%[%]\\]', '\\%0')
+    .. '/*.md'
+  vim.list_extend(
+    obsidian_events,
+    { 'BufReadPre ' .. pattern, 'BufNewFile ' .. pattern }
+  )
+end
+
 return vim.list_contains(DyNeo.enabled_languages, 'markdown')
     and {
       {
@@ -37,11 +59,10 @@ return vim.list_contains(DyNeo.enabled_languages, 'markdown')
       {
         -- Obsidian
         'obsidian-nvim/obsidian.nvim',
-        ft = language.filetypes,
-        enabled = #DyNeo.obsidian.vaults() > 0
-          and (DyNeo.used_full_plugins or DyNeo.enabled_plugins.obsidian),
+        event = obsidian_events,
+        enabled = #obsidian_vaults > 0,
         opts = {
-          workspaces = DyNeo.obsidian.vaults(),
+          workspaces = obsidian_vaults,
           ui = { enable = false },
           legacy_commands = false,
         },
