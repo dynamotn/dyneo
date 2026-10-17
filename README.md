@@ -305,14 +305,13 @@ vim._core.defaults              0.90    2.15  ▌
 
 ### Filetypes
 
-Opening a file of each of the 126 filetypes, one Neovim per filetype, fastest of
-4 runs on AMD Ryzen 5 7535HS with Radeon Graphics (Linux x86_64), Neovim 0.13.0,
-2026-10-02.
+Opening a file of each of the 136 filetypes, one Neovim per filetype, fastest of
+5 runs on Apple M4 Pro (Darwin arm64), Neovim 0.13.0, 2026-10-18.
 
 | | `open` | `ready` | `reopen` | `plugins` |
 | --- | -----: | ------: | -------: | --------: |
-| median | 130.0 ms | 153.4 ms | 19.8 ms | 41 |
-| 90th percentile | 161.2 ms | 191.1 ms | 33.5 ms | 43 |
+| median | 91.7 ms | 112.7 ms | 15.8 ms | 22 |
+| 90th percentile | 134.6 ms | 161.4 ms | 25.2 ms | 24 |
 
 `open` is the blocking `:edit`, `ready` runs on to the last plugin load or
 server attach it set off, and `reopen` is the same file once its filetype is
@@ -326,21 +325,21 @@ The 15 slowest to open:
 
 | Filetype | Open | Ready | Reopen | Plugins | Language |
 | -------- | ---: | ----: | -----: | ------: | -------- |
-| `jsonc` | 297.5 ms | 335.8 ms | 31.4 ms | 41 | json |
-| `java` | 285.0 ms | 321.7 ms | 40.3 ms | 75 | java |
-| `json.openapi` | 280.9 ms | 314.1 ms | 29.7 ms | 41 | json |
-| `json` | 275.1 ms | 310.4 ms | 33.8 ms | 41 | json |
-| `php` | 219.9 ms | 251.2 ms | 47.6 ms | 47 | php |
-| `markdown` | 219.2 ms | 263.5 ms | 62.9 ms | 41 | markdown |
-| `astro` | 216.9 ms | 253.9 ms | 67.9 ms | 41 | astro |
-| `plaintex` | 180.9 ms | 202.3 ms | 68.0 ms | 41 | latex |
-| `tex` | 179.7 ms | 208.4 ms | 65.2 ms | 41 | latex |
-| `eruby` | 175.2 ms | 196.2 ms | 46.9 ms | 41 | rails |
-| `ruby` | 167.9 ms | 191.1 ms | 30.0 ms | 42 | ruby |
-| `haskell` | 163.8 ms | 192.8 ms | 27.3 ms | 47 | haskell |
-| `julia` | 161.2 ms | 190.6 ms | 17.0 ms | 43 | julia |
-| `clojure` | 161.1 ms | 252.7 ms | 18.4 ms | 47 | clojure |
-| `html` | 160.8 ms | 184.1 ms | 35.0 ms | 41 | html |
+| `typescript` | 183.9 ms | 209.9 ms | 20.0 ms | 25 | typescript |
+| `mysql` | 177.7 ms | 200.3 ms | 16.3 ms | 25 | sql |
+| `sql` | 164.2 ms | 180.3 ms | 14.8 ms | 25 | sql |
+| `plsql` | 159.4 ms | 177.9 ms | 12.8 ms | 25 | sql |
+| `ruby` | 158.5 ms | 193.4 ms | 19.7 ms | 23 | ruby |
+| `markdown.mdx` | 153.0 ms | 180.2 ms | 29.6 ms | 22 | markdown |
+| `markdown` | 145.0 ms | 170.7 ms | 30.9 ms | 23 | markdown |
+| `yaml.az-pl` | 144.4 ms | 172.5 ms | 24.0 ms | 22 | yaml |
+| `java` | 141.6 ms | 167.7 ms | 20.5 ms | 38 | java |
+| `yaml.gh-action` | 140.8 ms | 173.7 ms | 23.8 ms | 22 | yaml |
+| `sh.eclass` | 140.0 ms | 162.1 ms | 26.5 ms | 22 | bash |
+| `javascriptreact` | 139.8 ms | 160.1 ms | 18.4 ms | 22 | javascript |
+| `javascript` | 135.3 ms | 152.9 ms | 17.1 ms | 22 | javascript |
+| `yaml.docker-compose` | 134.6 ms | 161.4 ms | 22.0 ms | 22 | yaml |
+| `sh.PKGBUILD` | 133.0 ms | 154.8 ms | 24.2 ms | 22 | bash |
 
 Opened as another filetype, and timed under the one asked for: `plaintex` as
 `tex`, `ipynb` as `python`.
