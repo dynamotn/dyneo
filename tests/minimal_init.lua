@@ -47,6 +47,12 @@ do
   vim.env[name] = nil
 end
 
+-- The machine's git configuration reaches every repository a spec creates: an
+-- `init.templatedir` copies its hooks into one, and the next commit there
+-- runs them, under the `$PATH` the spec narrowed. Specs see git as CI does.
+vim.env.GIT_CONFIG_GLOBAL = '/dev/null'
+vim.env.GIT_CONFIG_NOSYSTEM = '1'
+
 vim.opt.runtimepath = {
   root,
   dependency('plenary.nvim', 'https://github.com/nvim-lua/plenary.nvim'),

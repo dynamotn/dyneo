@@ -37,7 +37,8 @@ describe('tools.data', function()
     cleanup()
   end)
 
-  --- A `duckdb` that keeps its arguments and its script, and prints `lines`
+  --- A `duckdb` that keeps its arguments and its script, and prints `lines`;
+  --- `read` appears once the whole script is in
   local function duckdb(lines)
     h.write(
       dir .. '/bin/duckdb',
@@ -45,6 +46,7 @@ describe('tools.data', function()
         '#!/bin/sh',
         'echo "$@" > "' .. dir .. '/args"',
         'cat > "' .. dir .. '/script"',
+        ': > "' .. dir .. '/read"',
       }, lines or { 'echo ok' })
     )
     vim.fn.setfperm(dir .. '/bin/duckdb', 'rwxr-xr-x')
@@ -296,7 +298,7 @@ describe('tools.data', function()
     assert.is_true(
       vim.wait(
         5000,
-        function() return vim.uv.fs_stat(dir .. '/args') ~= nil end,
+        function() return vim.uv.fs_stat(dir .. '/read') ~= nil end,
         20
       )
     )

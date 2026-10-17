@@ -56,6 +56,15 @@ describe('tools.jira', function()
       assert.equals('', jira.slug('  !! '))
     end)
 
+    it('drops accents the same way whatever iconv the system has', function()
+      assert.equals('cafe-creme-ubung', jira.slug('Café Crème Übung'))
+      assert.equals(
+        'duong-uu-tien-o-cua-so',
+        jira.slug('ĐƯỜNG ưu tiên ở cửa sổ')
+      )
+      assert.equals('strasse-aeon', jira.slug('Straße Æon'))
+    end)
+
     it('cuts a long summary between words', function()
       local slug = jira.slug(
         'Rotate the database credentials of every service in the staging cluster'

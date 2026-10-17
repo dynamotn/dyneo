@@ -72,6 +72,41 @@ function M.parse(lines)
   return issues
 end
 
+--- The ASCII a lowercase Latin letter reads as once its accents are gone,
+--- by hand rather than through `iconv`: macOS's libiconv transliterates `ử`
+--- to `?` and `é` to `'e`, where glibc gives `u` and `e`.
+---@type table<string, string>
+local ACCENTS = {}
+for ascii, letters in pairs({
+  a = 'àáâãäåāăąǎạảấầẩẫậắằẳẵặ',
+  c = 'çćĉċč',
+  d = 'ďđ',
+  e = 'èéêëēĕėęěẹẻẽếềểễệ',
+  g = 'ĝğġģ',
+  h = 'ĥħ',
+  i = 'ìíîïĩīĭįıǐỉị',
+  j = 'ĵ',
+  k = 'ķ',
+  l = 'ĺļľŀł',
+  n = 'ñńņňŉ',
+  o = 'òóôõöøōŏőơǒọỏốồổỗộớờởỡợ',
+  r = 'ŕŗř',
+  s = 'śŝşšș',
+  t = 'ţťŧț',
+  u = 'ùúûüũūŭůűųưǔǖǘǚǜụủứừửữự',
+  w = 'ŵ',
+  y = 'ýÿŷỳỵỷỹ',
+  z = 'źżž',
+  ss = 'ß',
+  ae = 'æ',
+  oe = 'œ',
+  th = 'þ',
+}) do
+  for letter in letters:gmatch('[\192-\255][\128-\191]*') do
+    ACCENTS[letter] = ascii
+  end
+end
+
 --- `text` as the part of a branch name it can be: lowercase ASCII words
 --- joined by dashes, short enough to read
 ---
@@ -80,12 +115,8 @@ end
 ---@param text string
 ---@return string
 function M.slug(text)
-  -- `đ` has no decomposition to strip an accent from
-  text = text:gsub('đ', 'd'):gsub('Đ', 'D')
-  local ascii = vim.fn.iconv(text, 'utf-8', 'ascii//TRANSLIT')
-  if ascii == '' then ascii = text end
-  local slug =
-    ascii:lower():gsub('[^%w]+', '-'):gsub('^%-+', ''):gsub('%-+$', '')
+  local ascii = vim.fn.tolower(text):gsub('[\192-\255][\128-\191]*', ACCENTS)
+  local slug = ascii:gsub('[^%w]+', '-'):gsub('^%-+', ''):gsub('%-+$', '')
   if #slug > SLUG_WIDTH then
     slug = slug:sub(1, SLUG_WIDTH)
     -- A word cut in half reads worse than one left out

@@ -264,12 +264,14 @@ describe('tools.logview', function()
       vim.fn.setfperm(dir .. '/bin/journalctl', 'rwxr-xr-x')
       local path = vim.env.PATH
       vim.env.PATH = dir .. '/bin:' .. path
-      local restore = h.stub(logview, 'TIMEOUT', 300)
+      -- The deadline runs from the spawn: it has to leave a loaded machine
+      -- time to start the shell and print, or there is nothing to keep
+      local restore = h.stub(logview, 'TIMEOUT', 2000)
       logview.command({ fargs = { 'journal', '-f' } })
       local function shown()
         return table.concat(lines(), '\n'):find('tick', 1, true) ~= nil
       end
-      assert.is_true(vim.wait(5000, shown, 20))
+      assert.is_true(vim.wait(10000, shown, 20))
       restore()
       vim.env.PATH = path
     end)
