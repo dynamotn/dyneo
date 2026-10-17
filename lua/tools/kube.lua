@@ -96,8 +96,9 @@ local function run(command, dir, stdin, on_done)
         return notify(result.stderr, vim.log.levels.ERROR)
       end
       -- A child stopped at the output cap exits 0: what it printed is only
-      -- the start of a render, a diff or a list, never the whole of it
-      if result.cut then
+      -- the start of a render, a diff or a list, never the whole of it. One
+      -- stopped at the deadline printed nothing a caller can read either.
+      if result.cut or result.timed_out then
         local failure = require('util.system').failure(result, command[1])
         return notify(failure, vim.log.levels.ERROR)
       end
@@ -496,9 +497,15 @@ function M.explain()
       { timeout = M.EXPLAIN_TIMEOUT },
       function(result)
         if result.code ~= 0 then
-          if depth > 0 then return try(depth - 1) end
+          -- Only a field the schema lacks is worth a shallower question; a
+          -- cluster out of reach would only time out once more per level
+          local missing = (result.stderr or ''):find('does not exist', 1, true)
+          if depth > 0 and missing and not result.timed_out then
+            return try(depth - 1)
+          end
           return notify(
-            'kubectl explain failed:\n' .. vim.trim(result.stderr or ''),
+            'kubectl explain failed:\n'
+              .. require('util.system').failure(result, 'kubectl'),
             vim.log.levels.ERROR
           )
         end

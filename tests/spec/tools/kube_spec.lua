@@ -245,6 +245,35 @@ describe('tools.kube', function()
       end
     )
 
+    it('asks no shallower field of a cluster out of reach', function()
+      fake('kubectl', 'error: dial tcp 10.0.0.1:443: connection refused', 1)
+      vim.api.nvim_set_current_buf(h.buffer({
+        lines = {
+          'apiVersion: apps/v1',
+          'kind: Deployment',
+          'metadata:',
+          '  labels:',
+          '    app: web',
+        },
+      }))
+      vim.api.nvim_win_set_cursor(0, { 5, 4 })
+      kube.explain()
+      settle(1)
+      assert.equals(1, #logged())
+      assert.truthy(notes[1]:find('^kubectl explain failed'))
+    end)
+
+    it('says a command stopped at its deadline timed out', function()
+      h.write(dir .. '/bin/kubectl', { '#!/bin/sh', 'exec sleep 30' })
+      vim.fn.setfperm(dir .. '/bin/kubectl', 'rwxr-xr-x')
+      local restore = h.stub(kube, 'TIMEOUT', 300)
+      vim.cmd.edit(dir .. '/app/deploy.yaml')
+      kube.diff()
+      settle(1)
+      restore()
+      assert.equals('kubectl gave no answer in time', notes[1])
+    end)
+
     it('says so when nothing differs', function()
       fake('kubectl', '', 0)
       vim.cmd.edit(dir .. '/app/deploy.yaml')
