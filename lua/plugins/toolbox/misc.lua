@@ -1,9 +1,3 @@
-vim.filetype.add({
-  extension = {
-    ['http'] = 'http',
-  },
-})
-
 return {
   {
     -- Minimal HTTP client interface
