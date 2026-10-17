@@ -783,6 +783,7 @@ Other keys
 `<Down>`               nx     Down
 `<M-[>`                in     Prev Copilot Suggestion  (LSP: copilot)
 `<M-]>`                in     Next Copilot Suggestion  (LSP: copilot)
+`<M-s>`                c      Toggle Flash Search
 `<P`                   n      Put Before and Indent Left
 `<S-Down>`             nt     Navigate to down window
 `<S-Enter>`            c      Redirect Cmdline
@@ -799,7 +800,6 @@ Other keys
 `<c-_>`                nt     which_key_ignore
 `<c-b>`                ins    Scroll Backward
 `<c-f>`                ins    Scroll Forward
-`<c-s>`                c      Toggle Flash Search
 `<c-space>`            nox    Treesitter Incremental Selection
 `<c-w><space>`         n      Window Hydra Mode (which-key)
 `<esc>`                ins    Escape and Clear hlsearch
