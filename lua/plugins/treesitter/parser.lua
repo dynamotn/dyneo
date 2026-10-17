@@ -208,46 +208,6 @@ return {
           end
         end,
       })
-
-      -- Setup predicates
-      for predicate, regex in pairs(opts.custom_predicates or {}) do
-        require('vim.treesitter.query').add_predicate(
-          predicate,
-          function(_, _, bufnr, _)
-            local filepath = vim.api.nvim_buf_get_name(tonumber(bufnr) or 0)
-            local filename = vim.fn.fnamemodify(filepath, ':t')
-            if type(regex) == 'string' then
-              return string.match(filename, regex) == filename
-            elseif type(regex) == 'table' then
-              for _, r in ipairs(regex) do
-                if string.match(filename, r) == filename then return true end
-              end
-              return false
-            else
-              return false
-            end
-          end,
-          { force = true, all = false }
-        )
-      end
-
-      -- Predicates that ask what a buffer *is* rather than what it is called.
-      -- `ftdetect/filetype.lua` already knows that `.github/workflows/ci.yml`
-      -- is a workflow and that `.gitlab-ci.yml` is a pipeline; the file name
-      -- on its own does not, so a query that only applies to one CI flavour
-      -- matches on the filetype instead.
-      local filetype_predicates = opts.custom_filetype_predicates or {}
-      for predicate, filetypes in pairs(filetype_predicates) do
-        local wanted = type(filetypes) == 'table' and filetypes or { filetypes }
-        require('vim.treesitter.query').add_predicate(
-          predicate,
-          function(_, _, bufnr, _)
-            local buf = tonumber(bufnr) or 0
-            return vim.list_contains(wanted, vim.bo[buf].filetype)
-          end,
-          { force = true, all = false }
-        )
-      end
     end,
   },
 }
