@@ -14,6 +14,19 @@ return {
       },
       highlight = { timer = 150 },
     },
+    config = function(_, opts)
+      require('yanky').setup(opts)
+      -- The ring is `g:YANKY_HISTORY`, which shada's `!` keeps across
+      -- sessions and the picker lists: a yank from a buffer holding secrets
+      -- (a decrypted file, a `.env`) goes to the registers only, which
+      -- `tools.encrypted` keeps out of the shada file once it decrypted one
+      local history = require('yanky.history')
+      local push = history.push
+      history.push = function(item)
+        if require('util.sensitive').is_sensitive(0) then return end
+        return push(item)
+      end
+    end,
     keys = {
       {
         '<leader>yh',
