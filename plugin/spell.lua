@@ -101,18 +101,28 @@ local add_word = function(lang)
   end
 end
 
-vim.keymap.set(
-  { 'n', 'x' },
-  '<leader>zt',
-  function() add_word('technical') end,
-  { desc = 'Add word to technical' }
-)
-vim.keymap.set(
-  { 'n', 'x' },
-  '<leader>zp',
-  function() add_word('proper') end,
-  { desc = 'Add word to proper nouns' }
-)
+-- Through `map`, which needs lazy.nvim and Snacks: set once they are there,
+-- and not at all under `nvim --clean`, where `:DySpell` still works
+vim.api.nvim_create_autocmd('User', {
+  group = vim.api.nvim_create_augroup('dy_spell', { clear = true }),
+  pattern = 'VeryLazy',
+  once = true,
+  callback = function()
+    local map = require('util.plugin').safe_keymap_set
+    map(
+      { 'n', 'x' },
+      '<leader>zt',
+      function() add_word('technical') end,
+      { desc = 'Add word to technical' }
+    )
+    map(
+      { 'n', 'x' },
+      '<leader>zp',
+      function() add_word('proper') end,
+      { desc = 'Add word to proper nouns' }
+    )
+  end,
+})
 
 vim.api.nvim_create_user_command(
   'DySpell',

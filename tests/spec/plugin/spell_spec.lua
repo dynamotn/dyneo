@@ -2,7 +2,17 @@ local h = require('helpers')
 
 describe('plugin/spell', function()
   local dir, cleanup, restores, commands, messages, executed
-  local restore_cmd, record_cmd
+  local restore_cmd, record_cmd, mapped
+
+  --- Source the shim, then fire the `VeryLazy` it waits on for its mappings
+  local function load()
+    dofile(h.root .. '/plugin/spell.lua')
+    vim.api.nvim_exec_autocmds(
+      'User',
+      { group = 'dy_spell', pattern = 'VeryLazy' }
+    )
+  end
+
   before_each(function()
     h.globals()
     dir, cleanup = h.tmpdir()
@@ -30,9 +40,18 @@ describe('plugin/spell', function()
           },
         }
       end),
+      -- `map` stands for `util.plugin.safe_keymap_set`, which needs
+      -- lazy.nvim and Snacks
+      h.stub(package.loaded, 'util.plugin', {
+        safe_keymap_set = function(mode, lhs, rhs, opts)
+          table.insert(mapped, lhs)
+          vim.keymap.set(mode, lhs, rhs, opts)
+        end,
+      }),
     }
+    mapped = {}
     vim.g.mapleader = ' '
-    dofile(h.root .. '/plugin/spell.lua')
+    load()
     -- Loaded first, so the module keeps the real `vim.cmd`; only `mkspell`
     -- is recorded from here on
     restore_cmd = vim.cmd
@@ -93,6 +112,11 @@ describe('plugin/spell', function()
       vim.fn.maparg(' z' .. key, 'n', false, true).callback()
     end
 
+    it(
+      'maps through `map`, once lazy.nvim is up',
+      function() assert.are.same({ '<leader>zt', '<leader>zp' }, mapped) end
+    )
+
     it('adds the word under the cursor and rebuilds', function()
       add('t', 'Neovim')
       assert.are.same(
@@ -131,7 +155,7 @@ describe('plugin/spell', function()
         return stdpath(what)
       end)
       vim.cmd = restore_cmd
-      dofile(h.root .. '/plugin/spell.lua')
+      load()
       vim.cmd = record_cmd
 
       add('p', 'Dynamo')
