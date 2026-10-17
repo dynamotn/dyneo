@@ -7,7 +7,6 @@ return {
       ['markdown.gh'] = ' ',
       Avante = '󰚩 ',
     },
-    me = ' ',
     treesitter = {
       core = ' ',
       schema = '󰏃 ',
