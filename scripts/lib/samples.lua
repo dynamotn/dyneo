@@ -51,7 +51,6 @@ M.names_of = {
   ['bicep-params'] = 'sample.bicepparam',
   hyprlang = 'hypr/sample.conf',
   javascriptreact = 'sample.jsx',
-  ['json.openapi'] = 'openapi.json',
   just = 'justfile',
   likec4 = 'sample.c4',
   make = 'Makefile',
@@ -74,7 +73,6 @@ M.names_of = {
   ['yaml.gh-action'] = '.github/workflows/sample.yml',
   ['yaml.gitlab'] = 'sample.gitlab-ci.yml',
   ['yaml.helm-values'] = 'chart/values.yaml',
-  ['yaml.openapi'] = 'openapi.yaml',
 }
 
 --- `language/filetype` pairs no file name opens, and why: the sweep of
@@ -85,9 +83,11 @@ M.unopened = {
   ['bash/sh.install'] = 'told by the contents of a `*.install` file',
   ['ini/ini'] = 'Neovim opens a .ini file as `dosini`',
   ['javascript/javascript.jsx'] = 'Neovim opens a .jsx file as `javascriptreact`',
+  ['json/json.openapi'] = 'told by the `"openapi"` key of an `openapi*.json`',
   ['latex/plaintex'] = 'told by the contents of a .tex file',
   ['terraform/terraform'] = 'Neovim 0.13 opens a .tf file as `tf`',
   ['tsx/typescript.tsx'] = 'Neovim opens a .tsx file as `typescriptreact`',
+  ['yaml/yaml.openapi'] = 'told by the `openapi:` key of an `openapi*.yaml`',
 }
 
 --- Files a filetype is only given beside, written ahead of its sample:
