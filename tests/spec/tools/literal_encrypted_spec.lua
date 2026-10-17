@@ -441,6 +441,22 @@ describe('tools.encrypted', function()
     assert.is_truthy(notes[#notes]:find('Not written: no recipients', 1, true))
   end)
 
+  it('keeps a missing final newline of the clear text', function()
+    tool('chezmoi', {
+      'case "$1" in',
+      "  decrypt) printf 'token';;",
+      '  encrypt) cp "$4" "$3";;',
+      'esac',
+    })
+    local file = dir .. '/encrypted_dot_api.asc'
+    h.write(file, { 'ciphertext' })
+    local bufnr = open(file)
+    assert.same({ 'token' }, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { 'other' })
+    vim.cmd('write')
+    assert.same({ 'other' }, vim.fn.readfile(file, 'b'))
+  end)
+
   it('leaves an ordinary file alone', function()
     local file = dir .. '/plain.yaml'
     h.write(file, { 'a: 1' })

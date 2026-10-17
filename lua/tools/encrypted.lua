@@ -116,12 +116,13 @@ end
 --- A file only this user can read, holding `lines`, in Neovim's private
 --- temporary directory
 ---@param lines string[]
+---@param noeol? boolean Leave out the newline after the last line
 ---@return string
-local function private_copy(lines)
+local function private_copy(lines, noeol)
   local path = vim.fn.tempname()
   vim.fn.writefile({}, path)
   vim.fn.setfperm(path, 'rw-------')
-  vim.fn.writefile(lines, path)
+  vim.fn.writefile(lines, path, noeol and 'b' or '')
   return path
 end
 
@@ -160,7 +161,10 @@ function M.write(bufnr)
     return false
   end
 
-  local copy = private_copy(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
+  local copy = private_copy(
+    vim.api.nvim_buf_get_lines(bufnr, 0, -1, false),
+    not vim.bo[bufnr].endofline and not vim.bo[bufnr].fixendofline
+  )
   local command, env
   local extra = {}
   if kind == 'sops' then
@@ -266,6 +270,10 @@ local function decrypt_into(bufnr, kind, header, unchanged, on_done)
     vim.bo[bufnr].undolevels = -1
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, clear)
     vim.bo[bufnr].undolevels = undolevels
+    -- A key or a token without a final newline is written back without one
+    local eol = stdout:sub(-1) == '\n'
+    vim.bo[bufnr].endofline = eol
+    if not eol then vim.bo[bufnr].fixendofline = false end
     vim.bo[bufnr].modified = false
 
     vim.b[bufnr].dy_encrypted = kind
