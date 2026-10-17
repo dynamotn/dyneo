@@ -311,5 +311,37 @@ describe('tools.jira', function()
       )
       assert.equals('Switched to fix/OPS-12-login-fails', notes[#notes].msg)
     end)
+
+    it('stops a switch that hangs, and says so', function()
+      local real = vim.fn.exepath('git')
+      local bin = dir .. '/bin'
+      h.write(bin .. '/git', {
+        '#!/bin/sh',
+        'if [ "$3" = switch ]; then exec sleep 30; fi',
+        'exec "' .. real .. '" "$@"',
+      })
+      vim.fn.setfperm(bin .. '/git', 'rwxr-xr-x')
+      local path = vim.env.PATH
+      vim.env.PATH = bin .. ':' .. path
+      local restores = {
+        h.stub(jira, 'SWITCH_TIMEOUT', 300),
+        h.stub(
+          vim.ui,
+          'input',
+          function(_, on_confirm) on_confirm('fix/hang') end
+        ),
+      }
+      jira.branch({ key = 'OPS-1', type = 'Bug', status = '', summary = 'x' })
+      local done = vim.wait(10000, function() return #notes > 0 end)
+      vim.env.PATH = path
+      for _, restore in ipairs(restores) do
+        restore()
+      end
+      assert.is_true(done)
+      assert.equals(
+        'git switch fix/hang gave no answer in 0 min and was stopped',
+        notes[1].msg
+      )
+    end)
   end)
 end)

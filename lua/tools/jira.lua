@@ -258,27 +258,41 @@ function M.branch(issue)
         function(found)
           local exists = found.code == 0
           local args = exists and { 'switch', name } or { 'switch', '-c', name }
-          -- With no deadline: `:wait()` SIGKILLs on timeout, and a checkout
-          -- killed half-way leaves `index.lock` behind. Detached, so a hook
-          -- that prompts cannot fight the TUI for the terminal
-          vim.system(
+          local system = require('util.system')
+          -- A long deadline: a big checkout or a slow hook takes its time,
+          -- and the stop at the deadline is a SIGTERM, on which git removes
+          -- its `index.lock`. Detached, so a hook that prompts cannot fight
+          -- the TUI for the terminal
+          system.run(
             vim.list_extend({ 'git', '-C', dir }, args),
-            { text = true, detach = true },
-            vim.schedule_wrap(function(result)
+            { timeout = M.SWITCH_TIMEOUT, detach = true },
+            function(result)
+              if result.timed_out then
+                return notify(
+                  ('git switch %s gave no answer in %d min and was stopped'):format(
+                    name,
+                    M.SWITCH_TIMEOUT / 60000
+                  ),
+                  vim.log.levels.ERROR
+                )
+              end
               if result.code ~= 0 then
                 return notify(
-                  vim.trim(result.stderr or ''),
+                  system.failure(result, 'git switch'),
                   vim.log.levels.ERROR
                 )
               end
               notify((exists and 'Switched to ' or 'Started ') .. name)
-            end)
+            end
           )
         end
       )
     end
   )
 end
+
+--- Milliseconds `git switch` may take: a big checkout, or a slow hook
+M.SWITCH_TIMEOUT = 5 * 60 * 1000
 
 --- Log time spent on `key`, asked for along with a comment
 ---@param key string
