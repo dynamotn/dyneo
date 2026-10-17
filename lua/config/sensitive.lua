@@ -9,7 +9,8 @@ local function token(class) return class:rep(20) end
 
 ---@class DySensitiveConfig
 return {
-  --- Lua patterns matched against the file name alone
+  --- Lua patterns matched against the lower-cased file name alone: macOS
+  --- names `ID_RSA` and `id_rsa` the same file. Written in lower case.
   ---@type string[]
   name_patterns = {
     '%.env$', -- dotenv: `.env`, `prod.env`, and `.env.local`, `.env.test`, ...
@@ -30,12 +31,38 @@ return {
     '^%.pypirc$',
     '^%.vault%-token$',
     '^%.gitlab%.nvim$', -- gitlab.nvim's `auth_token=` file
+    '%.ppk$', -- PuTTY keys
+    '%.p8$', -- PKCS#8 keys (App Store Connect, APNs)
+    '%.jks$', -- Java keystores
+    '%.keystore$',
+    '%.kdbx$', -- KeePass databases
+    '^%.htpasswd$',
+    '^kubeconfig$', -- cluster credentials outside `~/.kube`
+    '^kubeconfig%.ya?ml$',
+    '%.kubeconfig$',
+    '^application_default_credentials%.json$', -- gcloud
+    '^credentials%.tfrc%.json$', -- Terraform Cloud token
+    -- Terraform state holds every secret of what it manages in clear text.
+    -- `*.tfvars` is left to the content rules: it is as often a committed
+    -- list of sizes and regions, and a name rule cannot be waived.
+    '%.tfstate$',
+    '%.tfstate%.backup$',
+  },
+  --- Lua patterns matched against the end of the lower-cased full path, for
+  --- files whose name alone is too common to hold back
+  ---@type string[]
+  path_patterns = {
+    '/%.cargo/credentials%.toml$',
+    '/%.cargo/credentials$',
+    '/%.gem/credentials$',
   },
   --- Directory names: every file below one of them is sensitive, whatever it
   --- is called, because they hold credentials under ordinary names (`config`,
-  --- `credentials`, `data/...`).
+  --- `credentials`, `data/...`). Keys are lower case and matched against the
+  --- lower-cased name, the directory itself included.
   ---@type table<string, boolean>
   dirs = {
+    ['.password-store'] = true,
     ['.ssh'] = true,
     ['.gnupg'] = true,
     ['.aws'] = true,
@@ -76,6 +103,22 @@ return {
   ---@type { name: string, pattern: string }[]
   content_patterns = {
     { name = 'private key block', pattern = 'BEGIN [%u ]*PRIVATE KEY' },
+    -- The same block in base64, as a Kubernetes Secret or a kubeconfig's
+    -- `client-key-data` holds it: `-----BEGIN ` and then ` PRIVATE K` at each
+    -- of the three offsets base64 can put it at. A base64 certificate
+    -- (`certificate-authority-data`) is public and matches none of them.
+    {
+      name = 'base64 private key',
+      pattern = 'LS0tLS1CRUdJTi[%w+/]-UFJJVkFURSBL',
+    },
+    {
+      name = 'base64 private key',
+      pattern = 'LS0tLS1CRUdJTi[%w+/]-QUklWQVRF',
+    },
+    {
+      name = 'base64 private key',
+      pattern = 'LS0tLS1CRUdJTi[%w+/]-SVZBVEUg',
+    },
     { name = 'age secret key', pattern = 'AGE%-SECRET%-KEY%-1[%u%d]+' },
     { name = 'AWS access key', pattern = 'A[KS]IA[%u%d][%u%d][%u%d][%u%d]+' },
     { name = 'GitHub token', pattern = '%f[%w]gh[pousr]_' .. token('%w') },

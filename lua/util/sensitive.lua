@@ -14,15 +14,22 @@ local M = {}
 ---@param path string Absolute, normalized path
 ---@return boolean
 local function path_is_sensitive(path)
+  -- Lower case throughout: on macOS `~/.SSH/ID_RSA` is the same file
+  path = path:lower()
   local name = vim.fs.basename(path)
   for _, pattern in ipairs(config.name_patterns) do
     if name:match(pattern) then return true end
   end
+  for _, pattern in ipairs(config.path_patterns) do
+    if path:match(pattern) then return true end
+  end
+  -- The path itself as well: `~/.ssh` handed over as a directory is all of it
+  if config.dirs[name] then return true end
   for dir in vim.fs.parents(path) do
     if config.dirs[vim.fs.basename(dir)] then return true end
   end
   for _, root in ipairs(config.paths) do
-    root = vim.fs.normalize(root)
+    root = vim.fs.normalize(root):lower()
     if path == root or vim.startswith(path, root .. '/') then return true end
   end
   return false
@@ -180,6 +187,10 @@ local function secrets_in_buffer(bufnr)
   return vim.deepcopy(scan.found), false
 end
 
+--- The namespace of `betterleaks`' diagnostics, `false` while it has none
+---@type integer|false|nil
+local leaks_namespace
+
 --- What `betterleaks` found in a buffer, as its diagnostics
 ---
 --- `betterleaks` already runs over every buffer as a linter of its own, with
@@ -194,11 +205,21 @@ end
 --- read: `vim.diagnostic.get` copies every diagnostic it hands back.
 ---@param bufnr integer
 ---@return { name: string, line: integer }[]
-local leaks_namespace
 local function leaks_in_buffer(bufnr)
   local found = {}
-  -- Asked per keystroke, and `nvim_get_namespaces` builds the whole table
-  leaks_namespace = leaks_namespace or vim.api.nvim_get_namespaces().betterleaks
+  -- Asked per keystroke, and `nvim_get_namespaces` builds the whole table:
+  -- a miss is kept too, until the next diagnostics arrive, which is the
+  -- earliest the linter can have made its namespace
+  if leaks_namespace == nil then
+    leaks_namespace = vim.api.nvim_get_namespaces().betterleaks or false
+    if not leaks_namespace then
+      vim.api.nvim_create_autocmd('DiagnosticChanged', {
+        group = vim.api.nvim_create_augroup('dy_sensitive', { clear = true }),
+        once = true,
+        callback = function() leaks_namespace = nil end,
+      })
+    end
+  end
   if not leaks_namespace then return found end
   for _, diagnostic in
     ipairs(vim.diagnostic.get(bufnr, { namespace = leaks_namespace }))

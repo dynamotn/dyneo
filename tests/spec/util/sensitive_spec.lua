@@ -35,6 +35,22 @@ describe('util.sensitive', function()
       '.pypirc',
       '.vault-token',
       '.gitlab.nvim',
+      'putty.ppk',
+      'AuthKey_ABC123.p8',
+      'release.jks',
+      'debug.keystore',
+      'vault.kdbx',
+      '.htpasswd',
+      'kubeconfig',
+      'kubeconfig.yaml',
+      'prod.kubeconfig',
+      'application_default_credentials.json',
+      'credentials.tfrc.json',
+      'terraform.tfstate',
+      'terraform.tfstate.backup',
+      'ID_RSA',
+      '.ENV',
+      'Server.KEY',
     }) do
       it(
         'flags a file named ' .. name,
@@ -50,6 +66,10 @@ describe('util.sensitive', function()
       'id_rsa.pub',
       'keymap.lua',
       'envrc.example',
+      'terraform.tfvars',
+      'kubeconfig.go',
+      'credentials.toml',
+      'credentials',
     }) do
       it(
         'leaves an ordinary file named ' .. name,
@@ -73,6 +93,31 @@ describe('util.sensitive', function()
           assert.is_true(
             sensitive.is_sensitive_path(dir .. '/' .. sub .. '/deep/config')
           )
+        end
+      )
+    end
+
+    for _, sub in ipairs({ '.ssh', '.aws', 'secrets', '.password-store' }) do
+      it('flags a ' .. sub .. ' directory itself', function()
+        assert.is_true(sensitive.is_sensitive_path(dir .. '/' .. sub))
+        assert.is_true(sensitive.is_sensitive_path(dir .. '/' .. sub .. '/'))
+      end)
+    end
+
+    it('flags a sensitive directory in another case', function()
+      assert.is_true(sensitive.is_sensitive_path(dir .. '/.SSH/config'))
+      assert.is_true(sensitive.is_sensitive_path(dir .. '/Secrets/x.yaml'))
+    end)
+
+    for _, rel in ipairs({
+      '.cargo/credentials.toml',
+      '.cargo/credentials',
+      '.gem/credentials',
+    }) do
+      it(
+        'flags ' .. rel .. ' by where it is',
+        function()
+          assert.is_true(sensitive.is_sensitive_path(dir .. '/' .. rel))
         end
       )
     end
@@ -146,6 +191,30 @@ describe('util.sensitive', function()
         'AWS access key',
         sensitive.secret_format('AKIAIOSFODNN7EXAMPLE')
       )
+    end)
+
+    it('names a private key held in base64', function()
+      for _, header in ipairs({
+        'RSA PRIVATE KEY',
+        'PRIVATE KEY',
+        'EC PRIVATE KEY',
+        'OPENSSH PRIVATE KEY',
+        'ENCRYPTED PRIVATE KEY',
+      }) do
+        local line = '  client-key-data: '
+          .. vim.base64.encode(('-----BEGIN %s-----\nMIIE'):format(header))
+        assert.are.equal(
+          'base64 private key',
+          sensitive.secret_format(line),
+          header
+        )
+      end
+    end)
+
+    it('leaves a certificate held in base64', function()
+      local line = 'certificate-authority-data: '
+        .. vim.base64.encode('-----BEGIN CERTIFICATE-----\nMIIC')
+      assert.is_nil(sensitive.secret_format(line))
     end)
 
     it('says nothing about an ordinary value', function()
@@ -309,6 +378,31 @@ describe('util.sensitive', function()
         },
       })
     end
+
+    it(
+      'looks for the betterleaks namespace once per diagnostics change',
+      function()
+        -- Forget whatever an earlier spec left cached
+        vim.api.nvim_exec_autocmds('DiagnosticChanged', {})
+        local calls = 0
+        local get = vim.api.nvim_get_namespaces
+        local restore = h.stub(vim.api, 'nvim_get_namespaces', function()
+          calls = calls + 1
+          local namespaces = get()
+          namespaces.betterleaks = nil
+          return namespaces
+        end)
+        local bufnr = h.buffer({ lines = { 'a' } })
+        sensitive.is_sensitive(bufnr)
+        sensitive.is_sensitive(bufnr)
+        local before = calls
+        vim.api.nvim_exec_autocmds('DiagnosticChanged', {})
+        sensitive.is_sensitive(bufnr)
+        restore()
+        assert.are.equal(1, before)
+        assert.are.equal(2, calls)
+      end
+    )
 
     it('flags a buffer betterleaks has found something in', function()
       local bufnr =
