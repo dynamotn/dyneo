@@ -188,6 +188,325 @@ function M.expand(code, values)
   )
 end
 
+--- The environment variable an input is handed over in: `RUNBOOK_` and its
+--- name in upper case, with anything a variable name cannot hold made `_`
+---@param name string
+---@return string
+function M.env_name(name) return 'RUNBOOK_' .. name:upper():gsub('[^%w]', '_') end
+
+--- Where each `${input:…}` of `code` sits, by the quoting a shell, Python or
+--- JavaScript reads there, keyed by the offset it starts at
+---
+--- A context is `none` (bare code), `single`, `double`, `heredoc` (a body
+--- the shell expands), `literal` (one it does not), `template` (a JS
+--- template literal) or `fstring`; a Python or JS string also gives where
+--- the literal opens and closes, its quote and prefix, so it can be rebuilt.
+---@class DyRunbookSpot
+---@field context string
+---@field quote? string
+---@field prefix? string
+---@field from? integer Offset of the literal's first character, prefix included
+---@field to? integer Offset of its last character
+
+---@param code string
+---@param family 'shell'|'python'|'js'
+---@return table<integer, DyRunbookSpot>
+local function spots(code, family)
+  local found = {}
+  local i, n = 1, #code
+  -- Shell: a stack of frames, since `$(` opens a fresh quoting context
+  -- inside a double-quoted string
+  local stack = { { state = 'none', depth = 0 } }
+  local heredocs, heredoc = {}, nil
+  -- Python and JS: the string being read
+  local str
+  while i <= n do
+    local frame = stack[#stack]
+    if code:find('^%${input:[%w_%-%.]+}', i) then
+      local spot
+      if family == 'shell' then
+        spot = {
+          context = heredoc and (heredoc.quoted and 'literal' or 'heredoc')
+            or frame.state,
+        }
+      elseif str then
+        spot = {
+          context = str.kind,
+          quote = str.quote,
+          prefix = str.prefix,
+          from = str.from,
+        }
+        table.insert(str.spots, spot)
+      else
+        spot = { context = 'none' }
+      end
+      found[i] = spot
+      i = code:find('}', i, true) + 1
+    elseif family == 'shell' and heredoc then
+      local eol = code:find('\n', i, true) or n + 1
+      local line = code:sub(i, eol - 1)
+      local bol = i == 1 or code:sub(i - 1, i - 1) == '\n'
+      if
+        bol
+        and (heredoc.strip and line:gsub('^\t+', '') or line) == heredoc.word
+      then
+        heredoc = table.remove(heredocs, 1)
+        i = eol + 1
+      else
+        -- A placeholder within the line is found on the next pass
+        local at = line:find('${input:', 1, true)
+        i = at and i + at - 1 or eol + 1
+      end
+    elseif family == 'shell' then
+      local c = code:sub(i, i)
+      if frame.state == 'single' then
+        if c == "'" then frame.state = 'none' end
+        i = i + 1
+      elseif c == '\\' then
+        i = i + 2
+      elseif frame.state == 'double' then
+        if c == '"' then
+          frame.state = 'none'
+        elseif code:sub(i, i + 1) == '$(' then
+          table.insert(stack, { state = 'none', depth = 1 })
+          i = i + 1
+        end
+        i = i + 1
+      elseif c == "'" then
+        frame.state = 'single'
+        i = i + 1
+      elseif c == '"' then
+        frame.state = 'double'
+        i = i + 1
+      elseif c == '#' and (i == 1 or code:sub(i - 1, i - 1):match('%s')) then
+        i = code:find('\n', i, true) or n + 1
+      elseif code:sub(i, i + 1) == '<<' and code:sub(i + 2, i + 2) ~= '<' then
+        local strip, quote, word, rest =
+          code:match('^<<(%-?)%s*([\'"]?)([%w_]+)[\'"]?()', i)
+        if word then
+          table.insert(heredocs, {
+            word = word,
+            strip = strip == '-',
+            quoted = quote ~= '',
+          })
+          i = rest
+        else
+          i = i + 2
+        end
+      elseif c == '\n' and #heredocs > 0 then
+        heredoc = table.remove(heredocs, 1)
+        i = i + 1
+      elseif c == '(' and #stack > 1 then
+        frame.depth = frame.depth + 1
+        i = i + 1
+      elseif c == ')' and #stack > 1 then
+        frame.depth = frame.depth - 1
+        if frame.depth == 0 then table.remove(stack) end
+        i = i + 1
+      else
+        i = i + 1
+      end
+    elseif str then
+      local c = code:sub(i, i)
+      if c == '\\' then
+        i = i + 2
+      elseif code:sub(i, i + #str.quote - 1) == str.quote then
+        for _, spot in ipairs(str.spots) do
+          spot.to = i + #str.quote - 1
+        end
+        i = i + #str.quote
+        str = nil
+      elseif c == '\n' and #str.quote == 1 and str.kind ~= 'template' then
+        str = nil
+        i = i + 1
+      else
+        i = i + 1
+      end
+    else
+      local c = code:sub(i, i)
+      if
+        (family == 'python' and c == '#')
+        or (family == 'js' and code:sub(i, i + 1) == '//')
+      then
+        i = code:find('\n', i, true) or n + 1
+      elseif family == 'js' and code:sub(i, i + 1) == '/*' then
+        local close = code:find('*/', i + 2, true)
+        i = close and close + 2 or n + 1
+      elseif c == '"' or c == "'" or (family == 'js' and c == '`') then
+        local quote = c
+        if family == 'python' and code:sub(i, i + 2) == c:rep(3) then
+          quote = c:rep(3)
+        end
+        local prefix = ''
+        if family == 'python' then
+          prefix = code:sub(1, i - 1):match('([rRbBfFuU]?[rRbBfFuU]?)$')
+          -- `xr"…"` is a name followed by a string, not a prefix
+          if prefix ~= '' and code:sub(1, i - 1 - #prefix):match('[%w_]$') then
+            prefix = ''
+          end
+        end
+        local kind = c == '`' and 'template'
+          or prefix:lower():find('f') and 'fstring'
+          or 'string'
+        str = {
+          kind = kind,
+          quote = quote,
+          prefix = prefix,
+          from = i - #prefix,
+          spots = {},
+        }
+        i = i + #quote
+      else
+        i = i + 1
+      end
+    end
+  end
+  return found
+end
+
+--- Which quoting a language reads its blocks with
+---@type table<string, 'shell'|'python'|'js'>
+local FAMILIES = {
+  sh = 'shell',
+  shell = 'shell',
+  bash = 'shell',
+  console = 'shell',
+  zsh = 'shell',
+  fish = 'shell',
+  python = 'python',
+  py = 'python',
+  javascript = 'js',
+  js = 'js',
+}
+
+--- `code` with each input read from the environment, and that environment
+---
+--- A typed value never becomes code: in `ps` it would show to every user
+--- of the machine, and a quote or a `$(…)` in it would be run. Each input
+--- is the variable `M.env_name` gives, read as one word where it stands --
+--- bare, inside quotes, in a heredoc, in a Python or JS string -- so
+--- `${input:flags}` is one argument, never split. Only a heredoc the shell
+--- does not expand (`<<'EOF'`) gets the value as text, since nothing there
+--- reads a variable.
+---@param code string
+---@param lang string
+---@param values table<string, string>
+---@return string code
+---@return table<string, string> env
+function M.bind(code, lang, values)
+  local family = FAMILIES[lang] or 'shell'
+  local env, owner = {}, {}
+  local function var(name)
+    local base = M.env_name(name)
+    local var, n = base, 1
+    while owner[var] and owner[var] ~= name do
+      n = n + 1
+      var = base .. '_' .. n
+    end
+    owner[var], env[var] = name, values[name]
+    return var
+  end
+  -- Named in the order they appear, so a clash is numbered the same way
+  -- every run
+  for _, name in ipairs(M.inputs(code)) do
+    var(name)
+  end
+  ---@param name string
+  ---@return string
+  local function read(name)
+    local v = var(name)
+    if family == 'python' then
+      return ("__import__('os').environ['%s']"):format(v)
+    end
+    return ("process.env['%s']"):format(v)
+  end
+  -- Non-overlapping `{ from, to, text }`, applied from the end
+  local edits, rebuilt = {}, {}
+  for at, spot in pairs(spots(code, family)) do
+    local name, e = code:match('^%${input:([%w_%-%.]+)}()', at)
+    if spot.context == 'string' and spot.to then
+      -- A Python or JS string holding an input is rebuilt whole, as
+      -- concatenated pieces in parentheses
+      if not rebuilt[spot.from] then
+        rebuilt[spot.from] = true
+        local open = #spot.prefix + #spot.quote
+        local body = code:sub(spot.from + open, spot.to - #spot.quote)
+        local lit = function(text)
+          return spot.prefix .. spot.quote .. text .. spot.quote
+        end
+        local pieces, last = {}, 1
+        for s, n, f in body:gmatch('()%${input:([%w_%-%.]+)}()') do
+          if s > last then table.insert(pieces, lit(body:sub(last, s - 1))) end
+          local bytes = family == 'python' and spot.prefix:lower():find('b')
+          table.insert(pieces, read(n) .. (bytes and '.encode()' or ''))
+          last = f
+        end
+        if last <= #body then table.insert(pieces, lit(body:sub(last))) end
+        table.insert(edits, {
+          spot.from,
+          spot.to,
+          '(' .. table.concat(pieces, ' + ') .. ')',
+        })
+      end
+    else
+      local text
+      local v = family == 'shell' and var(name)
+      if spot.context == 'fstring' then
+        -- The other quote than the string's: Python before 3.12 allows
+        -- no reuse of it inside
+        text = '{' .. read(name) .. '}'
+        if spot.quote:sub(1, 1) == "'" then text = text:gsub("'", '"') end
+      elseif spot.context == 'template' then
+        text = '${' .. read(name) .. '}'
+      elseif family ~= 'shell' then
+        text = read(name)
+      elseif spot.context == 'literal' then
+        text = values[name]
+      elseif lang == 'fish' then
+        -- Fish never splits a variable; a quote ends a string around it
+        text = spot.context == 'single' and ([['"$%s"']]):format(v)
+          or ('"$%s"'):format(v)
+      elseif spot.context == 'double' or spot.context == 'heredoc' then
+        text = ('${%s}'):format(v)
+      elseif spot.context == 'single' then
+        text = ([['"${%s}"']]):format(v)
+      else
+        text = ('"${%s}"'):format(v)
+      end
+      table.insert(edits, { at, e - 1, text })
+    end
+  end
+  table.sort(edits, function(x, y) return x[1] > y[1] end)
+  for _, edit in ipairs(edits) do
+    code = code:sub(1, edit[1] - 1) .. edit[3] .. code:sub(edit[2] + 1)
+  end
+  return code, env
+end
+
+--- `text` with every value of `secrets` replaced by `***`
+---@param text string
+---@param secrets string[]
+---@return string
+function M.redact(text, secrets)
+  for _, secret in ipairs(secrets) do
+    if secret ~= '' then
+      text = text:gsub(vim.pesc(secret), function() return '***' end)
+    end
+  end
+  return text
+end
+
+--- Whether an input named `name` is typed hidden and kept out of the output
+---@param name string
+---@return boolean
+function M.is_hidden(name)
+  local lower = name:lower()
+  -- `db_pass`, `ssh_key`: shorter than any key pattern of `util.sensitive`
+  return require('util.sensitive').is_secret_key(name)
+    or lower:find('pass') ~= nil
+    or lower:find('key') ~= nil
+end
+
 --- Hand `on_values` a value for each of `names`: kept from earlier in this
 --- buffer, else asked for. Nil when one is not given.
 ---@param bufnr integer
@@ -203,11 +522,7 @@ function M.ask_inputs(bufnr, names, on_values)
     if values[name] ~= nil then return next_input() end
     -- `vim.ui.input` (Snacks) and `input()` both keep a history on disk;
     -- `inputsecret` keeps none, and shows nothing while it is typed
-    local lower = name:lower()
-    local hidden = lower:find('pass')
-      or lower:find('secret')
-      or lower:find('token')
-      or lower:find('key')
+    local hidden = M.is_hidden(name)
     local function got(value)
       if value == nil then return on_values(nil) end
       values[name] = value
@@ -563,22 +878,41 @@ function M.run_block(bufnr, block, on_done)
     if not values or not vim.api.nvim_buf_is_valid(bufnr) then
       return on_done(false)
     end
-    -- Expanded first: what is checked is what runs. The record keeps the
-    -- code as written, so no typed value -- a password, a token -- is
-    -- written to disk
-    start(bufnr, block, runner, M.expand(code, values), on_done, code)
+    local bound, env = M.bind(code, block.lang, values)
+    local secrets = {}
+    for name, value in pairs(values) do
+      if M.is_hidden(name) then table.insert(secrets, value) end
+    end
+    -- Longest first, so one secret holding another is hidden whole
+    table.sort(secrets, function(a, b) return #a > #b end)
+    start(bufnr, block, runner, {
+      code = bound,
+      env = env,
+      -- What is checked is what runs, values filled in
+      checked = M.expand(code, values),
+      -- The record keeps the code as written, so no typed value -- a
+      -- password, a token -- is written to disk
+      written = code,
+      secrets = secrets,
+    }, on_done)
   end)
 end
+
+---@class DyRunbookCode
+---@field code string As it runs, inputs read from `env`
+---@field env table<string, string>
+---@field checked string Inputs filled in, what the danger check reads
+---@field written string As written, what the record keeps
+---@field secrets string[] The values of hidden inputs, kept out of the output
 
 --- Run `code` of `block`, once its inputs are in
 ---@param bufnr integer
 ---@param block DyRunbookBlock
 ---@param runner string[]
----@param code string As it runs, inputs filled in
+---@param code DyRunbookCode
 ---@param on_done fun(ok: boolean)
----@param written? string As written, what the record keeps
-start = function(bufnr, block, runner, code, on_done, written)
-  local danger = M.danger(code)
+start = function(bufnr, block, runner, code, on_done)
+  local danger = M.danger(code.checked)
   if danger then
     local answer = vim.fn.confirm(
       ('This block runs `%s`. Run it?'):format(danger),
@@ -595,7 +929,7 @@ start = function(bufnr, block, runner, code, on_done, written)
   })
   local name = vim.api.nvim_buf_get_name(bufnr)
   local cwd = name ~= '' and vim.fs.dirname(name) or vim.uv.cwd()
-  local command = vim.list_extend(vim.deepcopy(runner), { code })
+  local command = vim.list_extend(vim.deepcopy(runner), { code.code })
 
   -- Declared ahead, so the exit callback can find itself in `running`
   ---@type vim.SystemObj?
@@ -605,6 +939,7 @@ start = function(bufnr, block, runner, code, on_done, written)
   -- stopping it reaches what it started
   process = require('util.system').run(command, {
     cwd = cwd,
+    env = code.env,
     detach = true,
     timeout = M.TIMEOUT,
     max_bytes = M.MAX_OUTPUT,
@@ -616,12 +951,19 @@ start = function(bufnr, block, runner, code, on_done, written)
       function(p) return p ~= process end,
       running[bufnr] or {}
     )
+    -- What a command echoes of a hidden input lands in the Markdown file
+    -- and the record otherwise
+    for _, stream in ipairs({ 'stdout', 'stderr' }) do
+      if result[stream] then
+        result[stream] = M.redact(result[stream], code.secrets)
+      end
+    end
     local output = M.render(result)
     local done = pcall(place, bufnr, mark, block.indent, output)
     record(bufnr, {
       line = block.open,
       lang = block.lang,
-      code = written or code,
+      code = code.written,
       output = output,
       code_status = result.code,
       signal = result.signal,

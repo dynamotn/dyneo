@@ -462,7 +462,7 @@ describe('tools.runbook', function()
           settle(function() return finished ~= nil end)
           assert.is_true(finished)
           assert.same(
-            { '```output', 'hunter2', '```' },
+            { '```output', '***', '```' },
             vim.api.nvim_buf_get_lines(bufnr, 4, 7, false)
           )
 
@@ -477,6 +477,155 @@ describe('tools.runbook', function()
           end
         end
       )
+
+      it('hides a secret by the names `util.sensitive` knows', function()
+        assert.is_truthy(runbook.is_hidden('api_key'))
+        assert.is_truthy(runbook.is_hidden('DB_PASS'))
+        assert.is_truthy(runbook.is_hidden('credentials'))
+        assert.is_falsy(runbook.is_hidden('namespace'))
+      end)
+
+      it('hands each input over in the environment, never as code', function()
+        local value = [[a b' "c" $(touch pwned) `id`]]
+        local code, env = runbook.bind(
+          table.concat({
+            'echo ${input:who} "in ${input:who}" \'${input:who}\'',
+            'echo "$(echo "${input:who}")" # it\'s fine',
+            'cat <<EOF',
+            "it's ${input:who}",
+            'EOF',
+            "cat <<'EOF'",
+            'as text ${input:who}',
+            'EOF',
+          }, '\n'),
+          'bash',
+          { who = value }
+        )
+        assert.same({ RUNBOOK_WHO = value }, env)
+        assert.same({
+          [[echo "${RUNBOOK_WHO}" "in ${RUNBOOK_WHO}" ''"${RUNBOOK_WHO}"'']],
+          [[echo "$(echo "${RUNBOOK_WHO}")" # it's fine]],
+          'cat <<EOF',
+          "it's ${RUNBOOK_WHO}",
+          'EOF',
+          "cat <<'EOF'",
+          'as text ' .. value,
+          'EOF',
+        }, vim.split(code, '\n', { plain = true }))
+        assert.equals(
+          [[echo "$RUNBOOK_A_B" ''"$RUNBOOK_A_B"'' "x "$RUNBOOK_A_B_2""]],
+          (
+            runbook.bind(
+              [[echo ${input:a.b} '${input:a.b}' "x ${input:a-b}"]],
+              'fish',
+              { ['a.b'] = '1', ['a-b'] = '2' }
+            )
+          )
+        )
+      end)
+
+      it('reads an input in Python and JS strings as one value', function()
+        assert.equals(
+          [[print(("x " + __import__('os').environ['RUNBOOK_A'] + "!").upper(), ]]
+            .. [[f'{__import__("os").environ["RUNBOOK_A"]}', ]]
+            .. [[__import__('os').environ['RUNBOOK_A']) # ${input:a}]],
+          (
+            runbook.bind(
+              [[print("x ${input:a}!".upper(), f'${input:a}', ${input:a}) # ${input:a}]],
+              'python',
+              { a = '1' }
+            )
+          )
+        )
+        assert.equals(
+          [[log(('x ' + process.env['RUNBOOK_A']), `y ${process.env['RUNBOOK_A']}`)]],
+          (
+            runbook.bind(
+              [[log('x ${input:a}', `y ${input:a}`)]],
+              'js',
+              { a = '1' }
+            )
+          )
+        )
+      end)
+
+      it('runs a value with quotes and `$(…)` as it was typed', function()
+        local bufnr = buffer({
+          '```bash',
+          'echo "[${input:who}]" ${input:who}',
+          '```',
+          '```python',
+          'print("<${input:who}>")',
+          '```',
+        })
+        local value = [[it's $(echo no) "x"]]
+        local restore = h.stub(
+          vim.ui,
+          'input',
+          function(_, on_confirm) on_confirm(value) end
+        )
+        local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+        local finished
+        runbook.run_block(
+          bufnr,
+          runbook.block_at(lines, 2),
+          function(ok) finished = ok end
+        )
+        settle(function() return finished ~= nil end)
+        assert.is_true(finished)
+        assert.equals(
+          '[' .. value .. '] ' .. value,
+          vim.api.nvim_buf_get_lines(bufnr, 5, 6, false)[1]
+        )
+        if vim.fn.executable('python3') == 1 then
+          lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+          finished = nil
+          runbook.run_block(
+            bufnr,
+            runbook.block_at(lines, 9),
+            function(ok) finished = ok end
+          )
+          settle(function() return finished ~= nil end)
+          assert.is_true(finished)
+          assert.equals(
+            '<' .. value .. '>',
+            vim.api.nvim_buf_get_lines(bufnr, 12, 13, false)[1]
+          )
+        end
+        restore()
+      end)
+
+      it('keeps a hidden value out of the output and the record', function()
+        local bufnr = buffer({
+          '```sh',
+          'echo "token=${input:api_token} again ${input:api_token}" >&2',
+          '```',
+        })
+        local restores = {
+          h.stub(vim.fn, 'inputsecret', function() return 's3cr.t' end),
+          h.stub(vim.fn, 'stdpath', function() return dir end),
+          h.stub(vim, 'notify', function() end),
+        }
+        runbook.record()
+        local log = vim.b[bufnr].dy_runbook_log
+        local finished
+        runbook.run_block(
+          bufnr,
+          runbook.block_at(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), 2),
+          function(ok) finished = ok end
+        )
+        settle(function() return finished ~= nil end)
+        for _, restore in ipairs(restores) do
+          restore()
+        end
+        assert.equals(
+          'token=*** again ***',
+          vim.api.nvim_buf_get_lines(bufnr, 5, 6, false)[1]
+        )
+        local text = table.concat(vim.fn.readfile(log), '\n')
+        assert.is_falsy(text:find('s3cr.t', 1, true))
+        assert.is_truthy(text:find('token=*** again ***', 1, true))
+      end)
 
       it('runs nothing when an input is not given', function()
         local bufnr = buffer({ '```sh', 'echo ${input:x}', '```' })

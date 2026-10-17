@@ -785,9 +785,14 @@ what is running.  A block that deletes, destroys or reaches for root asks
 first.  See |:DyRunbook|.
 
 A block can leave a value to the moment it runs: `${input:name}` is asked
-for once per buffer and filled in, everywhere it appears, before the block
-is checked for what it would destroy -- the check sees the command that
-runs.  `<localleader>I` (`:DyRunbook inputs`) forgets the values typed.
+for once per buffer, and the block is checked for what it would destroy
+with the value filled in -- the check sees the command that runs.  The
+value itself never becomes code: it is handed over in the environment, as
+`RUNBOOK_NAME`, and read there as one word wherever the input stands --
+bare, in quotes, in a heredoc, in a Python or JS string -- so a quote or a
+`$(…)` in it is never run, and it never shows in `ps`.  An input is one
+argument, never split into several.  Only in a heredoc the shell does not
+expand (`<<'EOF'`) is the value written in as text.  `<localleader>I` (`:DyRunbook inputs`) forgets the values typed.
 `<localleader>F` runs every block from the one under the cursor down, where
 a runbook is picked up after a step failed and was fixed.
 
@@ -797,8 +802,10 @@ long it took, the code as written and what it printed, to a Markdown file
 under `stdpath('state')/dyneo/runbook/` that only its owner can read -- the
 timeline of an incident, written as it happens.  The code keeps its
 `${input:…}`: a value typed for one is never written to the record, and one
-whose name says `pass`, `secret`, `token` or `key` is typed hidden and kept
-out of the input history as well.
+whose name says `pass`, `key` or what `util.sensitive` takes for a secret
+(`secret`, `token`, `credential`, ...) is typed hidden, kept out of the
+input history, and shown as `***` wherever the output, in the file or in the
+record, prints it.
 
 7.2 Logs                                                          *dyneo-logs*
 
