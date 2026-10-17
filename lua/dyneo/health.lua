@@ -39,6 +39,14 @@ local function config_home()
     or vim.fs.joinpath(vim.env.HOME or '~', '.config')
 end
 
+--- Where bun reads its global config: the config home only when
+--- `XDG_CONFIG_HOME` names one, the home directory otherwise
+---@return string
+local function bunfig_path()
+  local dir = vim.env.XDG_CONFIG_HOME or vim.env.HOME or '~'
+  return vim.fs.joinpath(dir, '.bunfig.toml')
+end
+
 ---@param seconds integer
 ---@return string
 local function days(seconds) return ('%.0f days'):format(seconds / DAY) end
@@ -191,7 +199,7 @@ local function tool_windows()
   local entries = {}
   local expected = window()
 
-  local bunfig = read(vim.fs.joinpath(config_home(), '.bunfig.toml'))
+  local bunfig = read(bunfig_path())
   if not bunfig then
     table.insert(entries, entry('info', 'No .bunfig.toml; bun installs unheld'))
   else

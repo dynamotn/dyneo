@@ -105,6 +105,21 @@ describe('dyneo.health', function()
     end)
   end)
 
+  it('reads bun from the home directory without a config home', function()
+    h.write(dir .. '/.bunfig.toml', { 'minimumReleaseAge = 604800' })
+    -- `vim.env` reads the environment, so the values are put back by hand
+    local xdg, home = vim.env.XDG_CONFIG_HOME, vim.env.HOME
+    vim.env.XDG_CONFIG_HOME = nil
+    vim.env.HOME = dir
+    local ok, entries = pcall(
+      function() return section(report(), 'Supply chain') end
+    )
+    vim.env.XDG_CONFIG_HOME = xdg
+    vim.env.HOME = home
+    assert.is_true(ok, entries)
+    assert.is_true(says(entries, 'ok', 'bun holds a package for 7 days'))
+  end)
+
   it('warns about a window shorter than the quarantine', function()
     h.write(dir .. '/.bunfig.toml', { 'minimumReleaseAge = 3600' })
     h.write(dir .. '/uv/uv.toml', { 'exclude-newer = "1 day"' })
