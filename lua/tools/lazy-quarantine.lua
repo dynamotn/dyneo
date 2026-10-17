@@ -87,19 +87,20 @@ function M.cache_file()
   )
 end
 
+--- The cache as written at `path`, what of it has the right shape
+---@param path string
 ---@return DyQuarantineCache
-local function load_cache()
-  if cache then return cache end
-  cache = { times = {}, ancestors = {}, tips = {} }
-  local file = io.open(M.cache_file(), 'r')
-  if not file then return cache end
+local function read_cache(path)
+  local read = { times = {}, ancestors = {}, tips = {} }
+  local file = io.open(path, 'r')
+  if not file then return read end
   local ok, decoded = pcall(vim.json.decode, file:read('*a'))
   file:close()
-  if not ok or type(decoded) ~= 'table' then return cache end
+  if not ok or type(decoded) ~= 'table' then return read end
   for hash, time in
     pairs(type(decoded.times) == 'table' and decoded.times or {})
   do
-    if type(time) == 'number' then cache.times[hash] = time end
+    if type(time) == 'number' then read.times[hash] = time end
   end
   for hash, found in
     pairs(type(decoded.ancestors) == 'table' and decoded.ancestors or {})
@@ -109,12 +110,12 @@ local function load_cache()
       and type(found.commit) == 'string'
       and type(found.cutoff) == 'number'
     then
-      cache.ancestors[hash] = found
+      read.ancestors[hash] = found
     end
   end
   for dir, tips in pairs(type(decoded.tips) == 'table' and decoded.tips or {}) do
     if type(tips) == 'table' then
-      cache.tips[dir] = vim.tbl_filter(
+      read.tips[dir] = vim.tbl_filter(
         function(tip)
           return type(tip) == 'table'
             and type(tip.commit) == 'string'
@@ -124,21 +125,76 @@ local function load_cache()
       )
     end
   end
+  return read
+end
+
+---@return DyQuarantineCache
+local function load_cache()
+  if cache then return cache end
+  cache = read_cache(M.cache_file())
   return cache
 end
 
+--- `ours` with what another Neovim wrote to `theirs` meanwhile: each tip at
+--- the earliest either saw it, so no session's watch is lost and none
+--- starts a commit's wait over
+---@param ours DyQuarantineCache
+---@param theirs DyQuarantineCache
+function M.merge_cache(ours, theirs)
+  for hash, time in pairs(theirs.times) do
+    ours.times[hash] = ours.times[hash] or time
+  end
+  for hash, found in pairs(theirs.ancestors) do
+    ours.ancestors[hash] = ours.ancestors[hash] or found
+  end
+  for dir, tips in pairs(theirs.tips) do
+    local at = {}
+    for _, tip in
+      ipairs(vim.list_extend(vim.deepcopy(tips), ours.tips[dir] or {}))
+    do
+      at[tip.commit] = math.min(at[tip.commit] or math.huge, tip.at)
+    end
+    local merged = {}
+    for commit, seen in pairs(at) do
+      table.insert(merged, { commit = commit, at = seen })
+    end
+    table.sort(merged, function(a, b)
+      if a.at ~= b.at then return a.at < b.at end
+      return a.commit < b.commit
+    end)
+    -- The tip this session saw last stays last: it is the current one
+    local last = ours.tips[dir] and ours.tips[dir][#ours.tips[dir]]
+    if last then
+      merged = vim.tbl_filter(
+        function(tip) return tip.commit ~= last.commit end,
+        merged
+      )
+      table.insert(merged, { commit = last.commit, at = at[last.commit] })
+    end
+    ours.tips[dir] = merged
+  end
+end
+
 --- Write the cache once the current batch of questions is answered
+---
+--- Merged with what is on disk first, since every running Neovim keeps one,
+--- and written whole to a file of its own then renamed over the old one, so
+--- no reader sees half of it.
 local function save_cache()
   if cache_dirty then return end
   cache_dirty = true
   vim.schedule(function()
     cache_dirty = false
+    if not cache then return end
     local path = M.cache_file()
     vim.fn.mkdir(vim.fs.dirname(path), 'p')
-    local file = io.open(path, 'w')
+    M.merge_cache(cache, read_cache(path))
+    local temp = ('%s.%d.tmp'):format(path, vim.uv.os_getpid())
+    local file = io.open(temp, 'w')
     if not file then return end
-    file:write(vim.json.encode(cache or {}))
+    local written = file:write(vim.json.encode(cache))
     file:close()
+    if not written or not vim.uv.fs_rename(temp, path) then os.remove(temp) end
   end)
 end
 

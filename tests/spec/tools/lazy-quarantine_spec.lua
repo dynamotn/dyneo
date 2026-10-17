@@ -197,6 +197,50 @@ describe('tools.lazy-quarantine', function()
       assert.are.equal(commits[2], target(dir, commits[2]).commit)
     end)
 
+    it('keeps what another Neovim wrote meanwhile', function()
+      local file = require('tools.lazy-quarantine').cache_file()
+      os.remove(file)
+      local dir, commits, cleanup = repository({ 30 * DAY, 8 * DAY, DAY })
+      -- Loaded, then another session writes its own watch of a plugin
+      target(dir, commits[3])
+      assert.is_true(
+        vim.wait(1000, function() return vim.uv.fs_stat(file) ~= nil end)
+      )
+      local other = { commit = ('a'):rep(40), at = now - 3 * DAY }
+      local written = vim.json.decode(table.concat(vim.fn.readfile(file), ''))
+      written.tips[dir .. '/other'] = { other }
+      written.tips[dir] = { { commit = commits[1], at = now - 20 * DAY } }
+      vim.fn.writefile({ vim.json.encode(written) }, file)
+      local quarantine = require('tools.lazy-quarantine')
+      quarantine.target(
+        { dir = dir, name = 'spec.nvim' },
+        { branch = 'main', commit = commits[2] },
+        nil,
+        now
+      )
+      local saved
+      assert.is_true(vim.wait(1000, function()
+        saved = vim.json.decode(table.concat(vim.fn.readfile(file), ''))
+        return #saved.tips[dir] > 1
+      end))
+      cleanup()
+      assert.same({ other }, saved.tips[dir .. '/other'])
+      assert.same(
+        { commits[1], commits[3], commits[2] },
+        vim.tbl_map(function(tip) return tip.commit end, saved.tips[dir])
+      )
+      assert.equals(now - 20 * DAY, saved.tips[dir][1].at)
+      -- Written whole, then renamed into place
+      assert.same(
+        {},
+        vim.fn.glob(
+          vim.fs.dirname(file) .. '/quarantine-cache.json.*',
+          false,
+          true
+        )
+      )
+    end)
+
     it('asks git again once the cutoff has moved on', function()
       local dir, commits, cleanup =
         repository({ 30 * DAY, 10 * DAY, 6 * DAY, DAY })
