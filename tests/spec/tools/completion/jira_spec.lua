@@ -41,6 +41,8 @@ describe('tools.completion.jira', function()
       function(r) response = r end
     )
     vim.wait(1000, function() return response ~= nil end)
+    -- The read it started answers on the main loop
+    vim.wait(50, function() return false end)
     return response
   end
 
@@ -67,14 +69,15 @@ describe('tools.completion.jira', function()
     assert.are.same({}, commands)
   end)
 
-  it('searches by project and by text', function()
+  local function lists()
+    return vim.tbl_filter(function(c) return c[3] == 'list' end, commands)
+  end
+
+  it('reads the recent issues once, in the background', function()
+    replies.list = { code = 0, stdout = '' }
     complete('AB')
-    local queries = {}
-    for _, cmd in ipairs(commands) do
-      if cmd[3] == 'list' then table.insert(queries, cmd[#cmd]) end
-    end
-    table.sort(queries)
-    assert.are.same({ 'project = AB', 'text ~ "*AB*"' }, queries)
+    complete('ABC')
+    assert.are.equal(1, #lists())
     assert.are.same({
       'jira',
       'issue',
@@ -82,69 +85,52 @@ describe('tools.completion.jira', function()
       '--plain',
       '--columns',
       'KEY,SUMMARY,ASSIGNEE',
-    }, vim.list_slice(commands[1], 1, 6))
+      '--paginate',
+      '100',
+    }, vim.list_slice(commands[1], 1, 8))
+    assert.is_truthy(commands[1][#commands[1]]:find('updated', 1, true))
   end)
 
-  it('completes keys and summaries, documented by the issue', function()
-    replies['project = AB'] = { code = 0, stdout = 'AB-1\tFix login\tme\n' }
-    replies['text ~ "*AB*"'] =
-      { code = 0, stdout = 'AB-1\tFix login\tme\nAB-2\tAdd AB test\tyou\n' }
-    replies['AB-1'] = { code = 0, stdout = 'Body of one\n' }
-    replies['AB-2'] = { code = 1 }
-    local response = complete('AB')
-
-    assert.are.same({ 'AB-1', 'Add AB test', 'Fix login' }, labels(response))
+  it('completes keys and summaries from the issues kept', function()
+    replies.list = {
+      code = 0,
+      stdout = 'AB-1\tFix login\tme\nAB-2\tAdd AB test\tyou\nCD-3\tOther\tx\n',
+    }
+    -- The first request starts the read and has nothing yet
+    assert.are.same({}, labels(complete('ab')))
+    local response = complete('ab')
+    assert.are.same({ 'AB-1', 'AB-2', 'Add AB test' }, labels(response))
     assert.is_false(response[1].isIncomplete)
     for _, item in ipairs(response[1].items) do
       assert.are.equal(vim.lsp.protocol.CompletionItemKind.Reference, item.kind)
-      if vim.startswith(item.detail, 'AB-1') then
-        assert.are.equal('Body of one', item.documentation.value)
-      else
-        -- An issue that cannot be read keeps its row as documentation
-        assert.are.equal(item.detail, item.documentation.value)
-      end
+      assert.are.equal(item.detail, item.documentation.value)
     end
-
-    local views = vim.tbl_filter(
-      function(c) return c[3] == 'view' end,
-      commands
-    )
-    assert.are.equal(2, #views, 'each issue is read once')
+    -- Nothing is read per word, nor per issue
+    assert.are.same({ 'Other' }, labels(complete('oth')))
+    assert.are.equal(1, #commands)
   end)
 
-  it('answers a word searched before from what it found', function()
-    replies['project = AB'] = { code = 0, stdout = 'AB-1\tFix login\tme\n' }
+  it('keeps at most a hundred issues and answers fifty items', function()
+    local rows = {}
+    for i = 1, 150 do
+      table.insert(rows, ('AB-%d\tTask %d\tme'):format(i, i))
+    end
+    replies.list = { code = 0, stdout = table.concat(rows, '\n') }
     complete('AB')
-    local spawned = #commands
-    assert.are.same({ 'AB-1' }, labels(complete('AB')))
-    assert.are.equal(spawned, #commands)
-  end)
-
-  it('searches only the word the typing settles on', function()
-    local first, second
-    builtin.generator.fn({ word_to_complete = 'AB' }, function(r) first = r end)
-    builtin.generator.fn(
-      { word_to_complete = 'ABC' },
-      function(r) second = r end
+    assert.are.equal(50, #complete('AB')[1].items)
+    -- `AB-1` starts `AB-10` to `AB-19` and `AB-100`: every key the word starts
+    -- is among the hundred kept
+    local keys = vim.tbl_filter(
+      function(label) return label:match('^AB%-1') ~= nil end,
+      labels(complete('AB-1'))
     )
-    vim.wait(1000, function() return first ~= nil and second ~= nil end)
-    assert.are.same({ { items = {}, isIncomplete = true } }, first)
-    for _, cmd in ipairs(commands) do
-      assert.is_nil(cmd[#cmd]:find('AB"', 1, true))
-      assert.are_not.equal('project = AB', cmd[#cmd])
-    end
+    assert.are.equal(12, #keys)
   end)
 
   it('drops rows missing a column', function()
-    replies['project = AB'] = { code = 0, stdout = 'AB-1\n\nAB-2\tTwo\tx\n' }
-    replies['AB-2'] = { code = 0, stdout = '' }
-    local response = complete('AB')
-    assert.are.same({ 'AB-2' }, labels(response))
-  end)
-
-  it('answers incomplete when every search fails', function()
-    local response = complete('AB')
-    assert.are.same({ { items = {}, isIncomplete = true } }, response)
+    replies.list = { code = 0, stdout = 'AB-1\n\nAB-2\tTwo\tx\n' }
+    complete('AB')
+    assert.are.same({ 'AB-2' }, labels(complete('AB')))
   end)
 
   it('gives a jira that hangs a few seconds, not forever', function()
@@ -155,21 +141,18 @@ describe('tools.completion.jira', function()
     end
   end)
 
-  it('stops searching for a while once a search hung', function()
-    local killed = { code = 124, signal = 15 }
-    replies['project = AB'], replies['text ~ "*AB*"'] = killed, killed
+  it('stops reading for a while once a read hung', function()
+    replies.list = { code = 124, signal = 15 }
     complete('AB')
-    local spawned = #commands
     local response = complete('ABC')
     assert.are.same({ { items = {}, isIncomplete = false } }, response)
-    assert.are.equal(spawned, #commands)
+    assert.are.equal(1, #commands)
   end)
 
-  it('keeps searching after a query that merely failed', function()
+  it('reads again after a read that merely failed', function()
     complete('AB')
-    local spawned = #commands
     complete('ABC')
-    assert.is_true(#commands > spawned)
+    assert.are.equal(2, #lists())
   end)
 
   it('asks nothing when jira-cli is not installed', function()

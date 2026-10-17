@@ -5,47 +5,44 @@ local methods = require('null-ls.methods')
 ---
 --- jira-cli waits on the network for as long as it takes, and with no server
 --- to reach -- offline, a VPN down, `jira init` never run -- that is forever.
---- null-ls answers a completion request once every source has, so one hung
---- search left the whole request, harper's words and all, unanswered.
 local TIMEOUT = 5000
 
---- Milliseconds the source stays quiet after a search hung
+--- Milliseconds the source stays quiet after the list hung
 ---
---- A hang is not about the word: the next search would wait out the same
---- timeout, once per word typed, two processes at a time. A query that fails
---- outright -- `project = AB` while no project is called that -- is about
---- the word, and the next one is tried as usual.
+--- A hang is not about the moment: the next read would wait out the same
+--- timeout. A query that fails outright is read again at the next refresh.
 local BACKOFF = 5 * 60 * 1000
 
---- Issue bodies read at once, all from the one Jira
-local PARALLEL = 4
+--- Milliseconds the issues read are kept before a request reads them again
+local REFRESH = 5 * 60 * 1000
 
---- `vim.uv.now()` before which the source answers nothing, without asking
-local quiet_until = 0
+--- The issues kept: the most recently updated the user can see. jira-cli
+--- reads at most a hundred a page, and one page is all that is read.
+local MAX_ISSUES = 100
 
---- Run `jira` and hand back the lines it printed, and whether it hung
----
---- `vim.system` rather than `plenary.job`: plenary calls `on_exit` as soon as
---- the process is gone and stops reading, so output still sitting in the pipe
---- was lost and a query dropped its rows every few runs.
----@param args string[]
----@param on_output fun(lines: string[], hung: boolean)
-local function jira(args, on_output)
-  require('util.system').run(
-    vim.list_extend({ 'jira' }, args),
-    { timeout = TIMEOUT },
-    function(result)
-      local hung = result.timed_out or result.missing
-      if result.code ~= 0 then return on_output({}, hung) end
-      on_output(
-        vim.split(result.stdout or '', '\n', { trimempty = true }),
-        false
-      )
-    end
-  )
-end
+--- Which issues are kept
+local JQL = 'updated >= -30d ORDER BY updated DESC'
 
---- Split one `--plain` row into the two columns the candidate is built from
+--- Items answered for one word, the best matches first
+local MAX_ITEMS = 50
+
+---@class DyJiraIssue
+---@field key string
+---@field summary string
+---@field row string The `--plain` row it was read from
+
+--- The issues read last, and the state of their reading
+local state = {
+  ---@type DyJiraIssue[]
+  issues = {},
+  --- `vim.uv.now()` of the last read that answered, 0 before any
+  read_at = 0,
+  --- `vim.uv.now()` before which nothing is read
+  quiet_until = 0,
+  reading = false,
+}
+
+--- Split one `--plain` row into the two columns an item is built from
 ---@param row string A `KEY\tSUMMARY\tASSIGNEE` line
 ---@return string? key
 ---@return string? summary
@@ -61,128 +58,85 @@ local function columns(row)
   return key, summary
 end
 
---- Turn one row into a completion item
----@param kind string `key` completes the issue key, anything else its summary
----@param row string
----@return table? candidate
----@return string? key The issue the candidate stands for
-local function candidate_of(kind, row)
-  local key, summary = columns(row)
-  -- A row missing either column cannot make a label, and an item without one
-  -- is not a completion item
-  if not key or not summary then return nil, nil end
+--- Read the issues again in the background, unless a read is under way, the
+--- list is fresh, or the last read hung a moment ago
+local function refresh()
+  local now = vim.uv.now()
+  if
+    state.reading
+    or now < state.quiet_until
+    or (state.read_at > 0 and now - state.read_at < REFRESH)
+  then
+    return
+  end
+  state.reading = true
+  require('util.system').run({
+    'jira',
+    'issue',
+    'list',
+    '--plain',
+    '--columns',
+    'KEY,SUMMARY,ASSIGNEE',
+    '--paginate',
+    tostring(MAX_ISSUES),
+    '--no-headers',
+    '--jql',
+    JQL,
+  }, { timeout = TIMEOUT, max_bytes = 1024 * 1024 }, function(result)
+    state.reading = false
+    if result.timed_out or result.missing then
+      state.quiet_until = vim.uv.now() + BACKOFF
+      return
+    end
+    -- A failed read keeps the issues there were, and is tried again on the
+    -- next request
+    if result.code ~= 0 then return end
+    local issues = {}
+    for _, row in ipairs(vim.split(result.stdout or '', '\n')) do
+      local key, summary = columns(row)
+      -- A row missing either column cannot make a label
+      if key and summary and #issues < MAX_ISSUES then
+        table.insert(issues, { key = key, summary = summary, row = row })
+      end
+    end
+    state.issues = issues
+    state.read_at = vim.uv.now()
+  end)
+end
+
+--- A completion item for `issue`, labelled by its key or its summary
+---@param issue DyJiraIssue
+---@param label string
+---@return table
+local function item(issue, label)
   return {
-    label = kind == 'key' and key or summary,
-    detail = row,
+    label = label,
+    detail = issue.row,
     kind = vim.lsp.protocol.CompletionItemKind['Reference'],
     documentation = {
       kind = vim.lsp.protocol.MarkupKind.Markdown,
-      -- Replaced by the body of the issue once it has been read
-      value = row,
+      value = issue.row,
     },
-  },
-    key
+  }
 end
 
---- Milliseconds the typing has to settle before a word is searched
-local DEBOUNCE = 300
---- Milliseconds the items found for a word are reused
-local CACHE_TTL = 60000
----@type table<string, { time: integer, items: table[] }>
-local cache = {}
---- Bumped by each request: a search waiting on a newer one is dropped
-local generation = 0
-
---- Search Jira for `word`, and hand the items to `on_items` on the main loop
+--- The items of the issues kept that `word` matches: a key it starts, a
+--- summary it is found in
 ---@param word string
----@param on_items fun(items: table[])
-local function search(word, on_items)
-  local queries = {
-    key = 'project = ' .. word,
-    text = [[text ~ "*]] .. word .. [[*"]],
-  }
-
-  --- Hand the items over, once
-  ---
-  --- The callback arrives straight off the libuv loop, which is a fast
-  --- event context. `done` leads into null-ls and from there into the API,
-  --- so it waits for the loop.
-  ---@param items table[]
-  local function finish(items)
-    vim.schedule(function() on_items(items) end)
+---@return table[]
+local function items_for(word)
+  local lower = word:lower()
+  local items = {}
+  for _, issue in ipairs(state.issues) do
+    if #items >= MAX_ITEMS then break end
+    if vim.startswith(issue.key:lower(), lower) then
+      table.insert(items, item(issue, issue.key))
+    end
+    if issue.summary:lower():find(lower, 1, true) then
+      table.insert(items, item(issue, issue.summary))
+    end
   end
-
-  --- Read the body of each issue and fill it into the items standing for
-  --- it, then hand everything over
-  ---
-  --- One read per issue, not per row: the two queries overlap, so an
-  --- issue found by both would be read twice.
-  ---@param items table[]
-  ---@param by_key table<string, table[]> Issue key to the items using it
-  local function describe(items, by_key)
-    local keys = vim.tbl_keys(by_key)
-    -- Nothing to read still has to answer, or the request never completes
-    if #keys == 0 then return finish(items) end
-
-    -- A few reads at a time, all to one Jira. Every item is settled before
-    -- anything is handed over, so nothing is still being written to after.
-    table.sort(keys)
-    require('util.system').each(keys, PARALLEL, function(key, done)
-      jira({ 'issue', 'view', '--plain', key }, function(lines)
-        if #lines > 0 then
-          local body = table.concat(
-            vim.lsp.util.convert_input_to_markdown_lines(lines),
-            '\n'
-          )
-          for _, item in ipairs(by_key[key]) do
-            item.documentation.value = body
-          end
-        end
-        done()
-      end)
-    end, function() finish(items) end)
-  end
-
-  local rows = {}
-  local pending_searches = vim.tbl_count(queries)
-
-  for kind, query in pairs(queries) do
-    local args = {
-      'issue',
-      'list',
-      '--plain',
-      '--columns',
-      'KEY,SUMMARY,ASSIGNEE',
-      '--paginate',
-      '10',
-      '--no-headers',
-      '--jql',
-      query,
-    }
-    jira(args, function(lines, hung)
-      -- A query that fails contributes nothing, rather than holding the
-      -- whole request back; one that hung keeps the next ones from trying
-      if hung then quiet_until = vim.uv.now() + BACKOFF end
-      rows[kind] = lines
-      pending_searches = pending_searches - 1
-      if pending_searches > 0 then return end
-
-      local items, by_key = {}, {}
-      for row_kind, list in pairs(rows) do
-        for _, row in ipairs(list) do
-          local candidate, key = candidate_of(row_kind, row)
-          -- The two come and go together, but saying so keeps the key a
-          -- `string` rather than a `string?` for whoever reads it next
-          if candidate and key then
-            table.insert(items, candidate)
-            by_key[key] = by_key[key] or {}
-            table.insert(by_key[key], candidate)
-          end
-        end
-      end
-      describe(items, by_key)
-    end)
-  end
+  return vim.list_slice(items, 1, MAX_ITEMS)
 end
 
 return h.make_builtin({
@@ -194,39 +148,17 @@ return h.make_builtin({
   method = methods.internal.COMPLETION,
   filetypes = { 'gitcommit' },
   generator = {
+    -- Answered from the issues kept, never by a `jira` per word typed: the
+    -- list is read again in the background once it is stale
     fn = function(params, done)
-      -- Must enable completion for word with >= 2 chars
       local word = params.word_to_complete
-      if #word < 2 then
-        done({ { items = {}, isIncomplete = false } })
-        return
+      if #word < 2 or vim.fn.executable('jira') ~= 1 then
+        return done({ { items = {}, isIncomplete = false } })
       end
-      -- Each search starts up to 22 `jira` processes: a word typed again
-      -- (backspace, a second commit) is answered from what was found, and
-      -- only the word the typing settles on is searched at all
-      local cached = cache[word]
-      if cached and vim.uv.now() - cached.time < CACHE_TTL then
-        local items = vim.deepcopy(cached.items)
-        return done({ { items = items, isIncomplete = #items == 0 } })
-      end
-
-      -- Nothing to ask, or a search just hung: answered at once, and as
-      -- complete, so the typing that follows does not ask again
-      if vim.fn.executable('jira') ~= 1 or vim.uv.now() < quiet_until then
-        done({ { items = {}, isIncomplete = false } })
-        return
-      end
-      generation = generation + 1
-      local mine = generation
-      vim.defer_fn(function()
-        if mine ~= generation then
-          return done({ { items = {}, isIncomplete = true } })
-        end
-        search(word, function(items)
-          cache[word] = { time = vim.uv.now(), items = vim.deepcopy(items) }
-          done({ { items = items, isIncomplete = #items == 0 } })
-        end)
-      end, DEBOUNCE)
+      refresh()
+      -- Asked again while the first read is still out
+      local waiting = state.reading and state.read_at == 0
+      done({ { items = items_for(word), isIncomplete = waiting } })
     end,
     async = true,
   },
