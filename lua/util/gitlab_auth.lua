@@ -59,8 +59,8 @@ end
 --- the repository, so a branch checked out for review may well bring one
 --- naming somebody else's server: `glab` is asked for the token of the URL
 --- given, never of `origin`. And a token from the environment keeps the
---- plugin's own default host rather than being sent to whatever `origin`
---- points at.
+--- plugin's own default host (or `GITLAB_URL`) rather than being sent to
+--- whatever `origin` or `.gitlab.nvim` points at.
 ---@param fallback fun(): string?, string?, string?
 ---@param remote string The remote gitlab.nvim targets
 ---@return string? token
@@ -70,7 +70,23 @@ function M.auth(fallback, remote)
   local token, url = fallback()
   if token == '' then token = nil end
   if url == '' then url = nil end
-  if token then return token, url end
+  if token then
+    -- The plugin pairs `.gitlab.nvim`'s URL with `GITLAB_TOKEN` when the file
+    -- names no token of its own: the user's token would go to whatever server
+    -- the repository names. It keeps to `GITLAB_URL`, or the plugin's default.
+    local env_token = vim.env.GITLAB_TOKEN
+    local env_url = vim.env.GITLAB_URL ~= '' and vim.env.GITLAB_URL or nil
+    if token == env_token and url and url ~= env_url then
+      notify(
+        ('Ignoring the `.gitlab.nvim` URL %s for the token in GITLAB_TOKEN'):format(
+          url
+        ),
+        vim.log.levels.WARN
+      )
+      url = env_url
+    end
+    return token, url
+  end
 
   local host
   if url then

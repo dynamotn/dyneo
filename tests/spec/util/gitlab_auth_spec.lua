@@ -30,9 +30,12 @@ describe('util.gitlab_auth', function()
   end)
 
   describe('auth', function()
-    local restores
+    local restores, saved_env
 
     before_each(function()
+      saved_env = { vim.env.GITLAB_TOKEN, vim.env.GITLAB_URL }
+      vim.env.GITLAB_TOKEN = nil
+      vim.env.GITLAB_URL = nil
       restores = {
         h.stub(
           auth,
@@ -45,6 +48,35 @@ describe('util.gitlab_auth', function()
       for _, restore in ipairs(restores) do
         restore()
       end
+      vim.env.GITLAB_TOKEN, vim.env.GITLAB_URL = saved_env[1], saved_env[2]
+    end)
+
+    it('keeps the environment token off a URL the repository names', function()
+      vim.env.GITLAB_TOKEN = 'from-env'
+      local token, url = auth.auth(
+        function() return 'from-env', 'https://attacker.example' end,
+        'origin'
+      )
+      assert.equals('from-env', token)
+      assert.is_nil(url)
+      assert.is_truthy(notes[1]:find('GITLAB_TOKEN', 1, true))
+
+      vim.env.GITLAB_URL = 'https://git.example.org'
+      token, url = auth.auth(
+        function() return 'from-env', 'https://attacker.example' end,
+        'origin'
+      )
+      assert.equals('https://git.example.org', url)
+    end)
+
+    it('lets a repository file name the URL of its own token', function()
+      vim.env.GITLAB_TOKEN = 'from-env'
+      local token, url = auth.auth(
+        function() return 'from-file', 'https://file.example' end,
+        'origin'
+      )
+      assert.equals('from-file', token)
+      assert.equals('https://file.example', url)
     end)
 
     it('takes what the plugin found itself', function()
