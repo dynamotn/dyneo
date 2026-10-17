@@ -99,8 +99,12 @@ function M.tailwind_highlighter(tailwind)
     callback = function() M.tailwind_hl = {} end,
   })
   return {
-    pattern = function()
-      if not vim.tbl_contains(tailwind.ft, vim.bo.filetype) then return end
+    -- Asked per buffer, not only for the current one: hipatterns also
+    -- updates buffers shown in other windows
+    pattern = function(buf)
+      if not vim.tbl_contains(tailwind.ft, vim.bo[buf or 0].filetype) then
+        return
+      end
       if tailwind.style == 'full' then
         -- The whole class is painted
         return '%f[%w:-]()[%w:-]+%-[a-z%-]+%-%d+()%f[^%w:-]'

@@ -93,6 +93,19 @@ describe('util.mini', function()
       assert.is_string(highlighter.pattern())
     end)
 
+    it('asks the buffer it is given, not the current one', function()
+      local html = vim.api.nvim_create_buf(false, true)
+      vim.bo[html].filetype = 'html'
+      vim.bo.filetype = 'lua'
+      assert.is_string(highlighter.pattern(html))
+      vim.bo.filetype = 'html'
+      local lua = vim.api.nvim_create_buf(false, true)
+      vim.bo[lua].filetype = 'lua'
+      assert.is_nil(highlighter.pattern(lua))
+      vim.api.nvim_buf_delete(html, { force = true })
+      vim.api.nvim_buf_delete(lua, { force = true })
+    end)
+
     it('paints a colour class in its own colour', function()
       local group = highlighter.group(nil, nil, { full_match = 'bg-red-500' })
       assert.are.equal('MiniHipatternsTailwindred500', group)
