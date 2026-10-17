@@ -2,6 +2,7 @@ local h = require('helpers')
 
 describe('tools.tfstate', function()
   local tfstate, dir, cleanup, path, notes, restore_notify, log
+  local restore_confirm, asked
 
   local MAIN = {
     'resource "aws_s3_bucket" "logs" {',
@@ -63,6 +64,11 @@ describe('tools.tfstate', function()
     vim.fn.mkdir(dir .. '/bin', 'p')
     path = vim.env.PATH
     vim.env.PATH = dir .. '/bin:' .. path
+    asked = {}
+    restore_confirm = h.stub(vim.fn, 'confirm', function(question)
+      table.insert(asked, question)
+      return 1
+    end)
     notes = {}
     restore_notify = h.stub(
       vim,
@@ -72,6 +78,7 @@ describe('tools.tfstate', function()
   end)
   after_each(function()
     vim.env.PATH = path
+    restore_confirm()
     restore_notify()
     vim.cmd('silent! only')
     vim.cmd('silent! %bwipeout!')
@@ -148,6 +155,30 @@ describe('tools.tfstate', function()
       'tofu state show -no-color aws_s3_bucket.logs TF_INPUT=0',
       calls[2]
     )
+  end)
+
+  it('reads no state of a directory not trusted', function()
+    tofu({ 'aws_s3_bucket.logs' })
+    restore_confirm()
+    restore_confirm = h.stub(vim.fn, 'confirm', function(question)
+      table.insert(asked, question)
+      return 2
+    end)
+    edit_at(2)
+    tfstate.show()
+    vim.wait(200)
+    assert.equals(1, #asked)
+    assert.truthy(asked[1]:find('tofu state', 1, true))
+    assert.equals(0, vim.fn.filereadable(log))
+    assert.is_not.equals('nofile', vim.bo.buftype)
+  end)
+
+  it('asks once a session before reading the state', function()
+    tofu({ 'aws_s3_bucket.logs' })
+    edit_at(2)
+    tfstate.show()
+    settle(function() return vim.bo.buftype == 'nofile' end)
+    assert.equals(1, #asked)
   end)
 
   it('asks which instance of a counted block to show', function()

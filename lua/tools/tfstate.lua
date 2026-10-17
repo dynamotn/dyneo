@@ -112,6 +112,8 @@ local function state(dir, args, on_done)
       vim.log.levels.ERROR
     )
   end
+  -- The backend and the provider binaries of `.terraform` run as the user
+  if not require('tools.tfplan').trusted(dir, bin, 'state') then return end
   local system = require('util.system')
   system.run(vim.list_extend({ bin, 'state' }, args), {
     cwd = dir,

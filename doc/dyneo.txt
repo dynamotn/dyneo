@@ -742,7 +742,9 @@ so instead when the state holds the resource already, and asks for the key
 of `to` when the resource has a `count` or a `for_each`.
 
 Only `state list` and `state show` run, which read the state and never write
-it, with `TF_INPUT=0` so a backend cannot stop to ask for input.  The state
+it, with `TF_INPUT=0` so a backend cannot stop to ask for input.  They load
+the backend and the providers of `.terraform`, so the first one in a
+directory asks first, as a plan does, once a session.  The state
 holds every attribute in plain text, so what is shown of it is held back from
 every AI integration.
 

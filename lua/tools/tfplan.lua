@@ -612,19 +612,22 @@ end
 ---@type table<string, boolean>
 local trusted = {}
 
---- Whether `dir` may be planned: `plan` runs the providers and the
---- `external` data sources the project names, as the user and with their
---- cloud credentials, so a directory is asked about once a session
+--- Whether `dir` may be planned, or its state read: `plan` runs the
+--- providers and the `external` data sources the project names, and `state`
+--- the backend and the providers in its `.terraform`, as the user and with
+--- their cloud credentials, so a directory is asked about once a session
 ---@param dir string
 ---@param bin string
+---@param verb? string What is run, `plan` unless given
 ---@return boolean
-function M.trusted(dir, bin)
+function M.trusted(dir, bin, verb)
   if trusted[dir] ~= nil then return trusted[dir] end
   -- Pinned before asking: the prompt keeps handling events
   trusted[dir] = false
   local answer = vim.fn.confirm(
-    ('Run `%s plan` in %s?\nIts providers and external data sources run as you.'):format(
+    ('Run `%s %s` in %s?\nIts backend, providers and external data sources run as you.'):format(
       bin,
+      verb or 'plan',
       vim.fn.fnamemodify(dir, ':~')
     ),
     '&Run\n&Cancel',
