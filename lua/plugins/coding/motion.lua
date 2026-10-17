@@ -123,6 +123,9 @@ return {
     event = 'VeryLazy',
     opts = {
       default_mappings = true,
+      -- Its own mappings redraw the signs at once; the timer only catches
+      -- marks set otherwise, and its default 150 ms wakes the editor often
+      refresh_interval = 250,
     },
   },
   {
