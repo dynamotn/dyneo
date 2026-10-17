@@ -226,6 +226,59 @@ end
 local decrypting = {}
 local next_decryption = 0
 
+--- Decrypt the file of `bufnr` off the main loop and put its clear text in
+---
+--- The buffer stays read-only until then. `unchanged` is asked once the
+--- clear text is back: a buffer that moved on meanwhile is left as it is.
+---@param bufnr integer
+---@param kind DyEncryptedKind
+---@param header? string The first line of the ciphertext
+---@param unchanged fun(): boolean
+---@param on_done fun(decrypted: boolean)
+local function decrypt_into(bufnr, kind, header, unchanged, on_done)
+  local command = M.decrypt_command(kind, vim.api.nvim_buf_get_name(bufnr))
+  next_decryption = next_decryption + 1
+  local id = next_decryption
+  decrypting[bufnr] = id
+  vim.bo[bufnr].modifiable = false
+  run(command, { text = true }, function(result)
+    if decrypting[bufnr] ~= id then return on_done(false) end
+    decrypting[bufnr] = nil
+    if not vim.api.nvim_buf_is_valid(bufnr) then return on_done(false) end
+    vim.bo[bufnr].modifiable = true
+    if not unchanged() then return on_done(false) end
+    -- A cut clear text, written back, would encrypt only part of the file
+    if not result or result.code ~= 0 or result.cut then
+      notify(
+        'Left encrypted: '
+          .. (
+            result and failure(kind, result) or (command[1] .. ' did not run')
+          ),
+        vim.log.levels.ERROR
+      )
+      return on_done(false)
+    end
+
+    local stdout = result.stdout or ''
+    local clear = vim.split(stdout:gsub('\n$', ''), '\n', { plain = true })
+    -- No undoing back to the ciphertext
+    local undolevels = vim.bo[bufnr].undolevels
+    vim.bo[bufnr].undolevels = -1
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, clear)
+    vim.bo[bufnr].undolevels = undolevels
+    vim.bo[bufnr].modified = false
+
+    vim.b[bufnr].dy_encrypted = kind
+    vim.b[bufnr].dy_vault_id = kind == 'ansible'
+        and header
+        and M.vault_id(header)
+      or nil
+    vim.bo[bufnr].buftype = 'acwrite'
+    M.guard(bufnr)
+    on_done(true)
+  end)
+end
+
 --- Open the clear text of `bufnr`, if it holds an encrypted file
 ---
 --- It is read on the main loop's behalf, not on it: a slow KMS, or an agent
@@ -250,58 +303,26 @@ function M.open(bufnr, on_done)
   vim.bo[bufnr].swapfile = false
   vim.bo[bufnr].undofile = false
 
-  local command = M.decrypt_command(kind, file)
-  if vim.fn.executable(command[1]) ~= 1 then
-    notify(
-      command[1] .. ' is not installed: left encrypted',
-      vim.log.levels.WARN
-    )
+  local bin = M.decrypt_command(kind, file)[1]
+  if vim.fn.executable(bin) ~= 1 then
+    notify(bin .. ' is not installed: left encrypted', vim.log.levels.WARN)
     return on_done(false)
   end
 
-  next_decryption = next_decryption + 1
-  local id = next_decryption
-  decrypting[bufnr] = id
-  vim.bo[bufnr].modifiable = false
-  run(command, { text = true }, function(result)
-    if decrypting[bufnr] ~= id then return on_done(false) end
-    decrypting[bufnr] = nil
-    if not vim.api.nvim_buf_is_valid(bufnr) then return on_done(false) end
-    vim.bo[bufnr].modifiable = true
-    -- Read again meanwhile, with something no longer this ciphertext. Not
-    -- `changedtick`: reading a file moves it on after `BufReadPost`.
-    if
-      not vim.deep_equal(lines, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
-    then
-      return on_done(false)
-    end
-    -- A cut clear text, written back, would encrypt only part of the file
-    if not result or result.code ~= 0 or result.cut then
-      notify(
-        'Left encrypted: '
-          .. (
-            result and failure(kind, result) or (command[1] .. ' did not run')
-          ),
-        vim.log.levels.ERROR
+  -- Read again meanwhile, with something no longer this ciphertext. Not
+  -- `changedtick`: reading a file moves it on after `BufReadPost`.
+  decrypt_into(
+    bufnr,
+    kind,
+    lines[1],
+    function()
+      return vim.deep_equal(
+        lines,
+        vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
       )
-      return on_done(false)
-    end
-
-    local clear =
-      vim.split((result.stdout or ''):gsub('\n$', ''), '\n', { plain = true })
-    -- No undoing back to the ciphertext
-    local undolevels = vim.bo[bufnr].undolevels
-    vim.bo[bufnr].undolevels = -1
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, clear)
-    vim.bo[bufnr].undolevels = undolevels
-    vim.bo[bufnr].modified = false
-
-    vim.b[bufnr].dy_encrypted = kind
-    vim.b[bufnr].dy_vault_id = kind == 'ansible' and M.vault_id(lines[1]) or nil
-    vim.bo[bufnr].buftype = 'acwrite'
-    M.guard(bufnr)
-    on_done(true)
-  end)
+    end,
+    on_done
+  )
 end
 
 --- Whether a buffer has held clear text this session, so the registers it
@@ -708,9 +729,26 @@ function M.rotate(how)
         vim.log.levels.WARN
       )
     end
-    -- Read again, which decrypts the file as rotated
-    vim.api.nvim_buf_call(bufnr, function() vim.cmd('edit!') end)
-    notify(done)
+    -- Decrypted again from the file as rotated, unless edited meanwhile
+    local clear = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    decrypt_into(
+      bufnr,
+      'sops',
+      nil,
+      function()
+        return not vim.bo[bufnr].modified
+          and vim.deep_equal(
+            clear,
+            vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+          )
+      end,
+      function(decrypted)
+        notify(
+          decrypted and done or (done .. '; the buffer was not read again'),
+          decrypted and vim.log.levels.INFO or vim.log.levels.WARN
+        )
+      end
+    )
   end)
 end
 

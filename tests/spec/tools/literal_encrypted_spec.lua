@@ -526,11 +526,10 @@ describe('tools.encrypted', function()
       )
 
       restore = h.stub(vim.fn, 'confirm', function() return 1 end)
-      -- What the BufReadPost hook of `plugin/encrypted.lua` does on `:edit!`
+      local read = 0
       vim.api.nvim_create_autocmd('BufReadPost', {
         buffer = bufnr,
-        once = true,
-        callback = function(args) encrypted.open(args.buf) end,
+        callback = function() read = read + 1 end,
       })
       local before = #notes
       encrypted.rotate('rotate')
@@ -557,6 +556,9 @@ describe('tools.encrypted', function()
         vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
       )
       assert.equals('New data key', notes[#notes])
+      -- Decrypted in place: the buffer was never read again from disk
+      assert.equals(0, read)
+      assert.equals('acwrite', vim.bo[bufnr].buftype)
     end)
 
     it('keeps edits made while sops ran', function()
