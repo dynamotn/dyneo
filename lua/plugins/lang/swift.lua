@@ -42,6 +42,8 @@ return vim.list_contains(DyNeo.enabled_languages, 'swift')
       {
         -- Build, run and test an Xcode project without leaving the editor
         'wojciech-kulik/xcodebuild.nvim',
+        -- Xcode, its simulators and devices are macOS only
+        cond = vim.fn.has('mac') == 1,
         ft = language.filetypes,
         cmd = { 'XcodebuildPicker', 'XcodebuildBuild', 'XcodebuildTest' },
         dependencies = {
