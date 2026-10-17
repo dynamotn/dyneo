@@ -51,8 +51,10 @@ try(
 Plugin.snapshot_options()
 if vim.g.deprecation_warnings == false then vim.deprecate = function() end end
 -- Reaching the system clipboard can take a while, and nothing needs it before
--- `VeryLazy`
-local clipboard = vim.o.clipboard
+-- `VeryLazy`. The value waits in `Plugin.options`, where a buffer that keeps
+-- the clipboard empty (`tools.encrypted`) takes it over as its own to give
+-- back, so it is not put back while that buffer is current.
+Plugin.options.clipboard = vim.o.clipboard
 vim.o.clipboard = ''
 -- `LazyFile`, for the specs that load once a real file is open
 Plugin.lazy_file()
@@ -205,7 +207,9 @@ if not lazy_autocmds then load('config.autocmds') end
 Plugin.on_very_lazy(function()
   -- The clipboard and the helpers first, so a mistake in the keymaps cannot
   -- take format-on-save and the clipboard down with it
-  vim.o.clipboard = clipboard
+  local clipboard = Plugin.options.clipboard
+  Plugin.options.clipboard = nil
+  if clipboard ~= nil then vim.o.clipboard = clipboard end
   require('util.format').setup()
   require('util.root').setup()
   require('util.rename').setup()

@@ -376,10 +376,17 @@ function M.hold(bufnr, group)
   -- clipboard, and from there into a clipboard manager's history. The value
   -- to restore is kept per buffer, outside this call: `:e!` guards the buffer
   -- again while the clipboard is already cleared, and must not take that ''
-  -- for the user's setting.
+  -- for the user's setting. Before `VeryLazy`, `config.lazy` holds the
+  -- user's value back in `util.plugin`'s options and the option is empty:
+  -- that value is taken over here, so it is put back on leaving this buffer
+  -- rather than at `VeryLazy`, with the clear text still current.
   local function clear()
+    local options = package.loaded['util.plugin']
+      and package.loaded['util.plugin'].options
+    local deferred = options and options.clipboard
+    if deferred ~= nil then options.clipboard = nil end
     if saved_clipboard[bufnr] == nil then
-      saved_clipboard[bufnr] = vim.o.clipboard
+      saved_clipboard[bufnr] = deferred or vim.o.clipboard
     end
     vim.o.clipboard = ''
   end

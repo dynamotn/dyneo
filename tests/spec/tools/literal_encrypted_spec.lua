@@ -260,6 +260,27 @@ describe('tools.encrypted', function()
     vim.o.clipboard = saved
   end)
 
+  it(
+    'takes over the clipboard config.lazy holds back until VeryLazy',
+    function()
+      local saved = vim.o.clipboard
+      local options = { clipboard = 'unnamedplus' }
+      local restore =
+        h.stub(package.loaded, 'util.plugin', { options = options })
+      vim.o.clipboard = ''
+      local file = dir .. '/values.yaml'
+      h.write(file, { 'plain: a: 1', 'x: ENC[AES256_GCM,data:x]', 'sops:' })
+      open(file)
+      -- Nothing left for `VeryLazy` to put back over the clear text
+      assert.is_nil(options.clipboard)
+      assert.equals('', vim.o.clipboard)
+      vim.cmd.enew()
+      assert.equals('unnamedplus', vim.o.clipboard)
+      restore()
+      vim.o.clipboard = saved
+    end
+  )
+
   it('maps the recipients and rotations on a sops file only', function()
     local file = dir .. '/values.yaml'
     h.write(file, { 'plain: a: 1', 'x: ENC[AES256_GCM,data:x]', 'sops:' })
