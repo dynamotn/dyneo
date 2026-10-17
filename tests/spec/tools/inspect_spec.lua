@@ -310,6 +310,30 @@ describe('tools.inspect', function()
     assert.same({}, vim.diagnostic.get(bufnr))
   end)
 
+  it('reads a certificate with the LibreSSL of macOS', function()
+    vim.fn.mkdir(dir .. '/bin', 'p')
+    -- LibreSSL's `x509` has no `-ext`, and refuses the whole command for it
+    h.write(dir .. '/bin/openssl', {
+      '#!/bin/sh',
+      'cat > /dev/null',
+      'for a in "$@"; do',
+      '  [ "$a" = -ext ] && { echo "unknown option -ext" >&2; exit 1; }',
+      'done',
+      'echo "subject= /CN=libressl.test"',
+    })
+    vim.fn.setfperm(dir .. '/bin/openssl', 'rwxr-xr-x')
+    local path = vim.env.PATH
+    vim.env.PATH = dir .. '/bin:' .. path
+    local lines, err
+    inspect.pem({ label = 'CERTIFICATE', text = 'x' }, function(l, e)
+      lines, err = l, e
+    end)
+    vim.wait(5000, function() return lines ~= nil or err ~= nil end, 10)
+    vim.env.PATH = path
+    assert.is_nil(err)
+    assert.equals('subject= /CN=libressl.test', lines[3])
+  end)
+
   it('says when nothing is under the cursor', function()
     vim.api.nvim_set_current_buf(h.buffer({ lines = { 'nothing' } }))
     local notes = {}

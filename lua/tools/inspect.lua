@@ -184,6 +184,8 @@ end
 
 --- The `openssl` arguments that print what a block of `label` says
 local READERS = {
+  -- The extensions through `-text` with all else left out, rather than
+  -- `-ext`: the LibreSSL of macOS has no `-ext`
   CERTIFICATE = {
     'x509',
     '-noout',
@@ -191,10 +193,12 @@ local READERS = {
     '-issuer',
     '-dates',
     '-serial',
-    '-ext',
-    'subjectAltName,keyUsage,extendedKeyUsage,basicConstraints',
     '-fingerprint',
     '-sha256',
+    '-text',
+    '-certopt',
+    'no_header,no_version,no_serial,no_signame,no_validity,no_subject,'
+      .. 'no_issuer,no_pubkey,no_sigdump,no_aux',
   },
   ['CERTIFICATE REQUEST'] = { 'req', '-noout', '-subject', '-text' },
   ['PUBLIC KEY'] = { 'pkey', '-pubin', '-noout', '-text' },
