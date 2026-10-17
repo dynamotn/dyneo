@@ -142,13 +142,6 @@ local function find_line(lines, message)
   return start
 end
 
---- The line of `lines` a change is about: the field of `Type.field` inside
---- its type, else the type, else the first line
----@param lines string[]
----@param message string
----@return integer
-function M.graphql_line(lines, message) return find_line(lines, message) or 1 end
-
 --- Where among `files` a change is about: the first that defines its type,
 --- else line 1 of `default`
 ---@param files table<string, string[]> Lines by path

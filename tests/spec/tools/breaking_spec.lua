@@ -98,18 +98,19 @@ describe('tools.breaking', function()
       '  email: String',
       '}',
     }
-    assert.equals(
-      6,
-      breaking.graphql_line(schema, 'Field User.email changed type')
+    local files = { ['schema.graphql'] = schema }
+    local function locate(message)
+      return { breaking.graphql_locate(files, 'schema.graphql', message) }
+    end
+    assert.same(
+      { 'schema.graphql', 6 },
+      locate('Field User.email changed type')
     )
-    assert.equals(
-      4,
-      breaking.graphql_line(
-        schema,
-        'Field User.name was removed from object type User'
-      )
+    assert.same(
+      { 'schema.graphql', 4 },
+      locate('Field User.name was removed from object type User')
     )
-    assert.equals(1, breaking.graphql_line(schema, 'Type Role was removed'))
+    assert.same({ 'schema.graphql', 1 }, locate('Type Role was removed'))
   end)
 
   describe('diff', function()
