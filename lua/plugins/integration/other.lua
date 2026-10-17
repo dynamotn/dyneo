@@ -254,9 +254,11 @@ return {
       end
 
       -- Upstream waits on `get` with no deadline: a stalled input method
-      -- daemon would hold every `InsertLeave`
-      local get_failed = false
+      -- daemon would hold every `InsertLeave`. One that ran out of time, or
+      -- a command that is not there, is not asked again this session.
+      local get_failed, get_broken = false, false
       im.save_im_state = function()
+        if get_broken then return false end
         vim.wait(200, function() return not running end, 5)
         local cmd, err = im_command.get_im_command('get')
         if not cmd then
@@ -266,6 +268,8 @@ return {
         local system = require('util.system')
         local result = system.sync(cmd, { text = true, timeout = 1000 })
         if result.code ~= 0 then
+          get_broken = result.code == system.TIMED_OUT
+            or result.code == system.MISSING
           if not get_failed then
             get_failed = true
             vim.notify(
