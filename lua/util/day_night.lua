@@ -35,7 +35,9 @@ function M.init()
   if DyNeo.day_night.enabled then
     DyNeo.dark_mode = M.is_dark(tonumber(os.date('%H')) --[[@as integer]])
   end
-  vim.o.background = DyNeo.dark_mode and 'dark' or 'light'
+  local background = DyNeo.dark_mode and 'dark' or 'light'
+  -- Setting it at all fires `OptionSet` and redraws, even to the same value
+  if vim.o.background ~= background then vim.o.background = background end
 end
 
 --- Re-resolve, and reload the colorscheme if the half of the day changed

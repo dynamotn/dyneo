@@ -60,6 +60,27 @@ describe('util.day_night', function()
       assert.equals('dark', vim.o.background)
     end)
 
+    it('leaves the background alone when it is already right', function()
+      DyNeo.dark_mode = true
+      day_night.init()
+      -- Setting it at all redraws and fires `OptionSet`, so count the sets
+      local sets, options = 0, vim.o
+      local undo = h.stub(
+        vim,
+        'o',
+        setmetatable({}, {
+          __index = options,
+          __newindex = function(_, key, value)
+            sets = sets + 1
+            options[key] = value
+          end,
+        })
+      )
+      day_night.init()
+      undo()
+      assert.equals(0, sets)
+    end)
+
     it('lets the clock decide when enabled', function()
       DyNeo.day_night.enabled = true
       local hour = tonumber(os.date('%H'))
