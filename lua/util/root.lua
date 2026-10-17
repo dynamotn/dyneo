@@ -175,13 +175,18 @@ function M.setup()
     function() M.info() end,
     { desc = 'DyNeo roots for the current buffer' }
   )
-  vim.api.nvim_create_autocmd(
-    { 'LspAttach', 'BufWritePost', 'DirChanged', 'BufEnter', 'BufWipeout' },
-    {
-      group = vim.api.nvim_create_augroup('dyneo_root_cache', { clear = true }),
-      callback = function(event) M.cache[event.buf] = nil end,
-    }
-  )
+  vim.api.nvim_create_autocmd({
+    'LspAttach',
+    'LspDetach',
+    'BufWritePost',
+    'BufFilePost',
+    'DirChanged',
+    'BufEnter',
+    'BufWipeout',
+  }, {
+    group = vim.api.nvim_create_augroup('dyneo_root_cache', { clear = true }),
+    callback = function(event) M.cache[event.buf] = nil end,
+  })
 end
 
 --- Return the root of `opts.buf` (the current buffer by default)

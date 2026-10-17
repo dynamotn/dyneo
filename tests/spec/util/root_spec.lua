@@ -157,6 +157,12 @@ describe('util.root', function()
     root.cache[buf] = '/stale'
     vim.api.nvim_exec_autocmds('BufEnter', { buffer = buf })
     assert.is_nil(root.cache[buf])
+    -- A server gone, or the buffer renamed, may change the root as well
+    for _, event in ipairs({ 'LspDetach', 'BufFilePost' }) do
+      root.cache[buf] = '/stale'
+      vim.api.nvim_exec_autocmds(event, { buffer = buf, modeline = false })
+      assert.is_nil(root.cache[buf], event)
+    end
     assert.is_not_nil(vim.api.nvim_get_commands({}).DyRoot)
   end)
 
