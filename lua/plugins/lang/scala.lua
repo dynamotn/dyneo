@@ -1,10 +1,7 @@
 local language = require('config.languages').scala
 
--- metals reads the build definition and the Java sources of the same project
-local filetypes = vim.list_extend(vim.deepcopy(language.filetypes), {
-  'sbt',
-  'java',
-})
+-- A Scala source or a build definition starts metals
+local filetypes = vim.list_extend(vim.deepcopy(language.filetypes), { 'sbt' })
 
 return vim.list_contains(DyNeo.enabled_languages, 'scala')
     and {
@@ -44,7 +41,9 @@ return vim.list_contains(DyNeo.enabled_languages, 'scala')
         config = function(self, metals_config)
           vim.api.nvim_create_autocmd('FileType', {
             group = vim.api.nvim_create_augroup('dy_metals', { clear = true }),
-            pattern = self.ft,
+            -- Once it runs, metals also takes the Java sources of a Scala
+            -- build; Java alone never loads it
+            pattern = vim.list_extend(vim.deepcopy(self.ft), { 'java' }),
             callback = function(event)
               -- Java only in a Scala build: next to jdtls in a plain Maven or
               -- Gradle project it would be a second JVM server
