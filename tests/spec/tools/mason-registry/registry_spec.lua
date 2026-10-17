@@ -17,8 +17,9 @@ end
 
 describe('tools.mason-registry', function()
   it('indexes every package file by its name', function()
+    -- Wherever the config directory is, the index is of this tree
     local restore = h.stub(vim.fn, 'stdpath', function(what)
-      if what == 'config' then return h.root end
+      if what == 'config' then return vim.fn.tempname() end
       return vim.call('stdpath', what)
     end)
     h.unload('tools.mason-registry')

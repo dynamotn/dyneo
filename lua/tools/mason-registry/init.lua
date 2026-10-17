@@ -1,5 +1,7 @@
 local M = {}
-local scan_path = vim.fn.stdpath('config') .. '/lua/tools/mason-registry'
+-- The directory of this very file: under another `NVIM_APPNAME`, or loaded
+-- from a worktree or a test run, `stdpath('config')` is some other tree
+local scan_path = vim.fs.dirname(debug.getinfo(1, 'S').source:sub(2))
 local files = vim.fn.glob(scan_path .. '/*.lua', true, true)
 
 for _, file in ipairs(files) do
