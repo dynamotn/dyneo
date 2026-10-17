@@ -182,6 +182,44 @@ describe('tools.lazy-quarantine', function()
     assert.is_truthy(notes[#notes]:find('nothing older is cloned', 1, true))
   end)
 
+  it('installs a release on a fresh clone, never its default branch', function()
+    -- The clone checked out `main`, a day past the only release
+    local dir, commits, cleanup = repository({ 2 * DAY, DAY, 0 })
+    local release = { tag = 'v2.0.0', commit = commits[2] }
+    local notes = {}
+    local restore = h.stub(
+      vim,
+      'notify',
+      function(msg) table.insert(notes, msg) end
+    )
+    local function pick()
+      h.unload('tools.lazy-quarantine')
+      return require('tools.lazy-quarantine').target(
+        { dir = dir, name = 'spec.nvim', _ = { cloned = true } },
+        { branch = 'main', tag = 'v2.0.0', commit = commits[2] },
+        function() return { release } end,
+        now
+      )
+    end
+    local picked = pick()
+    assert.is_truthy(notes[#notes]:find('has cleared the window', 1, true))
+    -- Nor when git cannot say how old the release is
+    local bin, clean_bin = h.tmpdir()
+    h.write(bin .. '/git', { '#!/bin/sh', 'exit 128' })
+    vim.fn.setfperm(bin .. '/git', 'rwxr-xr-x')
+    local path = vim.env.PATH
+    vim.env.PATH = bin .. ':' .. path
+    os.remove(require('tools.lazy-quarantine').cache_file())
+    local failed = pick()
+    vim.env.PATH = path
+    restore()
+    clean_bin()
+    cleanup()
+    assert.are.equal('v2.0.0', picked.tag)
+    assert.are.equal(commits[2], picked.commit)
+    assert.are.equal(commits[2], failed.commit)
+  end)
+
   describe('cache', function()
     it('answers the next session without asking git', function()
       local file = require('tools.lazy-quarantine').cache_file()
@@ -239,6 +277,25 @@ describe('tools.lazy-quarantine', function()
           true
         )
       )
+    end)
+
+    it('keeps pruned tips pruned when merging what is on disk', function()
+      h.unload('tools.lazy-quarantine')
+      local quarantine = require('tools.lazy-quarantine')
+      local function tip(c, age) return { commit = c:rep(40), at = now - age } end
+      local ours = {
+        times = {},
+        ancestors = {},
+        tips = { dir = { tip('c', 10 * DAY), tip('d', 0) } },
+      }
+      quarantine.merge_cache(ours, {
+        times = {},
+        ancestors = {},
+        tips = {
+          dir = { tip('a', 30 * DAY), tip('b', 20 * DAY), tip('c', 10 * DAY) },
+        },
+      }, now)
+      assert.same({ tip('c', 10 * DAY), tip('d', 0) }, ours.tips.dir)
     end)
 
     it('asks git again once the cutoff has moved on', function()

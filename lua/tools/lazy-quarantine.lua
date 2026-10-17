@@ -135,12 +135,33 @@ local function load_cache()
   return cache
 end
 
+--- Drop the tips of `list` before the newest one first seen a window before
+--- `now`: they no longer decide anything
+---@param list { commit: string, at: integer }[]
+---@param now integer
+---@return integer newest Index of that tip, 0 when there is none
+---@return boolean pruned Whether anything was dropped
+local function prune(list, now)
+  local cutoff = now - M.window()
+  local newest = 0
+  for index, tip in ipairs(list) do
+    if tip.at <= cutoff then newest = index end
+  end
+  if newest <= 1 then return newest, false end
+  for _ = 1, newest - 1 do
+    table.remove(list, 1)
+  end
+  return 1, true
+end
+
 --- `ours` with what another Neovim wrote to `theirs` meanwhile: each tip at
 --- the earliest either saw it, so no session's watch is lost and none
---- starts a commit's wait over
+--- starts a commit's wait over. What either side pruned stays pruned, so the
+--- list of a plugin does not grow with every save.
 ---@param ours DyQuarantineCache
 ---@param theirs DyQuarantineCache
-function M.merge_cache(ours, theirs)
+---@param now? integer Seconds since the epoch, for the specs
+function M.merge_cache(ours, theirs, now)
   for hash, time in pairs(theirs.times) do
     ours.times[hash] = ours.times[hash] or time
   end
@@ -171,6 +192,7 @@ function M.merge_cache(ours, theirs)
       )
       table.insert(merged, { commit = last.commit, at = at[last.commit] })
     end
+    prune(merged, now or os.time())
     ours.tips[dir] = merged
   end
 end
@@ -287,18 +309,8 @@ local function watched(dir, commit, now)
     table.insert(list, { commit = commit, at = now })
     save_cache()
   end
-  local cutoff = now - M.window()
-  local newest = 0
-  for index, tip in ipairs(list) do
-    if tip.at <= cutoff then newest = index end
-  end
-  -- What came before the newest aged tip no longer decides anything
-  if newest > 1 then
-    for _ = 1, newest - 1 do
-      table.remove(list, 1)
-    end
-    save_cache()
-  end
+  local newest, pruned = prune(list, now)
+  if pruned then save_cache() end
   return newest > 0 and list[1] or nil
 end
 
@@ -325,9 +337,18 @@ end
 --- Whether a failing git was reported this session
 local warned = false
 
+--- Whether lazy.nvim cloned `plugin` in this run
+---
+--- The clone checks out the default branch before the checkout task asks
+--- for a target, so what is there is never nil: it is just not a choice
+--- anyone made, and staying on it would install an unreleased tip.
+---@param plugin LazyPlugin
+---@return boolean
+local function fresh(plugin) return plugin._ ~= nil and plugin._.cloned == true end
+
 --- What to check out when git cannot say how old `target` is: the commit
 --- already there, since a check that cannot run must not let anything
---- through. A plugin not cloned yet has nothing to stay on.
+--- through. A plugin just cloned has nothing of its own to stay on.
 ---@param plugin LazyPlugin
 ---@param target GitInfo
 ---@param quiet? boolean Nothing failed: there is just nothing to move to
@@ -340,6 +361,7 @@ local function stay(plugin, target, quiet)
       vim.log.levels.WARN
     )
   end
+  if fresh(plugin) then return target end
   local ok, Git = pcall(require, 'lazy.manage.git')
   return ok and Git.info(plugin.dir) or target
 end
@@ -400,11 +422,13 @@ function M.target(plugin, target, releases, now)
       end
     end
     -- No release of the range is old enough: what is checked out stays.
-    -- Only a plugin with nothing cloned yet takes the fresh one, since the
-    -- alternative is not installing it at all.
-    local ok, Git = pcall(require, 'lazy.manage.git')
-    local current = ok and Git.info(plugin.dir)
-    if current then return current end
+    -- Only a plugin just cloned takes the fresh one, since the alternative
+    -- is the default branch's tip, which no release vouches for.
+    if not fresh(plugin) then
+      local ok, Git = pcall(require, 'lazy.manage.git')
+      local current = ok and Git.info(plugin.dir)
+      if current then return current end
+    end
     notify(
       ('No release of `%s` has cleared the window: installing %s, nothing older is cloned'):format(
         plugin.name,
