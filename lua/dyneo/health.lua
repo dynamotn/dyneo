@@ -458,6 +458,31 @@ end
 
 --- The programs the README asks for
 ---@return DyHealthEntry[]
+--- Which yq is installed, when one is: the commands that run it write
+--- mikefarah's syntax (`yq eval`, `-o=json`), which the Python yq, a jq
+--- wrapper of the same name, does not read
+---@return table?
+local function yq_flavour()
+  if vim.fn.executable('yq') ~= 1 then return nil end
+  local result = require('util.system').sync(
+    { 'yq', '--version' },
+    { text = true, timeout = 2000 }
+  )
+  local version = vim.trim((result.stdout or '') .. (result.stderr or ''))
+  if result.code ~= 0 then
+    return entry('warn', 'yq --version failed: cannot tell which yq it is')
+  end
+  if version:find('mikefarah', 1, true) then
+    return entry('ok', 'yq is mikefarah/yq: ' .. version)
+  end
+  return entry(
+    'warn',
+    ('yq is not mikefarah/yq (%s): `:DyQuery` on YAML and `:DyOpenApiRequest` write its syntax'):format(
+      version
+    )
+  )
+end
+
 local function requirements()
   local entries = {}
   local required = { 'git', 'curl', 'tar', 'unzip', 'gzip' }
@@ -541,6 +566,8 @@ local function requirements()
         )
     )
   end
+  local flavour = yq_flavour()
+  if flavour then table.insert(entries, flavour) end
   return entries
 end
 

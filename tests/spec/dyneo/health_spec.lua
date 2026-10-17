@@ -233,6 +233,22 @@ describe('dyneo.health', function()
     assert.is_false(says(entries, 'warn', 'infracost'))
   end)
 
+  it('tells mikefarah/yq from the Python yq', function()
+    local bin = dir .. '/bin'
+    local path = vim.env.PATH
+    vim.env.PATH = bin .. ':' .. path
+    local function yq(version)
+      h.write(bin .. '/yq', { '#!/bin/sh', 'echo "' .. version .. '"' })
+      vim.fn.setfperm(bin .. '/yq', 'rwxr-xr-x')
+      return section(report(), 'Requirements')
+    end
+    local go = yq('yq (https://github.com/mikefarah/yq/) version v4.44.3')
+    local python = yq('yq 3.4.3')
+    vim.env.PATH = path
+    assert.is_true(says(go, 'ok', 'yq is mikefarah/yq'))
+    assert.is_true(says(python, 'warn', 'yq is not mikefarah/yq (yq 3.4.3)'))
+  end)
+
   it('names the CLIs the encrypted files and Kubernetes run', function()
     local restore = h.stub(vim.fn, 'executable', function() return 0 end)
     local entries = section(report(), 'Requirements')
