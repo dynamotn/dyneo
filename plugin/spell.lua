@@ -8,16 +8,17 @@ local dictionaries = vim.fn.expand(
     or vim.fs.joinpath(vim.fn.stdpath('config'), '..', 'dictionaries')
 )
 
--- Escaped for `:mkspell`: a directory with a space would split its argument
--- list, and escaping the whole `zh` glob would stop it expanding
+-- Each word list as its directory and the file (or glob) in it: the path is
+-- read and written as it is, and only escaped to build `:mkspell`, where a
+-- directory with a space would split its argument list and escaping the
+-- whole `zh` glob would stop it expanding
+---@type table<string, { dir: string, file: string }[]>
 local spell_files = {
-  vi = { vim.fs.joinpath(vim.fn.fnameescape(dictionaries), 'vietnamese.txt') },
-  zh = { vim.fs.joinpath(vim.fn.fnameescape(dictionaries), 'chinese', '*.txt') },
+  vi = { { dir = dictionaries, file = 'vietnamese.txt' } },
+  zh = { { dir = vim.fs.joinpath(dictionaries, 'chinese'), file = '*.txt' } },
 
-  proper = { vim.fs.joinpath(vim.fn.fnameescape(spell_dir), 'proper.txt') },
-  technical = {
-    vim.fs.joinpath(vim.fn.fnameescape(spell_dir), 'technical.txt'),
-  },
+  proper = { { dir = spell_dir, file = 'proper.txt' } },
+  technical = { { dir = spell_dir, file = 'technical.txt' } },
 }
 
 --- Build the spell file of one language from its dictionaries
@@ -38,7 +39,15 @@ local make_spell = function(lang, silent)
       .. 'mkspell! '
       .. vim.fn.fnameescape(vim.fs.joinpath(spell_dir, lang))
       .. ' '
-      .. table.concat(spell_files[lang], ' ')
+      .. table.concat(
+        vim.tbl_map(
+          function(list)
+            return vim.fs.joinpath(vim.fn.fnameescape(list.dir), list.file)
+          end,
+          spell_files[lang]
+        ),
+        ' '
+      )
   )
 end
 
@@ -71,7 +80,8 @@ local add_word = function(lang)
     return
   end
 
-  local list = spell_files[lang][1]
+  local list =
+    vim.fs.joinpath(spell_files[lang][1].dir, spell_files[lang][1].file)
   local words = vim.uv.fs_stat(list) and vim.fn.readfile(list) or {}
   if vim.list_contains(words, word) then
     vim.notify("[spell] '" .. word .. "' is already in " .. lang)

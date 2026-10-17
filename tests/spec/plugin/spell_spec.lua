@@ -2,6 +2,7 @@ local h = require('helpers')
 
 describe('plugin/spell', function()
   local dir, cleanup, restores, commands, messages, executed
+  local restore_cmd, record_cmd
   before_each(function()
     h.globals()
     dir, cleanup = h.tmpdir()
@@ -34,10 +35,9 @@ describe('plugin/spell', function()
     dofile(h.root .. '/plugin/spell.lua')
     -- Loaded first, so the module keeps the real `vim.cmd`; only `mkspell`
     -- is recorded from here on
-    table.insert(
-      restores,
-      h.stub(vim, 'cmd', function(cmd) table.insert(commands, cmd) end)
-    )
+    restore_cmd = vim.cmd
+    record_cmd = function(cmd) table.insert(commands, cmd) end
+    table.insert(restores, h.stub(vim, 'cmd', record_cmd))
   end)
   after_each(function()
     for i = #restores, 1, -1 do
@@ -117,6 +117,38 @@ describe('plugin/spell', function()
       assert.are.same({ 'Dynamo' }, vim.fn.readfile(dir .. '/spell/proper.txt'))
       assert.are.same({}, commands)
       assert.are.equal("[spell] 'Dynamo' is already in proper", messages[1][1])
+    end)
+
+    it('reads and writes a list whose path needs escaping', function()
+      -- `stdpath('config')` with a space, `#` and `%` in it
+      local config = dir .. '/my config #1 %'
+      vim.fn.mkdir(config .. '/spell', 'p')
+      h.write(config .. '/spell/proper.txt', { 'Dynamo' })
+      restores[1]()
+      local stdpath = vim.fn.stdpath
+      restores[1] = h.stub(vim.fn, 'stdpath', function(what)
+        if what == 'config' then return config end
+        return stdpath(what)
+      end)
+      vim.cmd = restore_cmd
+      dofile(h.root .. '/plugin/spell.lua')
+      vim.cmd = record_cmd
+
+      add('p', 'Dynamo')
+      assert.are.equal("[spell] 'Dynamo' is already in proper", messages[1][1])
+      add('t', 'Neovim')
+      assert.are.same(
+        { 'Neovim' },
+        vim.fn.readfile(config .. '/spell/technical.txt')
+      )
+      assert.are.equal(1, #commands)
+      assert.truthy(
+        commands[1]:find(
+          vim.fn.fnameescape(config) .. '/spell/technical.txt',
+          1,
+          true
+        )
+      )
     end)
 
     it('refuses an empty word', function()
