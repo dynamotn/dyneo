@@ -311,6 +311,37 @@ describe('tools.ci_inline', function()
       end
     )
 
+    it('lints without the env token on a host it is not for', function()
+      local saved = {}
+      for _, var in ipairs({ 'GITLAB_TOKEN', 'GITLAB_HOST', 'GL_HOST' }) do
+        saved[var] = vim.env[var]
+      end
+      vim.env.GITLAB_TOKEN, vim.env.GITLAB_HOST, vim.env.GL_HOST =
+        'spec-token', nil, nil
+      cli('glab', {
+        'echo "token=${GITLAB_TOKEN-unset} home=${HOME:+set}" >> "'
+          .. dir
+          .. '/env"',
+      })
+      h.write(repo .. '/.gitlab-ci.yml', GITLAB)
+      vim.cmd.edit(repo .. '/.gitlab-ci.yml')
+      local bufnr = vim.api.nvim_get_current_buf()
+      vim.bo.filetype = 'yaml.gitlab'
+      git('remote', 'add', 'origin', 'https://gitlab.attacker.example/g/p')
+      ci.lint(bufnr)
+      assert.is_true(vim.wait(5000, function() return #notes > 0 end, 20))
+      git('remote', 'set-url', 'origin', 'https://gitlab.com/g/p')
+      ci.lint(bufnr)
+      assert.is_true(vim.wait(5000, function() return #notes > 1 end, 20))
+      for var, value in pairs(saved) do
+        vim.env[var] = value
+      end
+      assert.same(
+        { 'token=unset home=set', 'token=spec-token home=set' },
+        vim.fn.readfile(dir .. '/env')
+      )
+    end)
+
     it('maps lint only on a GitLab file', function()
       local gitlab = h.buffer({ filetype = 'yaml.gitlab' })
       local github = h.buffer({ filetype = 'yaml.gh-action' })

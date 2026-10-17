@@ -494,9 +494,16 @@ function M.lint(bufnr)
     return notify('glab is not installed', vim.log.levels.ERROR)
   end
   M.context(bufnr, function(ctx)
+    local opts = { cwd = ctx.dir, timeout = forge.TIMEOUT }
+    -- `glab` sends the file to the remote's host, which the repository
+    -- names: a token from the environment stays with the host it is for
+    local env = forge.cli_env(ctx.remote)
+    if env then
+      opts.env, opts.clear_env = env, true
+    end
     require('util.system').run(
       { 'glab', 'ci', 'lint', ctx.file },
-      { cwd = ctx.dir, timeout = forge.TIMEOUT },
+      opts,
       function(result)
         if not vim.api.nvim_buf_is_valid(bufnr) then return end
         local output = (result.stdout or '') .. '\n' .. (result.stderr or '')
