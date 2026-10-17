@@ -539,10 +539,11 @@ function M.lockfile(file, lines)
 end
 
 --- Hand `on_files` the lockfiles of the project at `root`: those git
---- tracks, else those at its top. Walking the tree would go through
---- `node_modules` and `vendor`.
+--- tracks, else those at its top -- outside git, or not tracked yet. Walking
+--- the tree would go through `node_modules` and `vendor`. A list cut at
+--- the output cap is no list: `on_files` gets nil and why.
 ---@param root string
----@param on_files fun(files: string[])
+---@param on_files fun(files: string[]?, err: string?)
 function M.find_lockfiles(root, on_files)
   local names = vim.tbl_keys(M.LOCKFILES)
   table.sort(names)
@@ -563,7 +564,13 @@ function M.find_lockfiles(root, on_files)
     vim.list_extend({ 'git', 'ls-files', '-z', '--' }, patterns),
     { cwd = root, timeout = 10000 },
     function(result)
-      if result.code ~= 0 and not result.cut then return at_top() end
+      if result.cut then
+        return on_files(
+          nil,
+          'git ls-files printed more than can be read, and was stopped'
+        )
+      end
+      if result.code ~= 0 then return at_top() end
       local files = {}
       for _, path in
         ipairs(vim.split(result.stdout or '', '\0', { trimempty = true }))
@@ -571,6 +578,7 @@ function M.find_lockfiles(root, on_files)
         local file = vim.fs.joinpath(root, path)
         if vim.fn.filereadable(file) == 1 then table.insert(files, file) end
       end
+      if #files == 0 then return at_top() end
       on_files(files)
     end
   )
@@ -724,8 +732,15 @@ function M.lock()
 end
 
 --- Ask OSV about the packages of `files`, and show what it knows
----@param files string[]
-function M.ask_lockfiles(files)
+---@param files string[]?
+---@param err? string Why there is no list of them
+function M.ask_lockfiles(files, err)
+  if not files then
+    return notify(
+      'Could not list the lockfiles: ' .. (err or 'no reason given'),
+      vim.log.levels.ERROR
+    )
+  end
   if #files == 0 then
     return notify(
       'No lockfile found: '

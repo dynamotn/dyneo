@@ -341,6 +341,32 @@ describe('tools.sbom', function()
       assert.same({ dir .. '/go.mod', dir .. '/web/package-lock.json' }, files)
     end)
 
+    it('looks at the top when git tracks no lockfile yet', function()
+      h.write(dir .. '/go.mod', { 'module x' })
+      h.write(dir .. '/main.go', { 'package main' })
+      vim.system({ 'git', 'init', '-q' }, { cwd = dir }):wait()
+      vim.system({ 'git', 'add', 'main.go' }, { cwd = dir }):wait()
+      local files
+      sbom.find_lockfiles(dir, function(found) files = found end)
+      assert.is_true(vim.wait(5000, function() return files ~= nil end, 10))
+      assert.same({ dir .. '/go.mod' }, files)
+    end)
+
+    it('lists nothing when git printed more than can be read', function()
+      local restore = h.stub(require('util.system'), 'MAX_BYTES', 4)
+      h.write(dir .. '/go.mod', { 'module x' })
+      vim.system({ 'git', 'init', '-q' }, { cwd = dir }):wait()
+      vim.system({ 'git', 'add', 'go.mod' }, { cwd = dir }):wait()
+      local done, files, err
+      sbom.find_lockfiles(dir, function(found, why)
+        done, files, err = true, found, why
+      end)
+      assert.is_true(vim.wait(5000, function() return done end, 10))
+      restore()
+      assert.is_nil(files)
+      assert.truthy(err:find('more than can be read', 1, true))
+    end)
+
     it('looks at the top only outside git', function()
       h.write(dir .. '/Cargo.lock', {})
       h.write(dir .. '/sub/go.mod', {})
