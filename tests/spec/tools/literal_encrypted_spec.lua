@@ -718,6 +718,20 @@ describe('tools.encrypted', function()
       )
     end)
 
+    it('fails on a clear text at the revision that was cut', function()
+      local bufnr = open(repo .. '/values.yaml')
+      tool('sops', { "printf '%0500d' 0" })
+      local restore = h.stub(require('util.system'), 'MAX_BYTES', 100)
+      local lines, err
+      encrypted.clear_at(bufnr, 'HEAD', function(l, e)
+        lines, err = l, e or ''
+      end)
+      assert.is_true(vim.wait(5000, function() return err ~= nil end, 10))
+      restore()
+      assert.is_nil(lines)
+      assert.is_truthy(err:find('could not decrypt it', 1, true))
+    end)
+
     it('refuses a buffer that was not decrypted', function()
       vim.cmd.edit(repo .. '/plain.txt')
       encrypted.diff(0)

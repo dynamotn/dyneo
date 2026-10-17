@@ -444,6 +444,9 @@ function M.clear_at(bufnr, rev, on_done)
     { 'git', 'show', ('%s:./%s'):format(rev, name) },
     { cwd = dir, text = false },
     function(blob)
+      if blob and blob.cut then
+        return on_done(nil, ('%s at %s is too large to read'):format(name, rev))
+      end
       if not blob or blob.code ~= 0 then
         return on_done(
           nil,
@@ -466,7 +469,7 @@ function M.clear_at(bufnr, rev, on_done)
       vim.uv.fs_close(fd)
       run(M.decrypt_command(kind, copy), { text = true }, function(result)
         vim.fn.delete(private, 'rf')
-        if not result or result.code ~= 0 then
+        if not result or result.code ~= 0 or result.cut then
           return on_done(
             nil,
             'could not decrypt it: '
