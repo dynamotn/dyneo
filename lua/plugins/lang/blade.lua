@@ -1,7 +1,9 @@
 local language = require('config.languages').blade
 local cmp_util = require('util.cmp')
 
--- Laravel's tooling reaches across the whole project, not just the templates
+-- Laravel's tooling reaches across the whole project, not just the templates:
+-- its keys are set on PHP buffers too, and the PHP buffers of a Laravel
+-- project load it (see `init` below)
 local filetypes = vim.list_extend(vim.deepcopy(language.filetypes), { 'php' })
 
 return vim.list_contains(DyNeo.enabled_languages, 'blade')
@@ -9,8 +11,37 @@ return vim.list_contains(DyNeo.enabled_languages, 'blade')
       {
         -- Artisan, routes, views and the rest of the project, as pickers
         'adalessa/laravel.nvim',
-        ft = filetypes,
+        ft = language.filetypes,
         cmd = 'Laravel',
+        -- A PHP buffer loads both plugins only inside a Laravel project, one
+        -- with `artisan` at its root; any other PHP file leaves them be
+        init = function()
+          local group =
+            vim.api.nvim_create_augroup('dyneo_laravel', { clear = true })
+          vim.api.nvim_create_autocmd('FileType', {
+            group = group,
+            pattern = 'php',
+            callback = function(args)
+              if not vim.fs.root(args.buf, 'artisan') then return end
+              vim.api.nvim_del_augroup_by_id(group)
+              require('lazy').load({
+                plugins = { 'laravel.nvim', 'blade-nav.nvim' },
+              })
+              -- Their ftplugins, which this buffer has missed: the
+              -- `filetypeplugin` group only, not every `FileType` handler
+              vim.api.nvim_buf_call(
+                args.buf,
+                function()
+                  pcall(
+                    vim.api.nvim_exec_autocmds,
+                    'FileType',
+                    { group = 'filetypeplugin', pattern = 'php' }
+                  )
+                end
+              )
+            end,
+          })
+        end,
         dependencies = {
           'MunifTanjim/nui.nvim',
           'nvim-lua/plenary.nvim',
@@ -71,7 +102,7 @@ return vim.list_contains(DyNeo.enabled_languages, 'blade')
       {
         -- `gf` on a view name, a route or a component
         'ricardoramirezr/blade-nav.nvim',
-        ft = filetypes,
+        ft = language.filetypes,
         -- Kept off the `blink.cmp` spec: lazy.nvim keeps a single `init` per
         -- plugin, and this one would replace the labels set in completion.lua
         init = function()
