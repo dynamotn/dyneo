@@ -420,7 +420,9 @@ the newest release, that has been out long enough.  What lazy.nvim then does
 with that target is untouched, so `:Lazy restore` still puts the lockfile back
 commit for commit, and a pinned plugin stays where it is.  A repository
 younger than the window is installed as lazy.nvim resolved it, since the
-alternative is not installing it at all.
+alternative is not installing it at all.  When no release of a plugin's
+range is old enough, it stays on what is checked out; only a plugin not
+cloned yet takes the fresh release, with a warning.
 
 A commit date is whatever the pusher set, so each target lazy.nvim resolves
 is also written down with the time this machine first saw it.  Once a plugin

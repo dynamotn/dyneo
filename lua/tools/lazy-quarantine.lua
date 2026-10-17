@@ -331,14 +331,31 @@ function M.target(plugin, target, releases, now)
 
   if target.tag then
     for _, release in ipairs(releases and releases() or {}) do
-      if release.commit and aged(plugin.dir, release.commit, now) then
-        return vim.tbl_extend('force', target, {
-          tag = release.tag,
-          version = release.version,
-          commit = release.commit,
-        })
+      if release.commit then
+        local old, asked = aged(plugin.dir, release.commit, now)
+        if not asked then return stay(plugin, target) end
+        if old then
+          return vim.tbl_extend('force', target, {
+            tag = release.tag,
+            version = release.version,
+            commit = release.commit,
+          })
+        end
       end
     end
+    -- No release of the range is old enough: what is checked out stays.
+    -- Only a plugin with nothing cloned yet takes the fresh one, since the
+    -- alternative is not installing it at all.
+    local ok, Git = pcall(require, 'lazy.manage.git')
+    local current = ok and Git.info(plugin.dir)
+    if current then return current end
+    notify(
+      ('No release of `%s` has cleared the window: installing %s, nothing older is cloned'):format(
+        plugin.name,
+        target.tag
+      ),
+      vim.log.levels.WARN
+    )
     return target
   end
 

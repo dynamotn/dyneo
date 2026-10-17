@@ -130,19 +130,56 @@ describe('tools.lazy-quarantine', function()
     assert.are.equal(commits[2], picked.commit)
   end)
 
-  it('keeps the release lazy.nvim picked when none is old enough', function()
-    local dir, commits, cleanup = repository({ 2 * DAY, DAY })
+  it('stays on the checkout when no release is old enough', function()
+    local dir, commits, cleanup = repository({ 3 * DAY, 2 * DAY, DAY })
+    git(dir, { 'checkout', '--quiet', '--detach', commits[1] })
     h.unload('tools.lazy-quarantine')
     local quarantine = require('tools.lazy-quarantine')
     local picked = quarantine.target(
       { dir = dir, name = 'spec.nvim' },
-      { branch = 'main', tag = 'v2.0.0', commit = commits[2] },
-      function() return { { tag = 'v1.0.0', commit = commits[1] } } end,
+      { branch = 'main', tag = 'v3.0.0', commit = commits[3] },
+      function()
+        return {
+          { tag = 'v3.0.0', commit = commits[3] },
+          { tag = 'v2.0.0', commit = commits[2] },
+        }
+      end,
       now
     )
     cleanup()
+    assert.are.equal(commits[1], picked.commit)
+  end)
+
+  it('installs a fresh release only when nothing is cloned', function()
+    local dir, commits, cleanup = repository({ 2 * DAY, DAY })
+    local empty, clean_empty = h.tmpdir()
+    -- Answers on the age come from the cache, filled from the real clone
+    h.unload('tools.lazy-quarantine')
+    local quarantine = require('tools.lazy-quarantine')
+    local release = { tag = 'v2.0.0', commit = commits[2] }
+    local notes = {}
+    local restore = h.stub(
+      vim,
+      'notify',
+      function(msg) table.insert(notes, msg) end
+    )
+    quarantine.target(
+      { dir = dir, name = 'spec.nvim' },
+      { branch = 'main', tag = 'v2.0.0', commit = commits[2] },
+      function() return { release } end,
+      now
+    )
+    local picked = quarantine.target(
+      { dir = empty, name = 'spec.nvim' },
+      { branch = 'main', tag = 'v2.0.0', commit = commits[2] },
+      function() return { release } end,
+      now
+    )
+    restore()
+    cleanup()
+    clean_empty()
     assert.are.equal('v2.0.0', picked.tag)
-    assert.are.equal(commits[2], picked.commit)
+    assert.is_truthy(notes[#notes]:find('nothing older is cloned', 1, true))
   end)
 
   describe('cache', function()
