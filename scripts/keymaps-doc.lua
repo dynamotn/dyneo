@@ -2,7 +2,7 @@
 -- sets, read off the configuration as it loads rather than kept by hand.
 --
 -- Loaded with `--cmd` by `keymaps-doc.sh`, ahead of `init.lua`, so it can
--- watch `vim.keymap.set` from the first mapping on. Three sources are read:
+-- watch `vim.keymap.set` from the first mapping on. Four sources are read:
 --
 -- - the `keys` of every plugin spec, through lazy.nvim's own resolution, so
 --   a later spec overriding a key is what shows;
@@ -10,7 +10,9 @@
 --   options, for the buffers a server attaches to;
 -- - every other `vim.keymap.set` made from this tree: `config.keymaps`, what
 --   plugin `opts` and `config` functions map themselves, and what an
---   `on_attach` maps in the buffer it attaches to.
+--   `on_attach` maps in the buffer it attaches to;
+-- - what the tools of `lua/tools` map in the buffers their `plugin/` shim
+--   attaches them to on `FileType`.
 --
 -- Groups come from which-key's `spec`. Mappings a plugin makes on its own,
 -- with no `keys` entry here, are left to `:help` of that plugin.
@@ -266,6 +268,74 @@ local function source_ftplugins()
   end
 end
 
+--- Fire the `FileType` autocmds of this tree's tools (the `dy_*` groups the
+--- `plugin/` shims make) in a buffer of each filetype they name, for the
+--- `<localleader>` keys their `attach` maps. Only those groups run, and the
+--- filetype is set without events, so no server or parser starts.
+---
+--- Several tools map only in a buffer that looks like theirs: a manifest, a
+--- file of a Helm chart, a schedule, an AsyncAPI document. Every buffer is
+--- one of all of these at once, so each of them maps what it would.
+local function attach_tools()
+  local chart = vim.fn.tempname()
+  vim.fn.mkdir(vim.fs.joinpath(chart, 'templates'), 'p')
+  vim.fn.writefile(
+    { 'name: keymaps-doc' },
+    vim.fs.joinpath(chart, 'Chart.yaml')
+  )
+  local lines = {
+    'asyncapi: 3.0.0',
+    '"asyncapi": "3.0.0",',
+    'apiVersion: batch/v1',
+    'kind: CronJob',
+    'schedule: "0 * * * *"',
+  }
+
+  -- One entry per group, holding every filetype it names
+  local by_group = {} ---@type table<string, { id: integer, fts: string[] }>
+  for _, autocmd in ipairs(vim.api.nvim_get_autocmds({ event = 'FileType' })) do
+    local name = autocmd.group_name
+    if name and name:match('^dy_') then
+      by_group[name] = by_group[name] or { id = autocmd.group, fts = {} }
+      if not vim.list_contains(by_group[name].fts, autocmd.pattern) then
+        table.insert(by_group[name].fts, autocmd.pattern)
+      end
+    end
+  end
+  local names = vim.tbl_keys(by_group)
+  table.sort(names)
+
+  for _, name in ipairs(names) do
+    local group = by_group[name]
+    sourcing_ft = table.concat(group.fts, ', ')
+    for _, ft in ipairs(group.fts) do
+      -- A pattern such as `yaml.*` is not a filetype a buffer can have
+      if not ft:find('[*?[]') then
+        local bufnr = vim.api.nvim_create_buf(true, false)
+        vim.api.nvim_buf_set_name(
+          bufnr,
+          vim.fs.joinpath(chart, 'templates', ('%s-%s.yaml'):format(name, ft))
+        )
+        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+        vim.api.nvim_buf_call(bufnr, function()
+          vim.cmd('noautocmd setlocal filetype=' .. ft)
+          local ok, err = pcall(
+            vim.api.nvim_exec_autocmds,
+            'FileType',
+            { group = group.id, pattern = ft, modeline = false }
+          )
+          if not ok then
+            io.stderr:write(
+              ('keymaps-doc: %s on %s: %s\n'):format(name, ft, err)
+            )
+          end
+        end)
+      end
+    end
+    sourcing_ft = nil
+  end
+end
+
 local function collect()
   local Config = require('lazy.core.config')
   local Plugin = require('lazy.core.plugin')
@@ -463,6 +533,7 @@ vim.api.nvim_create_autocmd('VimEnter', {
       pcall(vim.cmd.edit, vim.fn.fnameescape(vim.fn.tempname()))
       attach(vim.api.nvim_get_current_buf())
       source_ftplugins()
+      attach_tools()
     end)
     if not ok then
       io.stderr:write('keymaps-doc: ' .. tostring(err) .. '\n')
