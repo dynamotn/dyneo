@@ -17,6 +17,20 @@ return h.make_builtin({
     cwd = h.cache.by_bufnr(
       function(params) return vim.fs.dirname(params.bufname) end
     ),
+    -- Validating evaluates the configuration, and a `run_cmd` in its locals
+    -- runs as the user: the project is trusted first, once a session
+    runtime_condition = function(params)
+      local root = vim.fs.root(params.bufnr, '.git')
+        or vim.fs.dirname(params.bufname)
+      return require('util.trust').ask(
+        'terragrunt',
+        root,
+        ('Run terragrunt hcl validate in %s?\n'):format(
+          vim.fn.fnamemodify(root, ':~')
+        ) .. 'It evaluates terragrunt.hcl, whose run_cmd runs as you.',
+        true
+      )
+    end,
     from_stderr = false,
     to_stdin = false,
     multiple_files = true,

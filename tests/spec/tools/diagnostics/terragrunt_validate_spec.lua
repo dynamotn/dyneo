@@ -28,6 +28,29 @@ describe('tools.diagnostics.terragrunt_validate', function()
     end
   )
 
+  it('runs only in a project trusted to run its code', function()
+    local asked = {}
+    local answer = false
+    local restore = h.stub(package.loaded, 'util.trust', {
+      ask = function(purpose, root, question, sticky)
+        table.insert(asked, { purpose, root, sticky })
+        assert.is_truthy(question:find('run_cmd', 1, true))
+        return answer
+      end,
+    })
+    local dir, cleanup = h.tmpdir()
+    h.write(dir .. '/live/terragrunt.hcl', { 'locals {}' })
+    local bufnr = h.buffer({ name = dir .. '/live/terragrunt.hcl' })
+    local params = { bufnr = bufnr, bufname = dir .. '/live/terragrunt.hcl' }
+    assert.is_false(opts.runtime_condition(params))
+    answer = true
+    assert.is_true(opts.runtime_condition(params))
+    restore()
+    vim.api.nvim_buf_delete(bufnr, { force = true })
+    cleanup()
+    assert.same({ 'terragrunt', dir .. '/live', true }, asked[1])
+  end)
+
   -- none-ls hands stdout to `on_output` only for an exit it was told is fine;
   -- any other, with nothing on stderr, has its stdout taken for the error
   it('reads the output whatever the exit code', function()
