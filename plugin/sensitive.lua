@@ -5,15 +5,35 @@ local function augroup(name)
   return vim.api.nvim_create_augroup('dyneo_' .. name, { clear = true })
 end
 
+--- `path` with its symlinks resolved, as far up as it exists: a new file,
+--- or one in a folder not made yet, keeps the part that is not there
+---@param path string
+---@return string
+local function resolve(path)
+  local rest = ''
+  while true do
+    local real = vim.uv.fs_realpath(path)
+    if real then return (real:gsub('/$', '')) .. rest end
+    local parent = vim.fs.dirname(path)
+    if parent == path then return path .. rest end
+    rest = '/' .. vim.fs.basename(path) .. rest
+    path = parent
+  end
+end
+
 -- Those files outlive it on disk in plain text. A file under the temporary
 -- directory counts too, such as the decrypted copy `chezmoi edit` works on.
+-- Both sides are resolved: on macOS `/tmp` and `$TMPDIR` are links into
+-- `/private`, and a file reaches Neovim by either name.
 local function leaves_no_copy(file)
   if file == '' then return false end
-  local tmp = vim.fs.normalize(vim.env.TMPDIR or '/tmp')
   file = vim.fs.normalize(vim.fn.fnamemodify(file, ':p'))
-  return vim.startswith(file, tmp .. '/')
-    or vim.startswith(file, '/tmp/')
-    or require('util.sensitive').is_sensitive_path(file)
+  local real = resolve(file)
+  for _, tmp in ipairs({ vim.env.TMPDIR or '/tmp', '/tmp' }) do
+    tmp = resolve(vim.fs.normalize(tmp))
+    if tmp ~= '' and vim.startswith(real, tmp .. '/') then return true end
+  end
+  return require('util.sensitive').is_sensitive_path(file)
 end
 
 vim.api.nvim_create_autocmd({ 'BufReadPre', 'BufNewFile' }, {

@@ -14,6 +14,41 @@ describe('plugin/sensitive', function()
     cleanup()
   end)
 
+  describe('a file in the temporary directory', function()
+    local tmpdir, swapfile, real, link
+    before_each(function()
+      tmpdir, swapfile = vim.env.TMPDIR, vim.o.swapfile
+      vim.o.swapfile = true
+      -- `real` stands for `/private/tmp`, and `link` for `/tmp` pointing at it
+      real, link = dir .. '/private-tmp', dir .. '/tmp'
+      vim.fn.mkdir(real, 'p')
+      assert(vim.uv.fs_symlink(real, link))
+    end)
+    after_each(function()
+      vim.env.TMPDIR, vim.o.swapfile = tmpdir, swapfile
+      vim.cmd('silent! %bwipeout!')
+    end)
+
+    ---@param tmp string `$TMPDIR`
+    ---@param file string
+    ---@return boolean
+    local function keeps_swap(tmp, file)
+      vim.env.TMPDIR = tmp
+      vim.cmd.edit(vim.fn.fnameescape(file))
+      return vim.bo.swapfile
+    end
+
+    it(
+      'counts by its real path when $TMPDIR is a link',
+      function() assert.is_false(keeps_swap(link, real .. '/secret.txt')) end
+    )
+
+    it(
+      'counts by a link into $TMPDIR',
+      function() assert.is_false(keeps_swap(real, link .. '/new/secret.txt')) end
+    )
+  end)
+
   it('restores backup options after a write that failed', function()
     -- The temporary directory counts as leaving a copy behind
     local file = dir .. '/missing/secret.txt'
