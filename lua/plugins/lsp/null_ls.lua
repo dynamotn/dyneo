@@ -50,15 +50,16 @@ return {
         for _, tool in ipairs(language.null_ls or {}) do
           local tool_name = tool[1]
           local key = tool.type .. '.' .. tool_name
+          -- A source's own filetypes win over the language's; `*` with none
+          -- of its own is every filetype, an empty list to none-ls
+          local filetypes = tool.filetypes
+            or (name == '*' and {} or language.filetypes)
           if source_configs[key] then
             source_configs[key].filetypes =
-              vim.list_extend(source_configs[key].filetypes, language.filetypes)
+              vim.list_extend(source_configs[key].filetypes, filetypes)
           else
-            source_configs[key] = {
-              info = tool,
-              filetypes = name == '*' and {}
-                or vim.deepcopy(language.filetypes),
-            }
+            source_configs[key] =
+              { info = tool, filetypes = vim.deepcopy(filetypes) }
           end
         end
       end

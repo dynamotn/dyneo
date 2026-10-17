@@ -127,6 +127,7 @@
 ---@field custom? boolean The source is `lua/tools/<type>/<name>.lua` of
 --- this repository rather than a none-ls builtin
 ---@field remote? boolean Sends the buffer off the machine: never a sensitive one
+---@field filetypes? string[] Only these filetypes, rather than the language's
 ---@field mason? DyMasonSpec
 
 --- A debug adapter mason-nvim-dap does not map to a package, see `util.dap`
@@ -367,10 +368,14 @@ return {
       { 'semgrep', mason = { enabled = false } },
     },
     null_ls = {
+      -- `K` looks the word up on dictionaryapi.dev: prose only, never a
+      -- sensitive buffer
       {
         'dictionary',
         type = 'hover',
         command = 'curl',
+        filetypes = { 'markdown', 'text', 'gitcommit', 'rst', 'asciidoc' },
+        remote = true,
         mason = { enabled = false },
       },
       {
