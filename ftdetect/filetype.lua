@@ -20,6 +20,23 @@ local ansible = within('yaml.ansible', {
 })
 local helm = within('helm', { 'Chart.yaml' })
 
+--- A filetype for a file whose first lines hold one of `keys`: a name such as
+--- `openapi*.json` is shared by `openapitools.json` and the generator's
+--- config, and only the document itself starts with `openapi:` or `swagger:`
+---@param filetype string
+---@param keys string[] Lua patterns, one per line
+---@return fun(path: string, bufnr?: integer): string?
+local function declaring(filetype, keys)
+  return function(_, bufnr)
+    if not bufnr then return end
+    for _, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, 20, false)) do
+      for _, key in ipairs(keys) do
+        if line:find(key) then return filetype end
+      end
+    end
+  end
+end
+
 vim.filetype.add({
   extension = {
     envrc = 'sh',
@@ -104,8 +121,14 @@ vim.filetype.add({
     ['.*/tasks/.*%.ya?ml'] = ansible,
     ['.*/molecule/.*%.ya?ml'] = 'yaml.ansible',
 
-    ['openapi.*%.ya?ml'] = 'yaml.openapi',
-    ['openapi.*%.json'] = 'json.openapi',
+    ['openapi.*%.ya?ml'] = declaring(
+      'yaml.openapi',
+      { '^openapi%s*:', '^swagger%s*:' }
+    ),
+    ['openapi.*%.json'] = declaring(
+      'json.openapi',
+      { '"openapi"%s*:', '"swagger"%s*:' }
+    ),
 
     ['.*%.gitlab%-ci%.ya?ml'] = 'yaml.gitlab',
     ['.*%.github/workflows/.*%.ya?ml'] = 'yaml.gh-action',

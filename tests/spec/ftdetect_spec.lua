@@ -47,8 +47,6 @@ describe('ftdetect', function()
     { '/p/roles/web/tasks/main.yml', 'yaml.ansible' },
     { '/p/roles/web/handlers/main.yml', 'yaml.ansible' },
     { '/p/molecule/default/converge.yml', 'yaml.ansible' },
-    { '/p/openapi.yaml', 'yaml.openapi' },
-    { '/p/openapi-v2.json', 'json.openapi' },
     { '/p/model/landscape.c4', 'likec4' },
     { '/p/model/views.likec4', 'likec4' },
     { '/p/.gitlab-ci.yml', 'yaml.gitlab' },
@@ -83,6 +81,37 @@ describe('ftdetect', function()
     'leaves a plain HTML file outside templates alone',
     function() assert.are.equal('html', match('/p/static/index.html')) end
   )
+
+  describe('an OpenAPI document', function()
+    ---@param name string
+    ---@param lines string[]
+    local function match_lines(name, lines)
+      local bufnr = h.buffer({ name = '/p/' .. name, lines = lines })
+      local ft = vim.filetype.match({ buf = bufnr })
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+      return ft
+    end
+
+    local documents = {
+      { 'openapi.yaml', { '# API', 'openapi: 3.1.0' }, 'yaml.openapi' },
+      { 'openapi-v2.yml', { 'swagger: "2.0"' }, 'yaml.openapi' },
+      { 'openapi.json', { '{', '  "openapi": "3.0.3",' }, 'json.openapi' },
+      { 'openapi-v2.json', { '{"swagger":"2.0"}' }, 'json.openapi' },
+      -- The generator's own files, named alike
+      { 'openapitools.json', { '{', '  "generator-cli": {}' }, 'json' },
+      {
+        'openapi-generator-config.yaml',
+        { 'generatorName: go', 'outputDir: out' },
+        'yaml',
+      },
+    }
+    for _, case in ipairs(documents) do
+      it(
+        case[1] .. ' is ' .. case[3],
+        function() assert.are.equal(case[3], match_lines(case[1], case[2])) end
+      )
+    end
+  end)
 
   describe('within a project', function()
     local dir, cleanup
