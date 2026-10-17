@@ -1,4 +1,30 @@
 {
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Edit|MultiEdit|Write|NotebookEdit|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "nvim --clean --headless -l \"$CLAUDE_PROJECT_DIR/scripts/claude-hook.lua\" pre",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "nvim --clean --headless -l \"$CLAUDE_PROJECT_DIR/scripts/claude-hook.lua\" post",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  },
   "enabledPlugins": {
     "supply-chain-risk-auditor@trailofbits": true,
     "differential-review@trailofbits": true,
