@@ -78,8 +78,9 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
             -- How to run jdtls. This can be overridden to a full java command-line
             -- if the Python wrapper script doesn't suffice.
             cmd = cmd,
-            full_cmd = function(opts)
-              local fname = vim.api.nvim_buf_get_name(0)
+            ---@param bufnr? integer The buffer the server starts for
+            full_cmd = function(opts, bufnr)
+              local fname = vim.api.nvim_buf_get_name(bufnr or 0)
               local root_dir = opts.root_dir(fname)
               local project_name = opts.project_name(root_dir)
               ---@diagnostic disable-next-line: redefined-local
@@ -136,12 +137,13 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
               end
             end
           end
-          local function attach_jdtls()
-            local fname = vim.api.nvim_buf_get_name(0)
+          ---@param bufnr integer
+          local function attach_jdtls(bufnr)
+            local fname = vim.api.nvim_buf_get_name(bufnr)
 
             -- Configuration can be augmented and overridden by opts.jdtls
             local config = extend_or_override({
-              cmd = opts.full_cmd(opts),
+              cmd = opts.full_cmd(opts, bufnr),
               root_dir = opts.root_dir(fname),
               init_options = {
                 bundles = bundles,
@@ -154,7 +156,7 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
             }, opts.jdtls)
 
             -- Existing server will be reused if the root_dir matches.
-            require('jdtls').start_or_attach(config)
+            require('jdtls').start_or_attach(config, nil, { bufnr = bufnr })
             -- not need to require("jdtls.setup").add_commands(), start automatically adds commands
           end
 
@@ -168,7 +170,7 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
           vim.api.nvim_create_autocmd('FileType', {
             group = group,
             pattern = language.filetypes,
-            callback = attach_jdtls,
+            callback = function(args) attach_jdtls(args.buf) end,
           })
 
           -- Setup keymap and dap after the lsp is fully attached.
@@ -300,7 +302,7 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
           })
 
           -- Avoid race condition by calling attach the first time, since the autocmd won't fire.
-          attach_jdtls()
+          attach_jdtls(vim.api.nvim_get_current_buf())
         end,
       },
       {
