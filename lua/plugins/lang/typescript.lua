@@ -10,6 +10,9 @@ local js_filetypes = vim
   })
   :flatten()
   :totable()
+-- `setup.vtsls` runs once for each language naming the server; the handler
+-- it adds is wanted once
+local move_to_file_hooked = false
 local condition = vim.list_contains(DyNeo.enabled_languages, 'typescript')
   or vim.list_contains(DyNeo.enabled_languages, 'javascript')
   or vim.list_contains(DyNeo.enabled_languages, 'tsx')
@@ -113,6 +116,8 @@ return condition
           },
           setup = {
             vtsls = function(_, opts)
+              if move_to_file_hooked then return end
+              move_to_file_hooked = true
               Snacks.util.lsp.on({ name = 'vtsls' }, function(_, client)
                 client.commands['_typescript.moveToFileRefactoring'] = function(
                   command,
