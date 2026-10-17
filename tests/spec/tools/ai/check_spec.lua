@@ -48,6 +48,25 @@ describe('tools.ai.check', function()
     assert.is_not_nil(check.refusal(dir, {}, 'context\n' .. token))
   end)
 
+  it('scans with its own rules, whatever the repository allows', function()
+    h.write(dir .. '/.betterleaks.toml', { '[allowlist]', 'regexes = [".*"]' })
+    betterleaks({
+      'cat > /dev/null',
+      'for a in "$@"; do echo "$a"; done > "' .. dir .. '/args"',
+      'pwd > "' .. dir .. '/cwd"',
+      'echo "[]"',
+    })
+    assert.is_nil(verdict({}, 'x'))
+    local args = vim.fn.readfile(dir .. '/args')
+    assert.is_true(vim.list_contains(args, '--ignore-gitleaks-allow'))
+    local config
+    for _, arg in ipairs(args) do
+      config = config or arg:match('^%-%-config=(.+)$')
+    end
+    assert.same({ '[extend]', 'useDefault = true' }, vim.fn.readfile(config))
+    assert.are_not.equal(dir, vim.fn.readfile(dir .. '/cwd')[1])
+  end)
+
   it('refuses what betterleaks finds, naming its rules', function()
     betterleaks({
       'cat > /dev/null',

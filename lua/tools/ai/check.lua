@@ -30,16 +30,39 @@ function M.refusal(root, paths, text)
   end
 end
 
+--- A directory of this session holding the `betterleaks` configuration used
+--- here, its built-in rules and nothing more, and an empty folder for its
+--- ignore file
+---@type string?
+local own
+
+--- That directory, made again when something removed it
+---@return string
+local function own_config()
+  if own and vim.uv.fs_stat(own .. '/config.toml') then return own end
+  own = vim.fn.tempname()
+  vim.fn.mkdir(own .. '/ignore', 'p', tonumber('700', 8))
+  vim.fn.writefile({ '[extend]', 'useDefault = true' }, own .. '/config.toml')
+  return own
+end
+
 --- Run `betterleaks` over `text`, with live validation off so nothing of it
 --- reaches a provider, and hand `on_done` why it must not go out, or nil
----@param cwd string Where its configuration is looked for
+---
+--- It runs on its own rules alone: the repository's `.betterleaks.toml`,
+--- `.gitleaks.toml` or `.betterleaksignore` could allow anything, and a
+--- `betterleaks:allow` comment is text of the diff like any other.
 ---@param text string
 ---@param on_done fun(reason?: string)
-function M.scan(cwd, text, on_done)
+function M.scan(text, on_done)
   local system = require('util.system')
+  local dir = own_config()
   system.run({
     'betterleaks',
     'stdin',
+    '--config=' .. dir .. '/config.toml',
+    '--gitleaks-ignore-path=' .. dir .. '/ignore',
+    '--ignore-gitleaks-allow',
     '--report-format=json',
     '--report-path=-',
     '--exit-code=0',
@@ -47,7 +70,7 @@ function M.scan(cwd, text, on_done)
     '--log-level=error',
     '--validation=false',
     '--redact',
-  }, { cwd = cwd, stdin = text, timeout = M.TIMEOUT }, function(result)
+  }, { cwd = dir, stdin = text, timeout = M.TIMEOUT }, function(result)
     if result.code ~= 0 or result.cut then
       return on_done(
         'betterleaks could not check it: '
@@ -77,7 +100,7 @@ end
 function M.text(root, paths, text, on_done)
   local reason = M.refusal(root, paths, text)
   if reason then return on_done(reason) end
-  M.scan(root, text, on_done)
+  M.scan(text, on_done)
 end
 
 return M
