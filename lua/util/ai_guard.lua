@@ -333,6 +333,29 @@ M.guard_avante = function()
       return read(filepath, ...)
     end
   )
+
+  -- What an ACP agent asks the editor to write (`fs/write_text_file`): Avante
+  -- writes the path as given. Its `fs/read_text_file` goes through the
+  -- reader above. Claude Code reads and writes with its own tools instead,
+  -- which none of this reaches.
+  local ok_acp, acp = pcall(require, 'avante.libs.acp_client')
+  wrap(
+    ok_acp and acp or nil,
+    '_handle_write_text_file',
+    'Avante ACP file writer',
+    function(write, self, message_id, params, ...)
+      local path = type(params) == 'table' and params.path
+      if
+        type(path) == 'string'
+        and path ~= ''
+        and sensitive.is_sensitive_path(vim.fn.fnamemodify(path, ':p'))
+      then
+        log('Avante', 'refused', path, 'ACP write')
+        return self:_send_error(message_id, 'the file is sensitive')
+      end
+      return write(self, message_id, params, ...)
+    end
+  )
 end
 
 --- Refuse to send a prompt to a CLI tool from a sensitive buffer, since

@@ -8,6 +8,7 @@ describe('util.ai_guard', function()
     'avante.file_selector',
     'avante.llm_tools.helpers',
     'avante.utils',
+    'avante.libs.acp_client',
     'sidekick.cli',
     'sidekick.status',
     'sidekick.config',
@@ -88,7 +89,7 @@ describe('util.ai_guard', function()
   end
 
   describe('guard_avante', function()
-    local api, selector, helpers, utils, calls
+    local api, selector, helpers, utils, acp, calls
 
     before_each(function()
       calls = {}
@@ -105,7 +106,24 @@ describe('util.ai_guard', function()
       package.loaded['avante.file_selector'] = selector
       package.loaded['avante.llm_tools.helpers'] = helpers
       package.loaded['avante.utils'] = utils
+      acp = { errors = {} }
+      acp._handle_write_text_file, calls.write = fn('written')
+      function acp:_send_error(id, message)
+        table.insert(self.errors, { id, message })
+      end
+      package.loaded['avante.libs.acp_client'] = acp
       ai_guard.guard_avante()
+    end)
+
+    it('writes no sensitive file an ACP agent asks for', function()
+      acp:_handle_write_text_file(1, { sessionId = 's', path = secret })
+      assert.same({ { 1, 'the file is sensitive' } }, acp.errors)
+      assert.equals(0, #calls.write)
+      assert.equals(
+        'written',
+        acp:_handle_write_text_file(2, { sessionId = 's', path = plain })
+      )
+      assert.equals(1, #calls.write)
     end)
 
     it('refuses ask and edit from a sensitive buffer', function()
@@ -167,8 +185,9 @@ describe('util.ai_guard', function()
         table.insert(missing, note.msg)
       end
     end
-    -- ask, edit, add_selected_file, the permission and the file reader
-    assert.equals(5, #missing)
+    -- ask, edit, add_selected_file, the permission, the file reader and
+    -- the ACP file writer
+    assert.equals(6, #missing)
     assert.equals(vim.log.levels.WARN, notes[1].level)
   end)
 

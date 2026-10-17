@@ -411,10 +411,15 @@ return {
             ANTHROPIC_MODEL = vim.env.VIM_AVANTE_CLAUDE_MODEL
               or 'claude-opus-5-5',
             ACP_PATH_TO_CLAUDE_CODE_EXECUTABLE = vim.fn.exepath('claude'),
-            -- Avante's default is `bypassPermissions`, which runs every tool
-            -- of Claude Code unasked. Here Claude Code asks Avante first, and
-            -- Avante asks the user: its tools read and write the disk
-            -- outside the project, past `util.ai_guard`.
+            -- Avante's default sets `bypassPermissions` here, so that one is
+            -- overridden; `claude-agent-acp` 0.23 reads neither variable,
+            -- though. Its mode is Claude Code's `permissions.defaultMode`
+            -- (`~/.claude/settings.json`, then the project's
+            -- `.claude/settings.json` and `.local.json`), `default` unset.
+            -- There Claude Code asks Avante, and Avante the user, only for
+            -- what its own rules ask about -- a shell, an edit; its read-only
+            -- tools read the disk unasked, with no `fs/read_text_file`, so
+            -- `util.ai_guard` never sees what they read.
             ACP_PERMISSION_MODE = 'default',
           },
         },
@@ -435,9 +440,10 @@ return {
         -- refuse a path outside the project, so reading and editing with
         -- them goes through on its own; a shell or a deletion is asked for.
         -- An ACP agent's requests are matched by their kind, which names no
-        -- path: only `think` goes through, and a `read`, `search` or `edit`
-        -- of Claude Code, which may reach `~/.ssh` as easily as the
-        -- project, is asked for.
+        -- path: only `think` goes through, and whatever an agent asks about
+        -- -- an `edit`, an `execute` -- is asked for. What it reads on its
+        -- own tools, as Claude Code does, never comes here; what it reads
+        -- or writes through the editor is checked by `util.ai_guard`.
         auto_approve_tool_permissions = {
           'think',
           'attempt_completion',
