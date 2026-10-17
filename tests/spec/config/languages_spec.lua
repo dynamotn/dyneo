@@ -104,6 +104,37 @@ describe('config.languages', function()
     end
   end)
 
+  -- `command` is what decides whether a tool is set up at all, so it has to
+  -- be the binary conform or nvim-lint really starts
+  it('names the binary each tool runs', function()
+    local runs = {
+      html_beautify = 'html-beautify',
+      erb_lint = 'erblint',
+      condense_blank_lines = 'lua',
+      nix = 'nix-instantiate',
+      csharpier = 'csharpier',
+    }
+    local seen = {}
+    for _, name in ipairs(names) do
+      for _, field in ipairs({ 'linters', 'formatters' }) do
+        for _, tool in ipairs(languages[name][field] or {}) do
+          if type(tool) == 'table' and runs[tool[1]] then
+            seen[tool[1]] = true
+            assert.are.equal(
+              runs[tool[1]],
+              tool.command,
+              name .. ' ' .. tool[1]
+            )
+          end
+          if type(tool) == 'table' and tool.opts and tool.opts.cmd then
+            assert.are.equal(tool.opts.cmd, tool.command, tool[1])
+          end
+        end
+      end
+    end
+    assert.are.same(vim.tbl_map(function() return true end, runs), seen)
+  end)
+
   for _, name in ipairs(names) do
     local spec = languages[name]
     describe(name, function()

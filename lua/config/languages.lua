@@ -189,7 +189,8 @@ local ltcc_diagnostics = {
 }
 local html_beautify_formatter = {
   'html_beautify',
-  command = 'js-beautify',
+  -- One npm package ships both binaries; conform runs the HTML one.
+  command = 'html-beautify',
   mason = { package = 'js-beautify' },
 }
 -- djLint speaks several template dialects and has to be told which one it is
@@ -350,7 +351,7 @@ return {
       { 'trim_newlines', command = 'lua', mason = { enabled = false } },
       {
         'condense_blank_lines',
-        command = 'sed',
+        command = 'lua',
         mason = { enabled = false },
       },
     },
@@ -653,7 +654,9 @@ return {
     formatters = {
       {
         'csharpier',
-        command = 'dotnet',
+        -- Mason's package is the standalone binary; conform only reaches for
+        -- `dotnet csharpier` when a project pins it as a local tool.
+        command = 'csharpier',
         mason = { package = 'csharpier' },
       },
     },
@@ -1187,7 +1190,14 @@ return {
     ext = 'erb',
     lsp_servers = { 'ruby_lsp', 'tailwindcss', 'harper_ls' },
     linters = {
-      { 'erb_lint', command = 'erb-lint', mason = { package = 'erb-lint' } },
+      -- nvim-lint runs it through `bundle exec`, which needs a Gemfile naming
+      -- it; Mason's gem is called directly instead.
+      {
+        'erb_lint',
+        command = 'erblint',
+        mason = { package = 'erb-lint' },
+        opts = { cmd = 'erblint', args = { '--format', 'compact' } },
+      },
     },
     formatters = {
       {
@@ -1989,7 +1999,7 @@ return {
     },
     lsp_servers = { 'nil_ls', 'harper_ls' },
     linters = {
-      { 'nix', command = 'nix', mason = { package = 'nix' } },
+      { 'nix', command = 'nix-instantiate', mason = { package = 'nix' } },
       { 'statix', command = 'statix', mason = { package = 'statix' } },
     },
     formatters = { 'nixfmt' },

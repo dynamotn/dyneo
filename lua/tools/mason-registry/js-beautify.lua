@@ -18,5 +18,6 @@ return {
   },
   bin = {
     ['js-beautify'] = 'npm:js-beautify',
+    ['html-beautify'] = 'npm:html-beautify',
   },
 }
