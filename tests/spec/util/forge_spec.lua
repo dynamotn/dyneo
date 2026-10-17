@@ -132,6 +132,71 @@ describe('util.forge', function()
       )
     end)
 
+    describe('environment tokens', function()
+      local saved
+
+      before_each(function()
+        saved = {}
+        for _, var in ipairs({
+          'GITLAB_TOKEN',
+          'GITLAB_HOST',
+          'GL_HOST',
+          'GH_ENTERPRISE_TOKEN',
+          'GH_HOST',
+        }) do
+          saved[var] = vim.env[var]
+          vim.env[var] = nil
+        end
+        vim.env.GITLAB_TOKEN = 'gl-env-token'
+        vim.env.GH_ENTERPRISE_TOKEN = 'gh-env-token'
+        cli('glab', {
+          'echo "token=$GITLAB_TOKEN" > "' .. dir .. '/glab.seen"',
+          'echo "[]"',
+        })
+        cli('gh', {
+          'echo "token=$GH_ENTERPRISE_TOKEN" > "' .. dir .. '/gh.seen"',
+          'echo "[]"',
+        })
+      end)
+      after_each(function()
+        for var, value in pairs(saved) do
+          vim.env[var] = value
+        end
+      end)
+
+      local function seen(kind, host)
+        local cli_name = kind == 'github' and 'gh' or 'glab'
+        call({ kind = kind, host = host, slug = 'g/p', name = 'origin' }, 'x')
+        return vim.fn.readfile(dir .. '/' .. cli_name .. '.seen')[1]
+      end
+
+      it('keeps them from a host a repository names', function()
+        assert.equals('token=', seen('gitlab', 'gitlab.attacker.example'))
+        assert.equals('token=', seen('github', 'github.attacker.example'))
+      end)
+
+      it(
+        'passes them to the default host',
+        function()
+          assert.equals('token=gl-env-token', seen('gitlab', 'gitlab.com'))
+        end
+      )
+
+      it('passes them to the host the user named', function()
+        vim.env.GITLAB_HOST = 'https://gitlab.corp.example'
+        vim.env.GH_HOST = 'github.corp.example'
+        assert.equals(
+          'token=gl-env-token',
+          seen('gitlab', 'gitlab.corp.example')
+        )
+        assert.equals(
+          'token=gh-env-token',
+          seen('github', 'github.corp.example')
+        )
+        assert.equals('token=', seen('gitlab', 'gitlab.attacker.example'))
+      end)
+    end)
+
     it('says why there is no answer', function()
       cli('gh', { 'echo "HTTP 404" >&2', 'exit 1' })
       local remote =

@@ -4,6 +4,23 @@
 --- holds its own token for the host, so none is ever read or passed here.
 local M = {}
 
+--- The host each CLI's environment token is meant for when no other is set
+M.DEFAULT_HOSTS = { github = 'github.com', gitlab = 'gitlab.com' }
+
+--- Variables naming the host a user works against, by forge kind
+M.HOST_VARS = {
+  github = { 'GH_HOST' },
+  gitlab = { 'GITLAB_HOST', 'GL_HOST' },
+}
+
+--- Tokens a CLI takes from the environment and sends to whatever host it is
+--- pointed at, by forge kind. `GH_TOKEN` is not among them: `gh` only ever
+--- sends it to github.com and its own cloud.
+M.TOKEN_VARS = {
+  github = { 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN' },
+  gitlab = { 'GITLAB_TOKEN', 'GITLAB_ACCESS_TOKEN', 'OAUTH_TOKEN' },
+}
+
 --- The remotes looked at, in order: the same as Octo and the CI checks use
 M.REMOTES = { 'upstream', 'gh', 'github', 'origin' }
 
@@ -111,6 +128,48 @@ function M.encode(text)
   )
 end
 
+--- The environment to run `remote`'s CLI in: nil for the user's own, or one
+--- without the tokens of `M.TOKEN_VARS`
+---
+--- The host comes from a repository's remote, which anyone can set: the
+--- tokens in the environment belong to the default host or the one the user
+--- named, and are not handed to any other. The CLI's own login for the
+--- host is still used.
+---@param remote DyForgeRemote
+---@return table<string, string>? env
+function M.cli_env(remote)
+  local host = remote.host:lower()
+  if host == M.DEFAULT_HOSTS[remote.kind] then return nil end
+  for _, var in ipairs(M.HOST_VARS[remote.kind] or {}) do
+    local value = vim.env[var]
+    if value and value ~= '' then
+      local named = M.parse_url(value .. '/x') or value
+      if named:lower() == host then return nil end
+    end
+  end
+  local env = vim.fn.environ()
+  local dropped = false
+  for _, var in ipairs(M.TOKEN_VARS[remote.kind] or {}) do
+    if env[var] then
+      env[var] = nil
+      dropped = true
+    end
+  end
+  return dropped and env or nil
+end
+
+--- `util.system.run` options for `remote`'s CLI
+---@param remote DyForgeRemote
+---@param opts DyRunOpts
+---@return DyRunOpts
+local function cli_opts(remote, opts)
+  local env = M.cli_env(remote)
+  if env then
+    opts.env, opts.clear_env = env, true
+  end
+  return opts
+end
+
 --- Call `endpoint` of the API of `remote`, through its CLI, and hand
 --- `on_done` the decoded answer or why there is none
 ---@param remote DyForgeRemote
@@ -123,24 +182,28 @@ function M.api(remote, endpoint, on_done)
   end
   local command = { cli, 'api', '--hostname', remote.host, endpoint }
   local system = require('util.system')
-  system.run(command, { timeout = M.TIMEOUT }, function(result)
-    if result.code ~= 0 and not result.cut then
-      return on_done(nil, system.failure(result, cli .. ' api'))
+  system.run(
+    command,
+    cli_opts(remote, { timeout = M.TIMEOUT }),
+    function(result)
+      if result.code ~= 0 and not result.cut then
+        return on_done(nil, system.failure(result, cli .. ' api'))
+      end
+      -- Half a JSON document is no answer
+      if result.cut then
+        return on_done(nil, cli .. ' api answered with more than can be read')
+      end
+      local decoded, data = pcall(
+        vim.json.decode,
+        result.stdout or '',
+        { luanil = { object = true, array = true } }
+      )
+      if not decoded then
+        return on_done(nil, cli .. ' api answered with something not JSON')
+      end
+      on_done(data)
     end
-    -- Half a JSON document is no answer
-    if result.cut then
-      return on_done(nil, cli .. ' api answered with more than can be read')
-    end
-    local decoded, data = pcall(
-      vim.json.decode,
-      result.stdout or '',
-      { luanil = { object = true, array = true } }
-    )
-    if not decoded then
-      return on_done(nil, cli .. ' api answered with something not JSON')
-    end
-    on_done(data)
-  end)
+  )
 end
 
 --- Call `endpoint` of the API of `remote`, through its CLI, for text rather
@@ -157,7 +220,7 @@ function M.api_text(remote, endpoint, max_bytes, on_done)
   local system = require('util.system')
   system.run(
     { cli, 'api', '--hostname', remote.host, endpoint },
-    { timeout = M.TIMEOUT, max_bytes = max_bytes },
+    cli_opts(remote, { timeout = M.TIMEOUT, max_bytes = max_bytes }),
     function(result)
       if result.code ~= 0 and not result.cut then
         return on_done(nil, false, system.failure(result, cli .. ' api'))
