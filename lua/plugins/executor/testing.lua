@@ -133,16 +133,31 @@ return {
             },
           },
           config = function(_, _)
-            -- Run zellij floating pane
+            -- Run in a floating zellij pane. The command goes to the shell
+            -- as one argument rather than through `:!`, which would expand
+            -- `%`, `#` and `!` in it and hold the editor until zellij returns.
             if DyNeo.test_strategy == 'zellij' then
-              vim.cmd([[
-                function! ZellijStrategy(cmd)
-                  execute "!zellij run --floating -- " . a:cmd
-                endfunction
-              ]])
-              vim.cmd(
-                [[ let g:test#custom_strategies = {'zellij': function('ZellijStrategy')} ]]
-              )
+              vim.g['test#custom_strategies'] = {
+                zellij = function(cmd)
+                  local argv = {
+                    'zellij',
+                    'run',
+                    '--floating',
+                    '--cwd',
+                    vim.fn.getcwd(),
+                    '--',
+                    vim.o.shell,
+                  }
+                  vim.list_extend(
+                    argv,
+                    vim.split(vim.o.shellcmdflag, ' ', {
+                      trimempty = true,
+                    })
+                  )
+                  table.insert(argv, cmd)
+                  vim.fn.jobstart(argv, { detach = true })
+                end,
+              }
             end
             vim.g['test#strategy'] = DyNeo.test_strategy
           end,
