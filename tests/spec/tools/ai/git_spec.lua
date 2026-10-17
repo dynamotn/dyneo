@@ -70,6 +70,24 @@ describe('tools.ai.git', function()
     assert.same({}, await(function(cb) git_tool.log(dir, { '-1' }, cb) end))
   end)
 
+  it('refuses a sensitive file renamed to a plain name', function()
+    local path = vim.env.PATH
+    h.write(
+      dir .. '/bin/betterleaks',
+      { '#!/bin/sh', 'cat >/dev/null', 'echo "[]"' }
+    )
+    vim.fn.setfperm(dir .. '/bin/betterleaks', 'rwxr-xr-x')
+    vim.env.PATH = dir .. '/bin:' .. path
+    h.write(repo .. '/.env', { 'A=1' })
+    git('add', '.env')
+    git('commit', '-q', '-m', 'add env')
+    git('mv', '.env', 'config.txt')
+    local change, err = await(function(cb) git_tool.change(repo, nil, cb) end)
+    vim.env.PATH = path
+    assert.is_nil(change)
+    assert.is_truthy(err:find('.env', 1, true), err)
+  end)
+
   it('takes a .gitlint or commitlint config as Conventional Commits', function()
     assert.is_false(git_tool.conventional(repo))
     h.write(repo .. '/.gitlint', { '[general]' })

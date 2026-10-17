@@ -60,7 +60,12 @@ end
 function M.change(root, base, on_done)
   local system = require('util.system')
   local which = base and { base .. '...HEAD' } or { '--cached' }
-  local names = vim.list_extend({ 'git', 'diff', '--name-only', '-z' }, which)
+  -- A rename lists the old path too: `.env` moved to `config.txt` is a
+  -- sensitive file leaving under a plain name
+  local names = vim.list_extend(
+    { 'git', 'diff', '--no-renames', '--name-only', '-z' },
+    which
+  )
   system.run(names, { cwd = root }, function(listed)
     if listed.code ~= 0 then
       return on_done(nil, system.failure(listed, 'git diff'))
@@ -73,8 +78,10 @@ function M.change(root, base, on_done)
           or 'Nothing is staged'
       )
     end
-    local diff =
-      vim.list_extend({ 'git', 'diff', '--no-color', '--no-ext-diff' }, which)
+    local diff = vim.list_extend(
+      { 'git', 'diff', '--no-color', '--no-ext-diff', '--no-renames' },
+      which
+    )
     system.run(diff, { cwd = root, max_bytes = M.MAX_DIFF }, function(read)
       if read.code ~= 0 and not read.cut then
         return on_done(nil, system.failure(read, 'git diff'))
