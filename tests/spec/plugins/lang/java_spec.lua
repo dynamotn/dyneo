@@ -101,5 +101,17 @@ describe('plugins.lang.java', function()
       local data = last.config.cmd[vim.fn.index(last.config.cmd, '-data') + 2]
       assert.matches('/jdtls/two%-%x+/workspace$', data)
     end)
+
+    it('scans for main classes once per server', function()
+      vim.api.nvim_set_current_buf(h.buffer({ name = '/work/three/A.java' }))
+      spec('mfussenegger/nvim-jdtls').config(nil, opts)
+      for _, attach in ipairs({ { 7, 'C' }, { 7, 'D' }, { 8, 'E' } }) do
+        vim.api.nvim_exec_autocmds('LspAttach', {
+          buffer = h.buffer({ name = '/work/three/' .. attach[2] .. '.java' }),
+          data = { client_id = attach[1] },
+        })
+      end
+      assert.are.equal(2, #scans)
+    end)
   end)
 end)

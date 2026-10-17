@@ -173,6 +173,10 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
             callback = function(args) attach_jdtls(args.buf) end,
           })
 
+          -- The clients whose main classes were scanned: the scan walks the
+          -- whole workspace, so it runs once per server, not per buffer
+          local scanned = {} ---@type table<integer, true>
+
           -- Setup keymap and dap after the lsp is fully attached.
           -- https://github.com/mfussenegger/nvim-jdtls#nvim-dap-configuration
           -- https://neovim.io/doc/user/lsp.html#LspAttach
@@ -246,7 +250,8 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
                   then
                     -- custom init for Java debugger
                     require('jdtls').setup_dap(opts.dap)
-                    if opts.dap_main then
+                    if opts.dap_main and not scanned[client.id] then
+                      scanned[client.id] = true
                       require('jdtls.dap').setup_dap_main_class_configs(
                         opts.dap_main
                       )
