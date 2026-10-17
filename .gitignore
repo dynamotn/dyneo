@@ -4,3 +4,10 @@
 # The help tags are generated, but committed all the same, so `:help
 # dyneo` works in a fresh clone. The global ignore drops every `tags`.
 !/doc/tags
+
+# The global ignore drops every `.claude`. This repository shares its Claude
+# Code settings (hooks, plugins) and skills; anything else there is personal.
+!/.claude/
+/.claude/*
+!/.claude/settings.json
+!/.claude/skills/
