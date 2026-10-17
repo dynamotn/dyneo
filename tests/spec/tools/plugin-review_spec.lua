@@ -164,6 +164,30 @@ describe('tools.plugin-review', function()
       assert.same({}, findings)
     end)
 
+    it('reads what a build installs, and every lockfile', function()
+      local findings = review.scan({
+        'diff --git a/requirements.txt b/requirements.txt',
+        '@@ -0,0 +1 @@',
+        '+evil @ https://example.com/evil.tar.gz',
+        'diff --git a/doc/p.txt b/doc/p.txt',
+        '@@ -0,0 +1 @@',
+        '+see https://example.com',
+        'diff --git a/pyproject.toml b/pyproject.toml',
+        'diff --git a/rust/Cargo.lock b/rust/Cargo.lock',
+        'diff --git a/go.sum b/go.sum',
+        'diff --git a/install.sh b/install.sh',
+        'diff --git a/flake.nix b/flake.nix',
+      })
+      assert.same({
+        'requirements.txt:1 reaches the network',
+        'pyproject.toml:- changes the build',
+        'rust/Cargo.lock:- changes the build',
+        'go.sum:- changes the build',
+        'install.sh:- changes the build',
+        'flake.nix:- changes the build',
+      }, flags(findings))
+    end)
+
     it('flags a build file and a binary, whatever is in them', function()
       local findings = review.scan({
         'diff --git a/build.lua b/build.lua',
@@ -361,6 +385,42 @@ describe('tools.plugin-review', function()
       review.MAX_OUTPUT = max
       local text = table.concat(lines, '\n')
       assert.is_truthy(text:find('diff cut at', 1, true))
+    end)
+
+    it('reads the bytes, past a textconv filter of the config', function()
+      -- A filter that prints nothing would hide every line of the change
+      git(dir, { 'config', 'diff.hide.textconv', 'true' })
+      h.write(dir .. '/.git/info/attributes', { '*.lua diff=hide' })
+      local row =
+        { name = 'p.nvim', dir = dir, from = from, to = to, held = false }
+      local findings
+      review.findings(row, function(result) findings = result end)
+      assert.is_true(vim.wait(10000, function() return findings ~= nil end))
+      assert.is_truthy(
+        vim.tbl_contains(flags(findings), 'lua/p.lua:1 runs a process')
+      )
+
+      review.open_diff(row)
+      local text = settled('Reading the commits')
+      assert.is_truthy(text:find("+vim.system({ 'curl', url })", 1, true))
+    end)
+
+    it('says when the list of commits was cut', function()
+      local max = review.MAX_OUTPUT
+      review.MAX_OUTPUT = 40
+      local lines = report({
+        {
+          name = 'p.nvim',
+          dir = dir,
+          from = from,
+          to = to,
+          held = false,
+          clears = 0,
+        },
+      })
+      review.MAX_OUTPUT = max
+      local text = table.concat(lines, '\n')
+      assert.is_truthy(text:find('1+ commits, the list cut at', 1, true))
     end)
 
     it('warns about a plugin with nothing waiting', function()

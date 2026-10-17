@@ -93,6 +93,17 @@ local BUILD_FILES = {
   ['go.mod'] = true,
   ['package.json'] = true,
   ['justfile'] = true,
+  ['build.sh'] = true,
+  ['install.sh'] = true,
+  ['pyproject.toml'] = true,
+  ['setup.py'] = true,
+  ['flake.nix'] = true,
+  -- Lockfiles: a dependency swapped under a build that stays the same
+  ['Cargo.lock'] = true,
+  ['go.sum'] = true,
+  ['package-lock.json'] = true,
+  ['yarn.lock'] = true,
+  ['pnpm-lock.yaml'] = true,
 }
 
 --- Directories of a plugin that never run in the editor: its CI, which runs
@@ -110,7 +121,8 @@ local NOT_RUN = {
 
 --- Whether `path` is something the rules would only cry wolf over: prose --
 --- docs, licences, changelogs, where a URL is a link and `rm -rf` an example
---- -- or a file that never runs here
+--- -- or a file that never runs here. A `.txt` outside `doc/` is read:
+--- `requirements.txt` is what a build installs.
 ---@param path string
 ---@return boolean
 local function is_ignored(path)
@@ -120,7 +132,6 @@ local function is_ignored(path)
   local name = vim.fs.basename(path)
   return path:find('^doc/') ~= nil
     or name:find('%.md$') ~= nil
-    or name:find('%.txt$') ~= nil
     or name:find('%.rst$') ~= nil
     or name:find('^LICEN[CS]E') ~= nil
     or name:find('^CHANGELOG') ~= nil
@@ -266,16 +277,20 @@ local function git(dir, args, callback)
 end
 
 --- The commits `row` would bring in, newest first, as `short date subject`;
---- nil when git could not list them
+--- nil when git could not list them, and whether the list was cut
 ---@param row DyPendingUpdate
----@param callback fun(commits: string[]?)
+---@param callback fun(commits: string[]?, cut?: boolean)
 function M.commits(row, callback)
   git(row.dir, {
     'log',
     '--no-color',
     '--format=%h %cs %s',
     row.from .. '..' .. row.to,
-  }, function(lines) callback(lines) end)
+  }, function(lines, cut)
+    -- The last line of a cut list is cut too
+    if cut and lines then table.remove(lines) end
+    callback(lines, cut)
+  end)
 end
 
 --- What the commits of `row` add, flagged
@@ -285,7 +300,10 @@ function M.findings(row, callback)
   git(row.dir, {
     'diff',
     '--no-color',
+    -- Neither a diff driver nor a textconv filter of the user's config
+    -- stands between the scan and the bytes that land
     '--no-ext-diff',
+    '--no-textconv',
     '--no-renames',
     -- `scan` reads the paths off `a/` and `b/`, which `diff.noprefix` and
     -- `diff.mnemonicPrefix` in a user's config would take away
@@ -386,13 +404,17 @@ end
 ---@param row DyPendingUpdate
 ---@param callback fun(lines: string[])
 local function section(row, callback)
-  M.commits(row, function(commits)
+  M.commits(row, function(commits, cut)
     M.findings(row, function(findings)
       local state = row.held
           and ('held %d more days'):format(math.ceil(row.clears / 86400))
         or 'out of quarantine'
       -- A failed `git log` must not read as an update with nothing in it
-      local count = commits and ('%d commits'):format(#commits)
+      local count = commits
+          and (
+            cut and '%d+ commits, the list cut at ' .. max_output()
+            or '%d commits'
+          ):format(#commits)
         or 'commits unavailable, nothing was read'
       local lines = {
         '',
@@ -504,6 +526,7 @@ function M.open_diff(row)
     'log',
     '--no-color',
     '--no-ext-diff',
+    '--no-textconv',
     '--stat',
     '--patch',
     row.from .. '..' .. row.to,
