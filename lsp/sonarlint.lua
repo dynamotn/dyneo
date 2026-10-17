@@ -190,25 +190,6 @@ return {
         'https://next.sonarqube.com/sonarqube/coding_rules?q=%s&open=%s'
       vim.ui.open(string.format(uri, req.key, req.key))
     end,
-    ['sonarlint/needCompilationDatabase'] = function(_, _, ctx)
-      local locations = vim.fs.find('compile_commands.json', {
-        upward = true,
-        path = vim.fs.dirname(vim.api.nvim_buf_get_name(0)),
-      })
-      if #locations > 0 then
-        local client = vim.lsp.get_client_by_id(ctx.client_id)
-        did_change_configuration(client, {
-          sonarlint = {
-            pathToCompileCommands = locations[1],
-          },
-        })
-      else
-        vim.notify_once(
-          "Couldn't find compile_commands.json. Make sure it exists in a parent directory.",
-          vim.log.levels.ERROR
-        )
-      end
-    end,
     ['sonarlint/listAllRules'] = function(err, result)
       if err then
         vim.notify(
