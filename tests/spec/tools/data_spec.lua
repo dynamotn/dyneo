@@ -261,6 +261,27 @@ describe('tools.data', function()
     assert.is_nil(vim.uv.fs_stat(dir .. '/finished'))
   end)
 
+  it('runs a Parquet summary again once its buffer is shown again', function()
+    duckdb({ 'sleep 0.5', 'echo parquet summary' })
+    h.write(dir .. '/x.parquet', { 'PAR1' })
+    vim.cmd.edit(dir .. '/x.parquet')
+    local bufnr = vim.api.nvim_get_current_buf()
+    assert.is_not_nil(data.jobs[bufnr])
+    vim.cmd.enew()
+    assert.is_nil(data.jobs[bufnr])
+    assert.is_true(
+      vim.wait(1000, function() return lines(bufnr)[1] == data.STOPPED end, 20)
+    )
+    vim.api.nvim_set_current_buf(bufnr)
+    assert.is_true(
+      vim.wait(
+        5000,
+        function() return lines(bufnr)[1] == 'parquet summary' end,
+        20
+      )
+    )
+  end)
+
   it('stops a run when its result window is closed', function()
     duckdb({ 'sleep 1', 'touch "' .. dir .. '/finished"' })
     vim.cmd.cd(dir)

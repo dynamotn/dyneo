@@ -229,9 +229,12 @@ M.STOPPED = 'Stopped: the window closed before duckdb was done'
 
 --- Run `script` and put what it prints in `bufnr`, stopping any run still
 --- going for that buffer
+---
+--- With `opts.rerun`, a run stopped by hiding the buffer starts again once
+--- it is shown: a summary standing for a file is not read again otherwise.
 ---@param bufnr integer
 ---@param script string[]
----@param opts? { cwd?: string, title?: string }
+---@param opts? { cwd?: string, title?: string, rerun?: boolean }
 function M.run_into(bufnr, script, opts)
   opts = opts or {}
   local scratch = require('util.scratch')
@@ -247,9 +250,16 @@ function M.run_into(bufnr, script, opts)
       M.stop(bufnr)
       if args.event == 'BufHidden' then
         vim.schedule(function()
-          if vim.api.nvim_buf_is_valid(bufnr) then
-            scratch.set(bufnr, { M.STOPPED })
-          end
+          if not vim.api.nvim_buf_is_valid(bufnr) then return end
+          scratch.set(bufnr, { M.STOPPED })
+          if not opts.rerun then return end
+          vim.api.nvim_create_autocmd('BufWinEnter', {
+            group = group,
+            buffer = bufnr,
+            once = true,
+            callback = function() M.run_into(bufnr, script, opts) end,
+            desc = 'Run the stopped summary again',
+          })
         end)
       end
     end,
@@ -372,7 +382,7 @@ function M.read(bufnr)
   end
   local script = M.summary_script(path)
   if not script then return end
-  M.run_into(bufnr, script, { title = vim.fs.basename(path) })
+  M.run_into(bufnr, script, { title = vim.fs.basename(path), rerun = true })
 end
 
 --- The window showing results of `:DyData sql`, opened at the bottom when
