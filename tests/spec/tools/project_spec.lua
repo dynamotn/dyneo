@@ -73,8 +73,13 @@ describe('tools.project', function()
     h.write(dir .. '/a.txt', { 'a' })
     git('add', 'a.txt')
     git('commit', '-q', '-m', 'first')
+    h.write(dir .. '/old name.txt', { 'o' })
+    git('add', 'old name.txt')
+    git('commit', '-q', '-m', 'second')
     h.write(dir .. '/a.txt', { 'b' })
     h.write(dir .. '/new.txt', { 'n' })
+    h.write(dir .. '/é b.txt', { 'n' })
+    git('mv', 'old name.txt', 'new name.txt')
     local got
     project.git(
       dir,
@@ -82,12 +87,14 @@ describe('tools.project', function()
     )
     assert.is_true(vim.wait(5000, function() return got ~= nil end, 10))
     assert.equals('done', got[1])
-    assert.equals('release/1.2, 0 ahead, 0 behind, 2 changed', got[2])
+    assert.equals('release/1.2, 0 ahead, 0 behind, 4 changed', got[2])
     assert.same(
-      { ' M a.txt', '?? new.txt' },
+      { ' M a.txt', 'R  new name.txt', '?? new.txt', '?? é b.txt' },
       vim.tbl_map(function(item) return item.text end, got[3])
     )
     assert.equals(dir .. '/a.txt', got[3][1].file)
+    assert.equals(dir .. '/new name.txt', got[3][2].file)
+    assert.equals(dir .. '/é b.txt', got[3][4].file)
 
     got = nil
     project.git(dir .. '/bin', function(state, note) got = { state, note } end)

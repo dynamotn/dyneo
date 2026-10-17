@@ -120,13 +120,20 @@ end
 ---@param command string[]
 ---@param dir string
 ---@param on_done fun(lines: string[]?)
-local function run(command, dir, on_done)
+---@param separator? string What the records end with, a newline unless given
+local function run(command, dir, on_done, separator)
   require('util.system').run(
     command,
     { cwd = dir, timeout = forge.TIMEOUT },
     function(result)
       if result.code ~= 0 then return on_done(nil) end
-      on_done(vim.split(result.stdout or '', '\n', { trimempty = true }))
+      on_done(
+        vim.split(
+          result.stdout or '',
+          separator or '\n',
+          { plain = true, trimempty = true }
+        )
+      )
     end
   )
 end
@@ -154,7 +161,10 @@ end
 ---@param root string
 ---@param set fun(state: string, note: string?, items: DyProjectItem[]?)
 function M.git(root, set)
-  run({ 'git', 'status', '--porcelain=v1', '--branch' }, root, function(lines)
+  -- `-z`: paths as they are, where a newline-separated list C-quotes one
+  -- with a space or a non-ASCII letter
+  local command = { 'git', 'status', '--porcelain=v1', '--branch', '-z' }
+  run(command, root, function(lines)
     if not lines then return set('skipped', 'not a git repository') end
     local head = table.remove(lines, 1) or ''
     -- `## main...origin/main [ahead 1]`, `## main`, `## No commits yet on main`
@@ -165,13 +175,17 @@ function M.git(root, set)
     local ahead = tonumber(head:match('ahead (%d+)')) or 0
     local behind = tonumber(head:match('behind (%d+)')) or 0
     local items = {}
-    for _, line in ipairs(lines) do
-      local file = line:sub(4):gsub('^.* %-> ', '')
+    local index = 1
+    while lines[index] do
+      local line = lines[index]
+      local file = line:sub(4)
       table.insert(items, {
         text = line:sub(1, 2) .. ' ' .. file,
         file = vim.fs.joinpath(root, file),
         lnum = 1,
       })
+      -- A rename or a copy is followed by the path it came from
+      index = index + (line:match('^[RC]') and 2 or 1)
     end
     set(
       'done',
@@ -183,7 +197,7 @@ function M.git(root, set)
       ),
       items
     )
-  end)
+  end, '\0')
 end
 
 --- The diagnostics of the loaded buffers under `root`, files with errors
