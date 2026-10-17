@@ -35,6 +35,17 @@ describe('per_machine', function()
     assert.are.same({}, messages)
   end)
 
+  it('sorts the languages a config enables', function()
+    local restore = h.stub(DyNeo, 'enabled_languages', {})
+    package.preload['per_machine.config'] = function()
+      DyNeo.enabled_languages = { 'sql', 'bash', 'gitcommit' }
+    end
+    require('per_machine')
+    local got = DyNeo.enabled_languages
+    restore()
+    assert.are.same({ 'bash', 'gitcommit', 'sql' }, got)
+  end)
+
   it('reports an error raised inside the config', function()
     package.preload['per_machine.config'] = function() error('boom') end
     require('per_machine')

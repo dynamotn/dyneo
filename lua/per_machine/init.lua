@@ -12,3 +12,9 @@ then
     vim.log.levels.ERROR
   )
 end
+
+-- A machine lists its languages in whatever order it likes, but what is built
+-- from the list walks it in order and expects the order `config.globals` gives
+if type(DyNeo.enabled_languages) == 'table' then
+  table.sort(DyNeo.enabled_languages)
+end
