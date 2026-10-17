@@ -2,18 +2,28 @@
 local lazypath = vim.fn.stdpath('data') .. '/lazy/lazy.nvim'
 if not vim.uv.fs_stat(lazypath) then
   local lazyrepo = 'https://github.com/folke/lazy.nvim.git'
-  local out = vim.fn.system({
-    'git',
-    'clone',
-    '--filter=blob:none',
-    '--branch=stable',
-    lazyrepo,
-    lazypath,
-  })
-  if vim.v.shell_error ~= 0 then
+  -- Nothing is on screen yet, so waiting is fine, but a stalled network must
+  -- not leave the editor hanging with no word of why
+  local timeout = 120000
+  local result = vim
+    .system({
+      'git',
+      'clone',
+      '--filter=blob:none',
+      '--branch=stable',
+      lazyrepo,
+      lazypath,
+    }, { text = true, timeout = timeout })
+    :wait()
+  if result.code ~= 0 then
+    -- A half-done clone would pass for an install on the next start
+    vim.fn.delete(lazypath, 'rf')
+    local why = result.code == 124
+        and ('git clone took longer than %d s'):format(timeout / 1000)
+      or (result.stderr or '')
     vim.api.nvim_echo({
       { 'Failed to clone lazy.nvim:\n', 'ErrorMsg' },
-      { out, 'WarningMsg' },
+      { why, 'WarningMsg' },
       { '\nPress any key to exit...' },
     }, true, {})
     vim.fn.getchar()
