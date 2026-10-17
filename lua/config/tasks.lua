@@ -487,7 +487,12 @@ return {
     {
       name = 'kotlin build and run',
       desc = 'Compile kotlin file to a jar and run it',
-      exe = 'java',
+      -- `java` runs the jar, but `kotlinc` has to build it first
+      exe = function()
+        local both = vim.fn.executable('kotlinc') == 1
+          and vim.fn.executable('java') == 1
+        return both and 'java' or nil
+      end,
       when = named('%.kt$'),
       build = function(ctx)
         return {

@@ -265,6 +265,15 @@ describe('overseer.template.dytask', function()
       )
     end)
 
+    it('offers no kotlin build without kotlinc', function()
+      restore[#restore + 1] = h.stub(
+        vim.fn,
+        'executable',
+        function(name) return name == 'kotlinc' and 0 or 1 end
+      )
+      assert.is_nil(templates('x.kt', 'kotlin')['kotlin build and run'])
+    end)
+
     it('leaves a file of a cargo project to cargo', function()
       assert.is_not_nil(templates('x.rs', 'rust')['rustc build and run'])
       h.write(dir .. '/Cargo.toml', { '[package]' })
