@@ -71,6 +71,41 @@ describe('config.keymaps', function()
     end)
   end)
 
+  describe('<leader>by', function()
+    local ran, messages, restores
+    before_each(function()
+      ran, messages = {}, {}
+      vim.api.nvim_set_current_buf(h.buffer({ lines = { 'plain text' } }))
+      restores = {
+        h.stub(vim, 'cmd', function(cmd) table.insert(ran, cmd) end),
+        h.stub(vim, 'notify', function(msg) table.insert(messages, msg) end),
+      }
+    end)
+    after_each(function()
+      for _, restore_one in ipairs(restores) do
+        restore_one()
+      end
+    end)
+
+    it('copies an ordinary buffer to the clipboard', function()
+      map('n', ' by').callback()
+      assert.are.same({ '%yank +' }, ran)
+    end)
+
+    it('keeps a sensitive buffer out of the clipboard', function()
+      require('util.sensitive').mark(0, 'decrypted for the spec')
+      map('n', ' by').callback()
+      assert.are.same({}, ran)
+      assert.are.equal(1, #messages)
+    end)
+
+    it('keeps a decrypted buffer out of the clipboard', function()
+      vim.b.dy_encrypted = 'sops'
+      map('n', ' by').callback()
+      assert.are.same({}, ran)
+    end)
+  end)
+
   it('maps the path copiers', function()
     for _, suffix in ipairs({
       'y',

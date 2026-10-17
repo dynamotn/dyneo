@@ -89,7 +89,16 @@ map(
   { desc = 'Delete Invisible Buffers' }
 )
 map('n', '<leader>bD', '<cmd>:bd<cr>', { desc = 'Delete Buffer and Window' })
-map('n', '<leader>by', '<cmd>%yank +<cr>', { desc = 'Yank Buffer' })
+map('n', '<leader>by', function()
+  -- The system clipboard outlives the buffer and is read by other programs
+  if vim.b.dy_encrypted or require('util.sensitive').is_sensitive(0) then
+    return require('util.notify').titled('Keys')(
+      'Not copying a sensitive buffer to the clipboard',
+      vim.log.levels.WARN
+    )
+  end
+  vim.cmd('%yank +')
+end, { desc = 'Yank Buffer' })
 map('n', '<leader>bR', function()
   -- Changes are only thrown away once that is confirmed
   if
