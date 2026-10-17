@@ -57,6 +57,12 @@ return {
 
       -- Setup treesitter parser to work with defined filetypes
       local parsers = require('nvim-treesitter.parsers')
+      -- Where a parser of `config.languages` is laid over nvim-treesitter's
+      -- list again on each `:TSUpdate`; set up anew, not added to
+      local parser_group = vim.api.nvim_create_augroup(
+        'dyneo_treesitter_parsers',
+        { clear = true }
+      )
       local languages = require('config.languages')
       for _, name in ipairs(require('util.languages').names()) do
         local language = languages[name]
@@ -70,6 +76,7 @@ return {
             parser_name = parser[1]
             if parsers[parser_name] then
               vim.api.nvim_create_autocmd('User', {
+                group = parser_group,
                 pattern = 'TSUpdate',
                 callback = function()
                   parsers[parser_name].install_info = parser.install_info
@@ -77,6 +84,7 @@ return {
               })
             else
               vim.api.nvim_create_autocmd('User', {
+                group = parser_group,
                 pattern = 'TSUpdate',
                 callback = function()
                   require('nvim-treesitter.parsers')[parser_name] = {

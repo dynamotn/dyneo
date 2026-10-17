@@ -31,6 +31,49 @@ describe('plugin autocmds set up twice', function()
     assert.equals(1, #hooks)
   end)
 
+  it('keep one parser override per `:TSUpdate`', function()
+    local restores = {
+      h.stub(package.loaded, 'nvim-treesitter', {
+        get_installed = function() return {} end,
+        setup = function() end,
+        install = function()
+          return { await = function() end }
+        end,
+      }),
+      h.stub(package.loaded, 'nvim-treesitter.parsers', {}),
+      h.stub(package.loaded, 'util.treesitter', {
+        get_installed = function() return {} end,
+        have = function() return true end,
+        build = function() end,
+      }),
+      h.stub(package.loaded, 'util.lazy_install', {
+        on_filetype = function() end,
+      }),
+    }
+    local spec = spec_of(
+      'lua/plugins/treesitter/parser.lua',
+      'nvim-treesitter/nvim-treesitter'
+    )
+    local function count()
+      return #vim.api.nvim_get_autocmds({
+        group = 'dyneo_treesitter_parsers',
+        event = 'User',
+      })
+    end
+    spec.config(nil, vim.deepcopy(spec.opts))
+    local once = count()
+    spec.config(nil, vim.deepcopy(spec.opts))
+    for i = #restores, 1, -1 do
+      restores[i]()
+    end
+    local twice = count()
+    -- The stubs live on in these handlers
+    vim.api.nvim_del_augroup_by_name('dyneo_treesitter')
+    vim.api.nvim_del_augroup_by_name('dyneo_treesitter_parsers')
+    assert.is_true(once > 0)
+    assert.equals(once, twice)
+  end)
+
   it('keep one CMake project check', function()
     local spec =
       spec_of('lua/plugins/lang/cmake.lua', 'Civitasv/cmake-tools.nvim')
