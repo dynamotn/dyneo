@@ -203,13 +203,16 @@ local function run_once(sample)
     'bench%-ft\t(%S*)\t(%S+)\t(%S+)\t(%S+)\t(%S+)\t'
   )
   if not open then
-    error(
-      ('%s: nothing reported (exit %d)\n%s'):format(
+    -- What the child said goes to the terminal only: the README names the
+    -- filetype and the exit code, never output that may hold local paths
+    io.stderr:write(
+      ('bench-ft: %s: nothing reported (exit %d)\n%s\n'):format(
         sample.filetype,
         result.code,
-        result.stderr
+        result.stderr or ''
       )
     )
+    error({ code = result.code })
   end
   return {
     -- What `:edit` made of the file, which is not always the filetype its
@@ -364,8 +367,13 @@ local ok, err = pcall(function()
           runs_ok.plugins
         )
       )
+    elseif type(runs_ok) == 'table' then
+      table.insert(
+        failures,
+        ('`%s` (exit %d)'):format(sample.filetype, runs_ok.code)
+      )
     else
-      table.insert(failures, tostring(runs_ok))
+      table.insert(failures, ('`%s`'):format(sample.filetype))
       io.stderr:write('bench-ft: ' .. tostring(runs_ok) .. '\n')
     end
   end
