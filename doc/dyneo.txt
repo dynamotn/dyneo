@@ -794,7 +794,10 @@ value itself never becomes code: it is handed over in the environment, as
 bare, in quotes, in a heredoc, in a Python or JS string -- so a quote or a
 `$(…)` in it is never run, and it never shows in `ps`.  An input is one
 argument, never split into several.  Only in a heredoc the shell does not
-expand (`<<'EOF'`) is the value written in as text.  `<localleader>I` (`:DyRunbook inputs`) forgets the values typed.
+expand (`<<'EOF'`) is the value written in as text, and a block whose
+secret (see below) or multi-line value would be is not run: use `<<EOF`
+there.  A Python bytes literal next to another literal (`b'a' b'${input:x}'`)
+cannot hold an input either.  `<localleader>I` (`:DyRunbook inputs`) forgets the values typed.
 `<localleader>F` runs every block from the one under the cursor down, where
 a runbook is picked up after a step failed and was fixed.
 

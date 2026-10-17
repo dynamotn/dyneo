@@ -267,6 +267,9 @@ local function spots(code, family)
       elseif frame.state == 'double' then
         if c == '"' then
           frame.state = 'none'
+        elseif code:sub(i, i + 2) == '$((' then
+          table.insert(stack, { state = 'none', depth = 2, arith = true })
+          i = i + 2
         elseif code:sub(i, i + 1) == '$(' then
           table.insert(stack, { state = 'none', depth = 1 })
           i = i + 1
@@ -280,7 +283,14 @@ local function spots(code, family)
         i = i + 1
       elseif c == '#' and (i == 1 or code:sub(i - 1, i - 1):match('%s')) then
         i = code:find('\n', i, true) or n + 1
-      elseif code:sub(i, i + 1) == '<<' and code:sub(i + 2, i + 2) ~= '<' then
+      elseif code:sub(i, i + 2) == '<<<' then
+        -- A here-string: the word after it is an argument, not a delimiter
+        i = i + 3
+      elseif code:sub(i, i + 2) == '$((' or code:sub(i, i + 1) == '((' then
+        -- Arithmetic, where `<<` is a shift
+        table.insert(stack, { state = 'none', depth = 2, arith = true })
+        i = i + (c == '$' and 3 or 2)
+      elseif code:sub(i, i + 1) == '<<' and not frame.arith then
         local strip, quote, word, rest =
           code:match('^<<(%-?)%s*([\'"]?)([%w_]+)[\'"]?()', i)
         if word then
@@ -387,15 +397,18 @@ local FAMILIES = {
 --- bare, inside quotes, in a heredoc, in a Python or JS string -- so
 --- `${input:flags}` is one argument, never split. Only a heredoc the shell
 --- does not expand (`<<'EOF'`) gets the value as text, since nothing there
---- reads a variable.
+--- reads a variable; those inputs are named in the third result, so a
+--- caller can refuse to write a secret into the code.
 ---@param code string
 ---@param lang string
 ---@param values table<string, string>
 ---@return string code
 ---@return table<string, string> env
+---@return string[] literal Inputs written into the code as text
+---@return string? problem Why the code cannot be run with its inputs
 function M.bind(code, lang, values)
   local family = FAMILIES[lang] or 'shell'
-  local env, owner = {}, {}
+  local env, owner, literal = {}, {}, {}
   local function var(name)
     local base = M.env_name(name)
     local var, n = base, 1
@@ -421,33 +434,87 @@ function M.bind(code, lang, values)
     return ("process.env['%s']"):format(v)
   end
   -- Non-overlapping `{ from, to, text }`, applied from the end
-  local edits, rebuilt = {}, {}
+  local edits, rebuilt, problem = {}, {}, nil
   for at, spot in pairs(spots(code, family)) do
     local name, e = code:match('^%${input:([%w_%-%.]+)}()', at)
-    if spot.context == 'string' and spot.to then
-      -- A Python or JS string holding an input is rebuilt whole, as
-      -- concatenated pieces in parentheses
-      if not rebuilt[spot.from] then
-        rebuilt[spot.from] = true
-        local open = #spot.prefix + #spot.quote
-        local body = code:sub(spot.from + open, spot.to - #spot.quote)
+    if spot.context == 'string' and spot.to and not rebuilt[spot.from] then
+      rebuilt[spot.from] = true
+      local open = #spot.prefix + #spot.quote
+      local body = code:sub(spot.from + open, spot.to - #spot.quote)
+      local prefix = spot.prefix:lower()
+      local before = code:sub(1, spot.from - 1):match('(%S?)%s*$')
+      local after = code:sub(spot.to + 1):match('^%s*(%S?)')
+      if family == 'python' and not prefix:find('b') then
+        -- Python: an f-string, still a literal, so one next to another
+        -- (`'a' 'b${input:x}'`) is joined to it as before
+        local pieces, last = {}, 1
+        local function lit(text)
+          -- `\N{NAME}` is an escape, not a field, outside a raw string
+          if prefix:find('r') then return (text:gsub('[{}]', '%0%0')) end
+          local out, from = {}, 1
+          for s, f in text:gmatch('()\\N{[^}]*}()') do
+            table.insert(out, (text:sub(from, s - 1):gsub('[{}]', '%0%0')))
+            table.insert(out, text:sub(s, f - 1))
+            from = f
+          end
+          table.insert(out, (text:sub(from):gsub('[{}]', '%0%0')))
+          return table.concat(out)
+        end
+        for s, n, f in body:gmatch('()%${input:([%w_%-%.]+)}()') do
+          table.insert(pieces, lit(body:sub(last, s - 1)))
+          local field = '{' .. read(n) .. '}'
+          -- The other quote than the string's: Python before 3.12 allows
+          -- no reuse of it inside
+          if spot.quote:sub(1, 1) == "'" then field = field:gsub("'", '"') end
+          table.insert(pieces, field)
+          last = f
+        end
+        table.insert(pieces, lit(body:sub(last)))
+        local quote = spot.quote
+        local fprefix = prefix:find('r') and 'rf' or 'f'
+        table.insert(edits, {
+          spot.from,
+          spot.to,
+          fprefix .. quote .. table.concat(pieces) .. quote,
+        })
+      elseif
+        family == 'python'
+        and (
+          before:match('[\'"]')
+          or code:sub(spot.to + 1):match('^%s*[rRbBfFuU]*[\'"]')
+        )
+      then
+        -- Bytes have no f-string, and a sum next to another literal
+        -- would be called by it
+        problem = problem
+          or 'a bytes literal next to another literal cannot hold '
+            .. ('`${input:%s}`'):format(body:match('%${input:([%w_%-%.]+)}'))
+      else
+        -- A JS string or Python bytes holding an input is rebuilt whole,
+        -- as concatenated pieces in parentheses
         local lit = function(text)
           return spot.prefix .. spot.quote .. text .. spot.quote
         end
         local pieces, last = {}, 1
         for s, n, f in body:gmatch('()%${input:([%w_%-%.]+)}()') do
           if s > last then table.insert(pieces, lit(body:sub(last, s - 1))) end
-          local bytes = family == 'python' and spot.prefix:lower():find('b')
-          table.insert(pieces, read(n) .. (bytes and '.encode()' or ''))
+          local bytes = family == 'python' and '.encode()' or ''
+          table.insert(pieces, read(n) .. bytes)
           last = f
         end
         if last <= #body then table.insert(pieces, lit(body:sub(last))) end
-        table.insert(edits, {
-          spot.from,
-          spot.to,
-          '(' .. table.concat(pieces, ' + ') .. ')',
-        })
+        local sum = table.concat(pieces, ' + ')
+        -- A quoted key of a JS object (`{ 'k${input:x}': 1 }`) becomes
+        -- a computed one, the only kind an expression may name
+        if family == 'js' and before:match('^[{,]$') and after == ':' then
+          sum = '[' .. sum .. ']'
+        else
+          sum = '(' .. sum .. ')'
+        end
+        table.insert(edits, { spot.from, spot.to, sum })
       end
+    elseif spot.context == 'string' and spot.to then
+      -- The rest of a string already rebuilt
     else
       local text
       local v = family == 'shell' and var(name)
@@ -462,6 +529,9 @@ function M.bind(code, lang, values)
         text = read(name)
       elseif spot.context == 'literal' then
         text = values[name]
+        if not vim.tbl_contains(literal, name) then
+          table.insert(literal, name)
+        end
       elseif lang == 'fish' then
         -- Fish never splits a variable; a quote ends a string around it
         text = spot.context == 'single' and ([['"$%s"']]):format(v)
@@ -480,7 +550,8 @@ function M.bind(code, lang, values)
   for _, edit in ipairs(edits) do
     code = code:sub(1, edit[1] - 1) .. edit[3] .. code:sub(edit[2] + 1)
   end
-  return code, env
+  table.sort(literal)
+  return code, env, literal, problem
 end
 
 --- `text` with every value of `secrets` replaced by `***`
@@ -878,7 +949,27 @@ function M.run_block(bufnr, block, on_done)
     if not values or not vim.api.nvim_buf_is_valid(bufnr) then
       return on_done(false)
     end
-    local bound, env = M.bind(code, block.lang, values)
+    local bound, env, literal, problem = M.bind(code, block.lang, values)
+    if problem then
+      notify('Not run: ' .. problem, vim.log.levels.ERROR)
+      return on_done(false)
+    end
+    for _, name in ipairs(literal) do
+      -- Written into the code, a secret would show in `ps`; a line break
+      -- could end the heredoc and run the rest
+      local why = M.is_hidden(name) and 'is a secret'
+        or values[name]:find('[\r\n]') and 'holds a line break'
+      if why then
+        notify(
+          (
+            "`%s` %s, and a quoted heredoc (`<<'EOF'`) would hold it as "
+            .. 'text: use `<<EOF` or pass it otherwise'
+          ):format(name, why),
+          vim.log.levels.ERROR
+        )
+        return on_done(false)
+      end
+    end
     local secrets = {}
     for name, value in pairs(values) do
       if M.is_hidden(name) then table.insert(secrets, value) end

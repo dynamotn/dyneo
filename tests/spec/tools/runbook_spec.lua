@@ -526,7 +526,7 @@ describe('tools.runbook', function()
 
       it('reads an input in Python and JS strings as one value', function()
         assert.equals(
-          [[print(("x " + __import__('os').environ['RUNBOOK_A'] + "!").upper(), ]]
+          [[print(f"x {__import__('os').environ['RUNBOOK_A']}!".upper(), ]]
             .. [[f'{__import__("os").environ["RUNBOOK_A"]}', ]]
             .. [[__import__('os').environ['RUNBOOK_A']) # ${input:a}]],
           (
@@ -547,6 +547,123 @@ describe('tools.runbook', function()
             )
           )
         )
+      end)
+
+      it('reads a here-string and a shift as code, not a heredoc', function()
+        local function bound(code)
+          return (runbook.bind(code, 'bash', { x = 'v' }))
+        end
+        assert.equals(
+          'cat <<< \'abc\'\necho "${RUNBOOK_X}"',
+          bound("cat <<< 'abc'\necho ${input:x}")
+        )
+        assert.equals(
+          'cat <<< word\necho "${RUNBOOK_X}"\nword',
+          bound('cat <<< word\necho ${input:x}\nword')
+        )
+        assert.equals(
+          'echo $((1<<2)) "$((1 << 2))"\necho "${RUNBOOK_X}"\n2',
+          bound('echo $((1<<2)) "$((1 << 2))"\necho ${input:x}\n2')
+        )
+        assert.equals(
+          '((n = 1<<2))\necho "${RUNBOOK_X}"',
+          bound('((n = 1<<2))\necho ${input:x}')
+        )
+        -- A heredoc after them is still one
+        local _, _, literal = runbook.bind(
+          "cat <<< x; echo $((1<<2)); cat <<'EOF'\n${input:x}\nEOF",
+          'bash',
+          { x = 'v' }
+        )
+        assert.same({ 'x' }, literal)
+      end)
+
+      it('runs no secret written as text into a quoted heredoc', function()
+        local bufnr = buffer({
+          '```sh',
+          "cat <<'EOF'",
+          '${input:api_token}',
+          'EOF',
+          '```',
+        })
+        local messages = {}
+        local restores = {
+          h.stub(vim.fn, 'inputsecret', function() return 's3cr.t' end),
+          h.stub(vim, 'notify', function(msg) table.insert(messages, msg) end),
+        }
+        local finished
+        runbook.run_block(
+          bufnr,
+          runbook.block_at(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), 2),
+          function(ok) finished = ok end
+        )
+        settle(function() return finished ~= nil end)
+        for _, restore in ipairs(restores) do
+          restore()
+        end
+        assert.is_false(finished)
+        assert.is_truthy(
+          table.concat(messages, '\n'):find('api_token', 1, true)
+        )
+        assert.equals(5, vim.api.nvim_buf_line_count(bufnr))
+      end)
+
+      it('keeps a literal next to another one a literal', function()
+        assert.equals(
+          [[x = 'a' f'b{__import__("os").environ["RUNBOOK_A"]}{{c}}' "d"]],
+          (
+            runbook.bind(
+              [[x = 'a' 'b${input:a}{c}' "d"]],
+              'python',
+              { a = '1' }
+            )
+          )
+        )
+        assert.equals(
+          [[x = rf"\d{__import__('os').environ['RUNBOOK_A']}" + f'\N{DASH}{__import__("os").environ["RUNBOOK_A"]}']],
+          (
+            runbook.bind(
+              [[x = r"\d${input:a}" + u'\N{DASH}${input:a}']],
+              'python',
+              { a = '1' }
+            )
+          )
+        )
+        local _, _, _, problem =
+          runbook.bind([[x = b'a' b'${input:a}']], 'python', { a = '1' })
+        assert.is_truthy(problem and problem:find('input:a', 1, true))
+        assert.equals(
+          [=[x = { ['k' + process.env['RUNBOOK_A']]: 1, b: c ? ('y' + process.env['RUNBOOK_A']) : 2 }]=],
+          (
+            runbook.bind(
+              [[x = { 'k${input:a}': 1, b: c ? 'y${input:a}' : 2 }]],
+              'js',
+              { a = '1' }
+            )
+          )
+        )
+        if vim.fn.executable('python3') == 1 then
+          local code, env = runbook.bind(
+            [[print('a' 'b${input:a}{c}' "d", f'{1}' '${input:a}')]],
+            'python',
+            { a = "x'y" }
+          )
+          local out = vim
+            .system({ 'python3', '-c', code }, { env = env, text = true })
+            :wait()
+          assert.equals("abx'y{c}d 1x'y\n", out.stdout)
+        end
+        if vim.fn.executable('node') == 1 then
+          local code, env = runbook.bind(
+            [[console.log(Object.keys({ 'k${input:a}': 1 })[0])]],
+            'js',
+            { a = 'v' }
+          )
+          local out = vim
+            .system({ 'node', '-e', code }, { env = env, text = true })
+            :wait()
+          assert.equals('kv\n', out.stdout)
+        end
       end)
 
       it('runs a value with quotes and `$(…)` as it was typed', function()
