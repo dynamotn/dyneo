@@ -1,5 +1,17 @@
 local cmp_util = require('util.cmp')
 
+--- `word` with a leading `~`, `$VAR`, or `%`/`#`/`<cword>`-style name
+--- expanded, as on the command line. Word by word: `expand` over the whole
+--- line reads it as one name, so `% -v` gives nothing and a glob only its
+--- first match. Anything else, a glob included, is passed on as typed.
+---@param word string
+---@return string
+local function expand_word(word)
+  if not word:match('^[~$%%#<]') then return word end
+  local expanded = vim.fn.expand(word) --[[@as string]]
+  return expanded ~= '' and expanded or word
+end
+
 --- Wrap `config` so its arguments are asked for, prefilled with its own
 ---@param config {type?:string, args?:string[]|fun():string[]?}
 local function get_args(config)
@@ -11,12 +23,13 @@ local function get_args(config)
   config = vim.deepcopy(config)
   ---@cast args string[]
   config.args = function()
-    local new_args = vim.fn.expand(vim.fn.input('Run with args: ', args_str)) --[[@as string]]
+    local new_args = vim.fn.input('Run with args: ', args_str) --[[@as string]]
     if config.type and config.type == 'java' then
+      -- The Java adapter splits the line itself, quotes and all
       ---@diagnostic disable-next-line: return-type-mismatch
-      return new_args
+      return (new_args:gsub('%S+', expand_word))
     end
-    return require('dap.utils').splitstr(new_args)
+    return vim.tbl_map(expand_word, require('dap.utils').splitstr(new_args))
   end
   return config
 end
