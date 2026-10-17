@@ -28,7 +28,8 @@ local notify = require('util.notify').titled('Images')
 ---@field image string As written: `nginx:1.27`, `ghcr.io/o/r@sha256:…`
 
 --- The images `lines` name: `FROM` of a Dockerfile (stages and `scratch`
---- left out), `image:` of YAML. A name holding a variable is left out.
+--- left out), `image:` of YAML. A name holding a variable, or starting with
+--- `-`, is left out.
 ---@param lines string[]
 ---@return DyImageRef[]
 function M.images(lines)
@@ -38,7 +39,9 @@ function M.images(lines)
     local image
     if from then
       -- Flags first: `--platform=$BUILDPLATFORM`
-      from = from:gsub('^%-%-%S+%s+', ''):gsub('^%-%-%S+%s+', '')
+      while from:match('^%-%-%S+%s+') do
+        from = from:gsub('^%-%-%S+%s+', '', 1)
+      end
       local name, stage = from:match('^(%S+)%s+[Aa][Ss]%s+(%S+)')
       image = name or from:match('^(%S+)')
       if stage then stages[stage:lower()] = true end
@@ -48,8 +51,14 @@ function M.images(lines)
     else
       image = line:match('^%s*%-?%s*image:%s*["\']?([^%s"\'#]+)')
     end
-    -- A variable or a Helm template is no image to ask a registry about
-    if image and not image:find('%$') and not image:find('{{', 1, true) then
+    -- A variable or a Helm template is no image to ask a registry about, and
+    -- a name starting with `-` would reach trivy, grype or crane as a flag
+    if
+      image
+      and not image:find('%$')
+      and not image:find('{{', 1, true)
+      and not image:find('^%-')
+    then
       table.insert(refs, { line = number, image = image })
     end
   end

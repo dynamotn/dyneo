@@ -77,6 +77,20 @@ describe('tools.images', function()
     end
   )
 
+  it(
+    'leaves out a name a scanner would read as a flag',
+    function()
+      assert.same(
+        { { line = 3, image = 'nginx:1.27' } },
+        images.images({
+          'FROM --platform=x --chown=1 -o=/tmp/x',
+          'image: --config=/tmp/evil.yaml',
+          'FROM --a=1 --b=2 --c=3 nginx:1.27',
+        })
+      )
+    end
+  )
+
   it('counts what trivy and grype report, worst first', function()
     local trivy = images.findings({
       Results = {
