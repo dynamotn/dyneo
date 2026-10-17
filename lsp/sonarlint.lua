@@ -15,7 +15,19 @@ local did_change_configuration = function(client, settings)
   })
 end
 
+--- Whether `name` may name a token file. The server, or whoever runs
+--- `:DySonarlintToken`, hands it over and it is joined to `token_path`, so a
+--- `/` or a `..` would reach outside the folder.
+---@param name string
+---@return boolean
+local function valid_name(name)
+  return type(name) == 'string'
+    and name:match('^[%w._-]+$') ~= nil
+    and name:match('^%.+$') == nil
+end
+
 local get_token = function(token_name)
+  if not valid_name(token_name) then return nil end
   local path = token_path .. '/' .. token_name
   if vim.fn.filereadable(path) == 1 then
     return vim.fn.readfile(path)[1]
@@ -25,6 +37,13 @@ local get_token = function(token_name)
 end
 
 local input_token = function(token_name)
+  if not valid_name(token_name) then
+    vim.notify(
+      'Sonarlint: not a token name: ' .. vim.inspect(token_name),
+      vim.log.levels.ERROR
+    )
+    return
+  end
   -- `inputsecret` rather than `input`: the token is a credential and has no
   -- business being echoed onto the screen or into the command line history.
   local token = vim.fn.inputsecret(
