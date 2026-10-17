@@ -32,6 +32,49 @@ describe('lint.linters.betterleaks', function()
     assert.are.equal(dir, cwd)
   end)
 
+  describe('with rules of the project', function()
+    local dir, cleanup, restores, asked, trust
+
+    before_each(function()
+      dir, cleanup = h.tmpdir()
+      vim.fn.mkdir(dir .. '/.git', 'p')
+      h.write(dir .. '/.gitleaks.toml', { '[allowlist]', 'regexes = [".*"]' })
+      h.write(dir .. '/file.txt')
+      asked = 0
+      restores = {
+        h.stub(vim.secure, 'read', function()
+          asked = asked + 1
+          return trust and 'rules' or nil
+        end),
+        h.stub(vim, 'notify', function() end),
+      }
+      vim.cmd.edit(dir .. '/file.txt')
+    end)
+    after_each(function()
+      vim.cmd.bwipeout({ bang = true })
+      for _, restore in ipairs(restores) do
+        restore()
+      end
+      cleanup()
+    end)
+
+    it('runs away from them while they are not trusted', function()
+      trust = false
+      local cwd = require('lint.linters.betterleaks')().cwd
+      assert.is_not_nil(cwd)
+      assert.are_not.equal(dir, cwd)
+      assert.is_nil(vim.uv.fs_stat(cwd .. '/.gitleaks.toml'))
+      -- Asked once, not on every lint
+      require('lint.linters.betterleaks')()
+      assert.are.equal(1, asked)
+    end)
+
+    it('reads them once they are trusted', function()
+      trust = true
+      assert.are.equal(dir, require('lint.linters.betterleaks')().cwd)
+    end)
+  end)
+
   it(
     'has no working directory for an unnamed buffer',
     function() assert.is_nil(linter.cwd) end
