@@ -447,18 +447,27 @@ vim.api.nvim_create_autocmd('VimEnter', {
   -- For the file opened below to fire the events that load plugins
   nested = true,
   callback = function()
-    -- which-key takes its `spec` apart as it sets up, so the groups are read
-    -- before `VeryLazy` loads it
-    local names = groups()
-    -- Headless there is no UI to enter, so `VeryLazy` is fired by hand: it
-    -- is what loads `config.keymaps`
-    vim.api.nvim_exec_autocmds('User', { pattern = 'VeryLazy' })
-    -- The plugins behind `LazyFile` map their toggles as they set up, so a
-    -- file is opened for them. It has no filetype, which keeps language
-    -- servers and parsers out of it.
-    pcall(vim.cmd.edit, vim.fn.fnameescape(vim.fn.tempname()))
-    attach(vim.api.nvim_get_current_buf())
-    source_ftplugins()
+    -- Only `keymaps-doc.lua` quits Neovim: an error here must quit too, not
+    -- leave it waiting until the shell script's timeout kills it
+    local names
+    local ok, err = pcall(function()
+      -- which-key takes its `spec` apart as it sets up, so the groups are
+      -- read before `VeryLazy` loads it
+      names = groups()
+      -- Headless there is no UI to enter, so `VeryLazy` is fired by hand: it
+      -- is what loads `config.keymaps`
+      vim.api.nvim_exec_autocmds('User', { pattern = 'VeryLazy' })
+      -- The plugins behind `LazyFile` map their toggles as they set up, so a
+      -- file is opened for them. It has no filetype, which keeps language
+      -- servers and parsers out of it.
+      pcall(vim.cmd.edit, vim.fn.fnameescape(vim.fn.tempname()))
+      attach(vim.api.nvim_get_current_buf())
+      source_ftplugins()
+    end)
+    if not ok then
+      io.stderr:write('keymaps-doc: ' .. tostring(err) .. '\n')
+      return vim.cmd('cquit')
+    end
     vim.defer_fn(function()
       local problems = {}
       local ok, err = pcall(function()
