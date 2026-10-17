@@ -119,19 +119,6 @@ return condition
         },
       },
       {
-        -- CI script injection
-        --
-        -- Keyed on the filetype, not the file name: a workflow is any YAML
-        -- under `.github/workflows/`, whatever it is called.
-        'nvim-treesitter/nvim-treesitter',
-        opts = {
-          custom_filetype_predicates = {
-            ['is-gh-action?'] = 'yaml.gh-action',
-            ['is-ci-pipeline?'] = { 'yaml.gitlab', 'yaml.az-pl' },
-          },
-        },
-      },
-      {
         -- Lualine integration
         'nvim-lualine/lualine.nvim',
         opts = function(_, opts)

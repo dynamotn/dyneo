@@ -13,15 +13,6 @@ return vim.list_contains(DyNeo.enabled_languages, 'toml')
         },
       },
       {
-        -- Mise injection
-        'nvim-treesitter/nvim-treesitter',
-        opts = {
-          custom_predicates = {
-            ['is-mise?'] = '.*mise.*%.toml$',
-          },
-        },
-      },
-      {
         -- Work with crates of Rust
         'Saecki/crates.nvim',
         event = { 'BufRead Cargo.toml' },
