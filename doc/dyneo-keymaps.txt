@@ -741,7 +741,7 @@ g  goto
 `gl`                   nx     Align
 `gp`                   nx     Put Text After Selection
 `gr`                   n      References  (LSP)
-`gx`                   nx     Open with system app
+`gx`                   n      Open with system app
 `gy`                   n      Goto T[y]pe Definition  (LSP)
 
 ==============================================================================

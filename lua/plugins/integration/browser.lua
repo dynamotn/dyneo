@@ -31,30 +31,30 @@ return {
     -- Open current word by other tools
     'ofirgall/open.nvim',
     opts = {
-      self_defined_openers = {
+      -- Issue keys open on the Jira of `$JIRA_URL` (up to `/browse/`), and
+      -- only there: `UTF-8` and `SHA-256` read as keys too, and are nobody
+      -- else's business
+      self_defined_openers = (vim.env.JIRA_URL or '') ~= '' and {
         {
           name = 'jira',
           open_fn = function(text)
             local urls = {}
             -- An issue key (`OPS-12`), not `utf-8` or `x86-64`
             for url in text:gmatch('%f[%w]%u[%u%d]+%-%d+%f[%W]') do
-              table.insert(
-                urls,
-                (vim.env.JIRA_URL or 'https://jira.atlassian.com/browse/')
-                  .. url
-              )
+              table.insert(urls, vim.env.JIRA_URL .. url)
             end
             return urls
           end,
         },
-      },
+      } or {},
     },
     keys = {
+      -- The word under the cursor; open.nvim has nothing for a selection,
+      -- which Neovim's own `gx` opens
       {
         'gx',
         function() require('open').open_cword() end,
         desc = 'Open with system app',
-        mode = { 'n', 'x' },
       },
     },
     config = function(_, opts)
