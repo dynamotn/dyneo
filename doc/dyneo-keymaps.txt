@@ -862,8 +862,17 @@ Other keys
 `K`                    n      Hover  (LSP)
 `N`                    nox    Prev Search Result
 `P`                    nx     Put Text Before Cursor
+`Q`                    ca     :q
+`Q!`                   ca     :q!
+`Qa`                   ca     :qa
+`Qa!`                  ca     :qa!
 `R`                    ox     Treesitter Search
 `S`                    nox    Flash Treesitter
+`W`                    ca     :w
+`W!`                   ca     :w!
+`WQ`                   ca     :wq
+`Wa`                   ca     :wa
+`Wq`                   ca     :wq
 `X`                    nx     Smart delete
 `a`                    ox     Around textobject
 `al`                   ox     Around last textobject
@@ -889,6 +898,8 @@ Other keys
 `s`                    nox    Flash
 `tklt`                 ia     takalinhtinh
 `w`                    nox    Next subword
+`wQ`                   ca     :wq
+`ww`                   ca     :DySudoWrite
 `x`                    nx     Smart delete
 `y`                    nx     Yank Text
 

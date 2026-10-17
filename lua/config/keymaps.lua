@@ -447,12 +447,12 @@ map({"n", "x"}, "<localleader>r", function() Snacks.debug.run() end, { desc = "R
 ---@param input string key sequence
 ---@param replace string key sequence
 local function cabbrev(input, replace)
-  vim.keymap.set('ca', input, function()
+  map('ca', input, function()
     if vim.fn.getcmdtype() == ':' and vim.fn.getcmdline() == input then
       return replace
     end
     return input
-  end, { expr = true })
+  end, { expr = true, desc = ':' .. replace })
 end
 
 -- Only a whole command expands, so `ww` typed in a search or a path stays.
