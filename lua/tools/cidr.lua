@@ -260,12 +260,20 @@ function M.check()
   if not vim.list_contains(files, file) then table.insert(files, file) end
   table.sort(files)
   local cut = #files > M.MAX_FILES
+  -- Each `.tfvars` is one environment: `dev.tfvars` and `prod.tfvars` may
+  -- well reuse a range, and are each compared with the `.tf` files alone
   local entries, ipv6, long = {}, 0, {}
+  local module, vars = {}, {}
   for i = 1, math.min(#files, M.MAX_FILES) do
     local lines, partly = lines_of(files[i])
     if partly then table.insert(long, vim.fs.basename(files[i])) end
     local found, skipped = M.collect(lines, files[i])
     vim.list_extend(entries, found)
+    if files[i]:match('%.tfvars$') then
+      table.insert(vars, found)
+    else
+      vim.list_extend(module, found)
+    end
     ipv6 = ipv6 + skipped
   end
   if #long > 0 then
@@ -283,8 +291,27 @@ function M.check()
       vim.log.levels.WARN
     )
   end
+  local sets = #vars == 0 and { module } or {}
+  for _, found in ipairs(vars) do
+    table.insert(sets, vim.list_extend(vim.list_slice(module), found))
+  end
+  -- The `.tf` files collide the same way in every set: each pair once
+  local overlaps, seen = {}, {}
+  for _, set in ipairs(sets) do
+    for _, overlap in ipairs(M.overlaps(set)) do
+      local e, o = overlap.entry, overlap.other
+      local key = table.concat(
+        { e.filename, e.lnum, e.col, o.filename, o.lnum, o.col },
+        '\0'
+      )
+      if not seen[key] then
+        seen[key] = true
+        table.insert(overlaps, overlap)
+      end
+    end
+  end
   local items = {}
-  for _, overlap in ipairs(M.overlaps(entries)) do
+  for _, overlap in ipairs(overlaps) do
     local e, o = overlap.entry, overlap.other
     table.insert(items, {
       filename = e.filename,

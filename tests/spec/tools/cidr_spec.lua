@@ -194,6 +194,39 @@ describe('tools.cidr', function()
     }, notes)
   end)
 
+  it('compares each tfvars with the module, not with the others', function()
+    local dir, cleanup = h.tmpdir()
+    h.write(dir .. '/vpc.tf', {
+      'cidr_block = "10.0.0.0/16"',
+      'cidr_block = "10.0.0.0/16"',
+    })
+    h.write(dir .. '/dev.tfvars', { 'subnets = ["10.1.1.0/24"]' })
+    h.write(dir .. '/prod.tfvars', {
+      'subnets = ["10.1.1.0/24"]',
+      'cidr_block = "10.0.0.0/16"',
+    })
+    vim.cmd.edit(dir .. '/vpc.tf')
+    local restore = h.stub(vim, 'notify', function() end)
+    vim.fn.setqflist({})
+    cidr.command({ fargs = { 'overlaps' } })
+    restore()
+    local items = vim.tbl_map(
+      function(item)
+        return ('%s:%d'):format(
+          vim.fs.basename(vim.api.nvim_buf_get_name(item.bufnr)),
+          item.lnum
+        )
+      end,
+      vim.fn.getqflist()
+    )
+    vim.cmd('cclose | silent! %bwipeout!')
+    cleanup()
+    -- The module's own pair once, and prod's range against it; dev and prod
+    -- sharing a subnet is no collision
+    table.sort(items)
+    assert.same({ 'prod.tfvars:2', 'prod.tfvars:2', 'vpc.tf:2' }, items)
+  end)
+
   it('reads a file, not the loaded buffer named like it', function()
     local dir, cleanup = h.tmpdir()
     h.write(dir .. '/prod.tf', { 'cidr_block = "10.0.0.0/16"' })
