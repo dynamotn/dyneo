@@ -226,6 +226,41 @@ describe('tools.openapi', function()
     )
   end)
 
+  it('keeps a variable on one line, and quotes it for the shell', function()
+    local request = {
+      name = 'x',
+      method = 'GET',
+      base = 'https://api.example.com',
+      path = '/x',
+      vars = {},
+      query = {
+        {
+          name = 'q',
+          value = openapi.request({
+            paths = {
+              ['/x'] = {
+                get = {
+                  parameters = {
+                    { name = 'q', ['in'] = 'query', example = "a b\nit's" },
+                  },
+                },
+              },
+            },
+          }, { path = '/x' }).query[1].value,
+        },
+      },
+      headers = {},
+    }
+    assert.equals([[a b\nit's]], request.query[1].value)
+    assert.equals("@q = a b\\nit's", openapi.http(request)[2])
+    assert.equals(
+      [[# hurl --variable baseUrl=https://api.example.com --variable 'q=a b\nit'\''s']],
+      openapi.hurl(request)[2]
+    )
+    local bufnr = h.buffer()
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, openapi.http(request))
+  end)
+
   it('writes it for kulala and for Hurl', function()
     local request =
       openapi.request(DOC, { path = '/pets/{petId}', method = 'get' })

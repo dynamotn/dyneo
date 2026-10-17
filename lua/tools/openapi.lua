@@ -251,7 +251,12 @@ function M.request(doc, op)
   for _, param in ipairs(params) do
     local value = param.example
     if value == nil then value = M.example(doc, param.schema) end
-    local entry = { name = param.name, value = text(value) }
+    -- A variable is one line of the file: a multi-line example keeps its
+    -- breaks as `\n`
+    local entry = {
+      name = param.name,
+      value = (text(value):gsub('\r?\n', '\\n')),
+    }
     if param['in'] == 'path' then
       table.insert(request.vars, entry)
     elseif param['in'] == 'query' then
@@ -325,14 +330,26 @@ function M.http(request)
   return lines
 end
 
---- `request` for Hurl, the variables to pass said on its first line
+--- `word` as one word of a shell command line, quoted only when it has to be
+---@param word string
+---@return string
+local function shell_word(word)
+  if word:match('^[%w%._/:=@,+%-]+$') then return word end
+  return vim.fn.shellescape(word)
+end
+
+--- `request` for Hurl, the variables to pass said on its first line, ready
+--- to paste into a shell
 ---@param request DyOpenApiRequest
 ---@return string[]
 function M.hurl(request)
-  local vars = { '--variable baseUrl=' .. request.base }
+  local vars = { '--variable ' .. shell_word('baseUrl=' .. request.base) }
   for _, list in ipairs({ request.vars, request.query, request.headers }) do
     for _, param in ipairs(list) do
-      table.insert(vars, ('--variable %s=%s'):format(param.name, param.value))
+      table.insert(
+        vars,
+        '--variable ' .. shell_word(param.name .. '=' .. param.value)
+      )
     end
   end
   local lines = {
