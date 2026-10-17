@@ -1,17 +1,19 @@
 local language = require('config.languages').r
 
+-- Every filetype R.nvim knows but `quarto`, whose chunks of any language run
+-- through quarto-nvim on the same `<localleader>` keys. Typst is a document
+-- with R chunks (`.Rtyp`), which R.nvim supports as it does R Markdown.
+local filetypes = { 'r', 'rmd', 'rnoweb', 'rhelp', 'typst' }
+
 return vim.list_contains(DyNeo.enabled_languages, 'r')
     and {
       {
         -- R console in a split, and everything that talks to it
         'R-nvim/R.nvim',
-        -- the plugin sets its own filetype hooks up, so it loads eagerly
-        lazy = false,
-        -- Every filetype it knows but `quarto`, whose chunks of any language
-        -- run through quarto-nvim on the same `<localleader>` keys
-        init = function()
-          vim.g.R_filetypes = { 'r', 'rmd', 'rnoweb', 'rhelp', 'typst' }
-        end,
+        -- Its hooks are ftplugins, which lazy.nvim runs again for the buffer
+        -- that loaded it; its ftdetect (`.Rtyp`) lazy.nvim reads at startup
+        ft = filetypes,
+        init = function() vim.g.R_filetypes = filetypes end,
         -- Every R buffer asks R for its `nvimcom` version, and fails when
         -- there is no R to ask.
         cond = function() return vim.fn.executable('R') == 1 end,
