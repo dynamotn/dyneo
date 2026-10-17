@@ -10,11 +10,12 @@ local function within(filetype, markers)
   end
 end
 
+-- A bare `roles/` folder is no marker: Kubernetes RBAC keeps one too. The
+-- folders of a role are matched by their own patterns below.
 local ansible = within('yaml.ansible', {
   'ansible.cfg',
   '.ansible-lint',
   'galaxy.yml',
-  'roles',
   'molecule',
 })
 local helm = within('helm', { 'Chart.yaml' })
@@ -97,6 +98,9 @@ vim.filetype.add({
     ['.*/playbooks/.*%.ya?ml'] = 'yaml.ansible',
     ['.*/roles/.*/tasks/.*%.ya?ml'] = 'yaml.ansible',
     ['.*/roles/.*/handlers/.*%.ya?ml'] = 'yaml.ansible',
+    ['.*/roles/[^/]+/defaults/.*%.ya?ml'] = 'yaml.ansible',
+    ['.*/roles/[^/]+/vars/.*%.ya?ml'] = 'yaml.ansible',
+    ['.*/roles/[^/]+/meta/.*%.ya?ml'] = 'yaml.ansible',
     ['.*/tasks/.*%.ya?ml'] = ansible,
     ['.*/molecule/.*%.ya?ml'] = 'yaml.ansible',
 

@@ -114,6 +114,10 @@ describe('ftdetect', function()
         'yaml.ansible',
       },
       { {}, 'pipeline/tasks/build.yaml', 'yaml' },
+      -- Kubernetes RBAC, not an Ansible role
+      { { 'roles/admin.yaml' }, 'tasks/build.yaml', 'yaml' },
+      { {}, 'roles/web/vars/main.yml', 'yaml.ansible' },
+      { {}, 'roles/web/meta/main.yml', 'yaml.ansible' },
       { { 'manage.py' }, 'app/templates/index.html', 'htmldjango' },
       { { 'go.mod' }, 'web/templates/index.html', 'html' },
       { { 'manage.py' }, 'templates/app.component.html', 'htmlangular' },
