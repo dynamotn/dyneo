@@ -185,7 +185,7 @@ local function run_once(sample)
       '-i',
       'NONE',
       '-c',
-      'luafile ' .. root .. '/scripts/bench-filetypes.lua',
+      'luafile ' .. vim.fn.fnameescape(root .. '/scripts/bench-filetypes.lua'),
     }, {
       cwd = workdir .. '/samples',
       env = {

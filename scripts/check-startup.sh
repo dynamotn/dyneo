@@ -25,6 +25,17 @@ if ! command -v nvim &> /dev/null; then
   exit 1
 fi
 
+# GNU `timeout`, which stock macOS lacks; Homebrew's coreutils names it
+# `gtimeout`
+if command -v timeout &> /dev/null; then
+  timeout_bin=timeout
+elif command -v gtimeout &> /dev/null; then
+  timeout_bin=gtimeout
+else
+  echo "check-startup: needs timeout or gtimeout (GNU coreutils)" >&2
+  exit 1
+fi
+
 workdir="$(mktemp -d)"
 trap 'rm -rf "${workdir}"' EXIT
 mkdir -p "${workdir}/config"
@@ -40,6 +51,8 @@ set +e
 # there. Every file is opened by an absolute path.
 # An error echoed while `init.lua` loads can still leave a headless Neovim
 # waiting, deaf to SIGTERM: `timeout` sends SIGKILL after a grace period.
+# The scripts are named through the environment and `fnameescape`, so a
+# checkout under a path with a space still loads them.
 # mise reads its global versions under the real config home: without them its
 # shims (the `go` gopls runs) have no version to run.
 mise_config="${MISE_CONFIG_DIR:-${XDG_CONFIG_HOME:-${HOME}/.config}/mise}"
@@ -47,10 +60,12 @@ mise_config="${MISE_CONFIG_DIR:-${XDG_CONFIG_HOME:-${HOME}/.config}/mise}"
   cd "${workdir}" \
     && MISE_CONFIG_DIR="${mise_config}" \
       XDG_CONFIG_HOME="${workdir}/config" CHECK_STARTUP_WORKDIR="${workdir}" \
-      timeout --kill-after=10 "${CHECK_STARTUP_TIMEOUT:-900}" \
+      CHECK_STARTUP_REPO="${repo}" \
+      "${timeout_bin}" --kill-after=10 "${CHECK_STARTUP_TIMEOUT:-900}" \
       nvim --headless -i NONE \
-      --cmd "luafile ${repo}/scripts/lib/notify-watch.lua" \
-      -c "luafile ${repo}/scripts/check-startup.lua" -c 'cquit' \
+      --cmd 'exe "luafile" fnameescape(getenv("CHECK_STARTUP_REPO") .. "/scripts/lib/notify-watch.lua")' \
+      -c 'exe "luafile" fnameescape(getenv("CHECK_STARTUP_REPO") .. "/scripts/check-startup.lua")' \
+      -c 'cquit' \
       < /dev/null &> "${output}"
 )
 status=$?
