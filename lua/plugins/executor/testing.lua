@@ -1,6 +1,7 @@
 local languages = require('config.languages')
 local not_supported_filetypes = {}
-for _, language in pairs(languages) do
+for _, name in ipairs(require('util.languages').names()) do
+  local language = languages[name]
   if type(language.test) ~= 'table' then
     vim.list_extend(not_supported_filetypes, language.filetypes)
   else
@@ -16,12 +17,20 @@ end
 
 --- Turn `adapters` into adapter instances: a list item is an adapter or the
 --- module of one, a named entry is the module of an adapter set up with its
---- value, or left out when that is false
+--- value, or left out when that is false. neotest asks the adapters in turn
+--- and the first that claims a file runs it, so they are given in a fixed
+--- order: the list first, then the named ones sorted.
 ---@param adapters table
 ---@return table
 local function load_adapters(adapters)
   local ret = {}
-  for name, config in pairs(adapters) do
+  local names = vim.tbl_keys(adapters)
+  table.sort(names, function(a, b)
+    if type(a) ~= type(b) then return type(a) == 'number' end
+    return a < b
+  end)
+  for _, name in ipairs(names) do
+    local config = adapters[name]
     if type(name) == 'number' then
       if type(config) == 'string' then config = require(config) end
       ret[#ret + 1] = config

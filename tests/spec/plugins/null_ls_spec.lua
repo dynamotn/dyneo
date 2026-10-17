@@ -53,6 +53,24 @@ describe('plugins.lsp.null_ls', function()
     return by_name
   end
 
+  it('lists the sources in the sorted order of the languages', function()
+    local languages = require('config.languages')
+    local expected = {}
+    for _, name in ipairs(require('util.languages').names()) do
+      for _, tool in ipairs(languages[name].null_ls or {}) do
+        local key = tool.type .. '.' .. tool[1]
+        if not vim.list_contains(expected, key) then
+          table.insert(expected, key)
+        end
+      end
+    end
+    sources()
+    assert.same(
+      expected,
+      vim.tbl_map(function(source) return source.name end, setup_opts.sources)
+    )
+  end)
+
   it('looks words up online only in prose, never in a secret', function()
     local dictionary = sources()['hover.dictionary']
     -- Not every filetype, which none-ls reads an empty list as

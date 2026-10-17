@@ -346,7 +346,8 @@ return {
     'mason-org/mason.nvim',
     opts = function(_, opts)
       local languages = require('config.languages')
-      for name, language in pairs(languages) do
+      for _, name in ipairs(require('util.languages').names()) do
+        local language = languages[name]
         for _, tool in ipairs(language.formatters or {}) do
           local is_mason_tool = true
           if type(tool) == 'table' and tool.mason then

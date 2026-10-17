@@ -27,8 +27,8 @@ return {
       require('util.lint_code').setup()
 
       -- Add each linter's own config to the list of tools if exist
-      for _, language in pairs(languages) do
-        for _, tool in ipairs(language.linters or {}) do
+      for _, name in ipairs(require('util.languages').names()) do
+        for _, tool in ipairs(languages[name].linters or {}) do
           if type(tool) == 'table' and tool.opts then
             opts.linters[tool[1]] =
               vim.tbl_extend('force', opts.linters[tool[1]] or {}, tool.opts)
@@ -37,14 +37,15 @@ return {
       end
 
       -- `config.languages` owns the linters of a filetype, so a filetype it
-      -- names is always assigned, empty list included. But more than one entry
-      -- may name the same filetype and `pairs` walks them in whatever order it
-      -- likes, so the lists are built whole and assigned once instead of each
+      -- names is always assigned, empty list included. More than one entry
+      -- may name the same filetype, so the lists are built whole, walking
+      -- the languages in sorted order, and assigned once instead of each
       -- entry resetting the key it happens to touch.
       ---@return table<string, string[]>
       local function build_linters_by_ft()
         local by_ft = {}
-        for name, language in pairs(languages) do
+        for _, name in ipairs(require('util.languages').names()) do
+          local language = languages[name]
           for _, ft in ipairs(language.filetypes) do
             by_ft[ft] = by_ft[ft] or {}
           end
@@ -228,7 +229,8 @@ return {
     'mason-org/mason.nvim',
     opts = function(_, opts)
       local languages = require('config.languages')
-      for name, language in pairs(languages) do
+      for _, name in ipairs(require('util.languages').names()) do
+        local language = languages[name]
         for _, tool in ipairs(language.linters or {}) do
           local is_mason_tool = true
           if type(tool) == 'table' and tool.mason then

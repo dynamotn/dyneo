@@ -46,7 +46,10 @@ return {
 
       -- Unified null_ls source configs
       local source_configs = {}
-      for name, language in pairs(require('config.languages')) do
+      local languages = require('config.languages')
+      local keys = {}
+      for _, name in ipairs(require('util.languages').names()) do
+        local language = languages[name]
         for _, tool in ipairs(language.null_ls or {}) do
           local tool_name = tool[1]
           local key = tool.type .. '.' .. tool_name
@@ -60,12 +63,14 @@ return {
           else
             source_configs[key] =
               { info = tool, filetypes = vim.deepcopy(filetypes) }
+            table.insert(keys, key)
           end
         end
       end
 
       -- Setup null_ls configs with predefined file types
-      for _, config in pairs(source_configs) do
+      for _, key in ipairs(keys) do
+        local config = source_configs[key]
         table.insert(
           opts.sources,
           require(
@@ -122,7 +127,9 @@ return {
     'mason-org/mason.nvim',
     opts = function(_, opts)
       opts.ensure_installed = opts.ensure_installed or {}
-      for name, language in pairs(require('config.languages')) do
+      local languages = require('config.languages')
+      for _, name in ipairs(require('util.languages').names()) do
+        local language = languages[name]
         for _, tool in ipairs(language.null_ls or {}) do
           local tool_package = require('util.languages').get_mason_package(tool)
           local is_mason_tool = true

@@ -18,7 +18,8 @@ return {
 
       -- Auto pair rules per filetype
       local languages = require('config.languages')
-      for _, language in pairs(languages) do
+      for _, name in ipairs(require('util.languages').names()) do
+        local language = languages[name]
         if language.autopairs then
           autopairs.add_rules(
             language.autopairs(language.filetypes, rule, cond, ts_cond)
