@@ -26,14 +26,14 @@ repos:
         description: Loads this configuration in a throwaway Neovim and fails on any error.
         entry: scripts/check-startup.sh
         language: script
-        files: (\.lua|\.scm|^lazy-lock(\.stable)?\.json)$
+        files: (\.lua|\.scm|\.sh|^ftdetect/.*\.vim|^spell/.*\.txt|^lazy-lock(\.stable)?\.json)$
         pass_filenames: false
       - id: unit-tests
         name: Unit tests
         description: Runs the plenary-busted specs under tests/spec.
         entry: scripts/test.sh
         language: script
-        files: (\.lua|\.scm|^lazy-lock(\.stable)?\.json)$
+        files: (\.lua|\.scm|\.sh|^ftdetect/.*\.vim|^spell/.*\.txt|^lazy-lock(\.stable)?\.json)$
         pass_filenames: false
       - id: validate-tools
         name: Tool names
@@ -47,8 +47,14 @@ repos:
         description: Regenerates doc/dyneo-keymaps.txt, so the help lists the mappings the configuration actually sets.
         entry: scripts/keymaps-doc.sh
         language: script
-        files: \.lua$
+        files: (\.lua|^scripts/keymaps-doc\.sh)$
         pass_filenames: false
+      - id: dyshellint
+        name: Shell lint
+        description: Runs dyshellint (ShellCheck, shfmt and its own rules) on the shell scripts.
+        entry: dyshellint
+        language: system
+        files: \.sh$
       - id: bench
         name: Startup benchmark
         description: Times the startup of this configuration and rewrites the Benchmark section of README.md when a median moved by more than 20%.
