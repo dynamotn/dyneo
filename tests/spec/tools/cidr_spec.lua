@@ -172,6 +172,28 @@ describe('tools.cidr', function()
     }, notes)
   end)
 
+  it('says which file it read only part of', function()
+    local dir, cleanup = h.tmpdir()
+    h.write(dir .. '/main.tf', { 'cidr_block = "10.0.0.0/16"' })
+    h.write(dir .. '/big.tf', { ('#'):rep(2000), 'cidr_block = "10.0.0.0/16"' })
+    vim.cmd.edit(dir .. '/main.tf')
+    local notes = {}
+    local restores = {
+      h.stub(vim, 'notify', function(msg) table.insert(notes, msg) end),
+      h.stub(cidr, 'MAX_BYTES', 1024),
+    }
+    cidr.command({ fargs = { 'overlaps' } })
+    for _, restore in ipairs(restores) do
+      restore()
+    end
+    vim.cmd('silent! %bwipeout!')
+    cleanup()
+    assert.same({
+      'Only the first 1 KiB read of big.tf',
+      'No overlap among 1 ranges',
+    }, notes)
+  end)
+
   it('reads a file, not the loaded buffer named like it', function()
     local dir, cleanup = h.tmpdir()
     h.write(dir .. '/prod.tf', { 'cidr_block = "10.0.0.0/16"' })

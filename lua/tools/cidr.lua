@@ -225,6 +225,7 @@ end
 --- The lines of `file`: the buffer's when it is loaded, else what is on disk
 ---@param file string
 ---@return string[]
+---@return boolean cut Whether the file is longer than the `M.MAX_BYTES` read
 local function lines_of(file)
   -- By name, not `bufnr(file)`: that is a pattern, and `prod.tf` would
   -- match a loaded `prod.tfvars`
@@ -233,14 +234,15 @@ local function lines_of(file)
       vim.api.nvim_buf_is_loaded(bufnr)
       and vim.api.nvim_buf_get_name(bufnr) == file
     then
-      return vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      return vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), false
     end
   end
   local fd = io.open(file, 'r')
-  if not fd then return {} end
+  if not fd then return {}, false end
   local text = fd:read(M.MAX_BYTES) or ''
+  local cut = fd:read(1) ~= nil
   fd:close()
-  return vim.split(text, '\n', { plain = true })
+  return vim.split(text, '\n', { plain = true }), cut
 end
 
 --- List the colliding ranges of the module of the current buffer
@@ -258,11 +260,22 @@ function M.check()
   if not vim.list_contains(files, file) then table.insert(files, file) end
   table.sort(files)
   local cut = #files > M.MAX_FILES
-  local entries, ipv6 = {}, 0
+  local entries, ipv6, long = {}, 0, {}
   for i = 1, math.min(#files, M.MAX_FILES) do
-    local found, skipped = M.collect(lines_of(files[i]), files[i])
+    local lines, partly = lines_of(files[i])
+    if partly then table.insert(long, vim.fs.basename(files[i])) end
+    local found, skipped = M.collect(lines, files[i])
     vim.list_extend(entries, found)
     ipv6 = ipv6 + skipped
+  end
+  if #long > 0 then
+    notify(
+      ('Only the first %d KiB read of %s'):format(
+        math.floor(M.MAX_BYTES / 1024),
+        table.concat(long, ', ')
+      ),
+      vim.log.levels.WARN
+    )
   end
   if ipv6 > 0 then
     notify(
