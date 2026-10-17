@@ -69,6 +69,28 @@ describe('lint.linters.betterleaks', function()
       assert.are.equal(1, asked)
     end)
 
+    it('reads them once `:trust` is given, without a restart', function()
+      local state, clean_state = h.tmpdir()
+      local stdpath = vim.fn.stdpath
+      table.insert(
+        restores,
+        h.stub(
+          vim.fn,
+          'stdpath',
+          function(what) return what == 'state' and state or stdpath(what) end
+        )
+      )
+      trust = false
+      assert.are_not.equal(dir, require('lint.linters.betterleaks')().cwd)
+      -- What `:trust` does: write the database `vim.secure` keeps
+      trust = true
+      h.write(state .. '/trust', { 'hash ' .. dir .. '/.gitleaks.toml' })
+      local cwd = require('lint.linters.betterleaks')().cwd
+      clean_state()
+      assert.are.equal(dir, cwd)
+      assert.are.equal(2, asked)
+    end)
+
     it('reads them once they are trusted', function()
       trust = true
       assert.are.equal(dir, require('lint.linters.betterleaks')().cwd)

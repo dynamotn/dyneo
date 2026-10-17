@@ -49,8 +49,9 @@ local PROJECT_FILES = {
   '.gitleaksignore',
 }
 
----@type table<string, boolean> Verdict per file and version, kept for the
---- session so that a lint never asks twice
+---@type table<string, boolean> Verdict per file and version, and per version
+--- of the trust database, so that a lint never asks twice and a `:trust`
+--- counts from the next lint on
 local verdicts = {}
 ---@type table<string, boolean> Files already said to be ignored
 local told = {}
@@ -60,7 +61,14 @@ local told = {}
 ---@param stat uv.fs_stat.result
 ---@return boolean
 local function trusted(path, stat)
-  local key = ('%s\0%d.%d'):format(path, stat.mtime.sec, stat.mtime.nsec)
+  -- `:trust` fires no event: it rewrites the database `vim.secure` keeps
+  local db = vim.uv.fs_stat(vim.fn.stdpath('state') .. '/trust')
+  local key = ('%s\0%d.%d\0%s'):format(
+    path,
+    stat.mtime.sec,
+    stat.mtime.nsec,
+    db and ('%d.%d.%d'):format(db.mtime.sec, db.mtime.nsec, db.size) or ''
+  )
   if verdicts[key] == nil then
     -- `vim.secure.read` goes on handling events while its prompt waits, so
     -- the verdict is pinned first: a lint arriving meanwhile does not ask
