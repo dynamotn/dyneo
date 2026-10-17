@@ -113,25 +113,33 @@ function M.headless(text, root, label, on_done)
     record('refused', root, label)
     return notify(why --[[@as string]], vim.log.levels.WARN)
   end
-  local system = require('util.system')
-  record('sent', root, label)
-  notify(('Writing the %s with %s...'):format(label, cmd[1]))
-  system.run(cmd, {
-    cwd = root,
-    stdin = text,
-    timeout = (DyNeo.ai or {}).commit_timeout,
-    max_bytes = M.MAX_ANSWER,
-    -- A CLI that wants to ask something must not take over the terminal
-    detach = true,
-  }, function(result)
-    -- A cut answer is not a shorter message: it is a broken one
-    if result.code ~= 0 or result.cut then
-      return notify(system.failure(result, cmd[1]), vim.log.levels.ERROR)
+  -- The diff was checked on its way in; the commits, the branch name and
+  -- whatever else the prompt took in are checked here, as the text goes out
+  require('tools.ai.check').text(root, {}, text, function(reason)
+    if reason then
+      record('refused', root, label)
+      return notify('Kept from AI: ' .. reason, vim.log.levels.WARN)
     end
-    if vim.trim(result.stdout) == '' then
-      return notify(cmd[1] .. ' gave an empty answer', vim.log.levels.WARN)
-    end
-    on_done(result.stdout)
+    local system = require('util.system')
+    record('sent', root, label)
+    notify(('Writing the %s with %s...'):format(label, cmd[1]))
+    system.run(cmd, {
+      cwd = root,
+      stdin = text,
+      timeout = (DyNeo.ai or {}).commit_timeout,
+      max_bytes = M.MAX_ANSWER,
+      -- A CLI that wants to ask something must not take over the terminal
+      detach = true,
+    }, function(result)
+      -- A cut answer is not a shorter message: it is a broken one
+      if result.code ~= 0 or result.cut then
+        return notify(system.failure(result, cmd[1]), vim.log.levels.ERROR)
+      end
+      if vim.trim(result.stdout) == '' then
+        return notify(cmd[1] .. ' gave an empty answer', vim.log.levels.WARN)
+      end
+      on_done(result.stdout)
+    end)
   end)
 end
 

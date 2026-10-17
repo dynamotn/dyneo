@@ -185,6 +185,52 @@ describe('tools.ai', function()
     end)
   end)
 
+  describe('headless', function()
+    local checked, answer
+
+    before_each(function()
+      checked, answer = {}, nil
+      table.insert(
+        restores,
+        h.stub(package.loaded, 'tools.ai.check', {
+          text = function(_, _, text, on_done)
+            table.insert(checked, text)
+            on_done(text:find('SECRET', 1, true) and 'it holds a SECRET' or nil)
+          end,
+        })
+      )
+      local cli = dir .. '/bin/writer'
+      h.write(cli, { '#!/bin/sh', 'cat > /dev/null', 'echo written' })
+      vim.fn.setfperm(cli, 'rwxr-xr-x')
+      DyNeo.ai.commit_command = { cli }
+    end)
+
+    --- Run `headless` over `text`, and wait until it has answered or said why
+    local function run(text)
+      local before = #notes
+      ai.headless(text, dir, 'commit message', function(a) answer = a end)
+      vim.wait(
+        5000,
+        function() return answer ~= nil or #notes > before + 1 end,
+        10
+      )
+    end
+
+    it('checks the whole prompt, and refuses what it finds', function()
+      run('Branch: feat/SECRET\ndiff')
+      assert.same({ 'Branch: feat/SECRET\ndiff' }, checked)
+      assert.is_nil(answer)
+      assert.same({ { 'refused', 'commit message' } }, audit)
+      assert.is_truthy(notes[#notes]:find('Kept from AI', 1, true))
+    end)
+
+    it('runs the command once the prompt passes', function()
+      run('Branch: feat/two\ndiff')
+      assert.equals('written\n', answer)
+      assert.same({ { 'sent', 'commit message' } }, audit)
+    end)
+  end)
+
   describe('status', function()
     it('says nothing before Avante has loaded', function()
       table.insert(restores, h.stub(package.loaded, 'avante.config', nil))
