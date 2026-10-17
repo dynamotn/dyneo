@@ -6,9 +6,6 @@ return vim.list_contains(DyNeo.enabled_languages, 'rust')
         -- LSP config
         'neovim/nvim-lspconfig',
         opts = {
-          servers = {
-            harper_ls = {},
-          },
           setup = {
             -- rustaceanvim starts its own client
             rust_analyzer = function() return true end,

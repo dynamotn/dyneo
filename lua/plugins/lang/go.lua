@@ -48,7 +48,6 @@ return vim.list_contains(DyNeo.enabled_languages, 'go')
                 },
               },
             },
-            harper_ls = {},
           },
           setup = {
             gopls = function(_, _)

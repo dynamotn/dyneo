@@ -4,15 +4,6 @@ local language = require('config.languages').toml
 return vim.list_contains(DyNeo.enabled_languages, 'toml')
     and {
       {
-        -- LSP config
-        'neovim/nvim-lspconfig',
-        opts = {
-          servers = {
-            harper_ls = {},
-          },
-        },
-      },
-      {
         -- Work with crates of Rust
         'Saecki/crates.nvim',
         event = { 'BufRead Cargo.toml' },

@@ -7,9 +7,6 @@ return vim.list_contains(DyNeo.enabled_languages, 'terragrunt')
         -- LSP config
         'neovim/nvim-lspconfig',
         opts = {
-          servers = {
-            terragruntls = {},
-          },
           setup = {
             terragruntls = function(_, _)
               Snacks.util.lsp.on({ name = 'terragruntls' }, function(_, client)

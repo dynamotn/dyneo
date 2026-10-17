@@ -23,8 +23,6 @@ return vim.list_contains(DyNeo.enabled_languages, 'bash')
                 },
               },
             },
-            termuxls = {},
-            harper_ls = {},
           },
         },
       },

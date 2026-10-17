@@ -5,12 +5,9 @@ return vim.list_contains(DyNeo.enabled_languages, 'vue')
         'neovim/nvim-lspconfig',
         opts = {
           servers = {
-            -- Hybrid mode is the only one since vue_ls 3, so it needs no
-            -- option: vtsls carries the TypeScript side
-            vue_ls = {},
+            -- vtsls carries the TypeScript side of a component (vue_ls 3
+            -- runs in hybrid mode only), and the spec below extends it
             vtsls = {},
-            tailwindcss = {},
-            harper_ls = {},
           },
         },
       },

@@ -34,7 +34,6 @@ return vim.list_contains(DyNeo.enabled_languages, 'lua')
                 },
               },
             },
-            harper_ls = {},
           },
         },
       },

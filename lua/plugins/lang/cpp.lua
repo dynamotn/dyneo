@@ -72,7 +72,6 @@ return vim.list_contains(DyNeo.enabled_languages, 'cpp')
                 clangdFileStatus = true,
               },
             },
-            harper_ls = {},
           },
         },
       },

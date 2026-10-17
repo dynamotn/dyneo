@@ -32,7 +32,6 @@ return vim.list_contains(DyNeo.enabled_languages, 'c_sharp')
                 },
               },
             },
-            harper_ls = {},
           },
         },
       },

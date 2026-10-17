@@ -19,10 +19,6 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
         -- LSP config
         'neovim/nvim-lspconfig',
         opts = {
-          servers = {
-            jdtls = {},
-            harper_ls = {},
-          },
           setup = {
             -- nvim-jdtls starts its own client
             jdtls = function() return true end,

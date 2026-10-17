@@ -13,11 +13,6 @@ return vim.list_contains(DyNeo.enabled_languages, 'angular')
         -- LSP config
         'neovim/nvim-lspconfig',
         opts = {
-          servers = {
-            angularls = {},
-            tailwindcss = {},
-            harper_ls = {},
-          },
           setup = {
             angularls = function()
               Snacks.util.lsp.on({ name = 'angularls' }, function(_, client)

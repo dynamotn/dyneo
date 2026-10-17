@@ -4,16 +4,6 @@ local language = require('config.languages').cmake
 return vim.list_contains(DyNeo.enabled_languages, 'cmake')
     and {
       {
-        -- LSP config
-        'neovim/nvim-lspconfig',
-        opts = {
-          servers = {
-            neocmake = {},
-            harper_ls = {},
-          },
-        },
-      },
-      {
         -- Powerful toolbox for CMake
         'Civitasv/cmake-tools.nvim',
         -- stylua: ignore

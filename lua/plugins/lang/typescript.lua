@@ -112,7 +112,6 @@ return condition
                 },
               },
             },
-            harper_ls = {},
           },
           setup = {
             vtsls = function(_, opts)

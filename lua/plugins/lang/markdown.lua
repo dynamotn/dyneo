@@ -26,16 +26,6 @@ end
 return vim.list_contains(DyNeo.enabled_languages, 'markdown')
     and {
       {
-        -- LSP config
-        'neovim/nvim-lspconfig',
-        opts = {
-          servers = {
-            marksman = {},
-            harper_ls = {},
-          },
-        },
-      },
-      {
         -- Preview markdown
         -- No `ft`: the key below is already limited to these filetypes and
         -- loads the plugin, which has nothing else to set up. Loading on `ft`

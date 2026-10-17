@@ -3,17 +3,6 @@ local language = require('config.languages').python
 return vim.list_contains(DyNeo.enabled_languages, 'python')
     and {
       {
-        -- LSP config
-        'neovim/nvim-lspconfig',
-        opts = {
-          servers = {
-            pyright = {},
-            ruff = {},
-            harper_ls = {},
-          },
-        },
-      },
-      {
         -- Debug adapters & configurations
         'mfussenegger/nvim-dap',
         dependencies = {

@@ -1,18 +1,4 @@
----@diagnostic disable-next-line: unused-local
-local language = require('config.languages').make
-
+-- GNU make's syntax, the one nearly every Makefile is written for
 vim.g.make_flavor = 'gnu'
 
-return vim.list_contains(DyNeo.enabled_languages, 'make')
-    and {
-      {
-        -- LSP config
-        'neovim/nvim-lspconfig',
-        opts = {
-          servers = {
-            autotools_ls = {},
-          },
-        },
-      },
-    }
-  or {}
+return {}

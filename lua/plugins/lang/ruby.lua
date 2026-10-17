@@ -3,16 +3,6 @@ local language = require('config.languages').ruby
 return vim.list_contains(DyNeo.enabled_languages, 'ruby')
     and {
       {
-        -- LSP config
-        'neovim/nvim-lspconfig',
-        opts = {
-          servers = {
-            ruby_lsp = {},
-            harper_ls = {},
-          },
-        },
-      },
-      {
         -- Debug adapters & configurations
         'mfussenegger/nvim-dap',
         -- Loaded with nvim-dap, not on `ft`: the adapter requires nvim-dap, so

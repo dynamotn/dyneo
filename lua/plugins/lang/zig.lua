@@ -3,15 +3,6 @@ local language = require('config.languages').zig
 return vim.list_contains(DyNeo.enabled_languages, 'zig')
     and {
       {
-        -- LSP config
-        'neovim/nvim-lspconfig',
-        opts = {
-          servers = {
-            zls = {},
-          },
-        },
-      },
-      {
         -- Debug adapters & configurations: what `zig build` leaves in
         -- `zig-out/bin`, through the same `codelldb` the C family uses
         'mfussenegger/nvim-dap',
