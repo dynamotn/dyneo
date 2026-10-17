@@ -342,11 +342,12 @@ return {
       -- Avante itself first: the ACP adapters after it are optional, and a
       -- machine without npm or unzip still gets a working Avante.
       'make',
-      -- The ACP adapters Avante talks to Claude Code and Codex through. A
-      -- failed shell step is logged and the next one still runs.
+      -- The ACP adapters Avante talks to Claude Code and Codex through, at
+      -- versions out for longer than `DyNeo.quarantine_window`. A failed
+      -- shell step is logged and the next one still runs.
       vim.fn.executable('mise') == 1
-          and 'mise use -g npm:@zed-industries/claude-agent-acp@latest npm:@zed-industries/codex-acp@latest'
-        or 'npm install -g @zed-industries/claude-agent-acp@latest @zed-industries/codex-acp@latest',
+          and 'mise use -g npm:@zed-industries/claude-agent-acp@0.23.1 npm:@zed-industries/codex-acp@0.16.0'
+        or 'npm install -g @zed-industries/claude-agent-acp@0.23.1 @zed-industries/codex-acp@0.16.0',
       install_agy_acp,
     },
     cmd = {
@@ -597,8 +598,9 @@ return {
     'ravitemer/mcphub.nvim',
     enabled = vim.fn.executable('npm') == 1,
     cmd = 'MCPHub',
-    build = vim.fn.executable('mise') == 1 and 'mise use -g npm:mcp-hub@latest'
-      or 'npm install -g mcp-hub@latest',
+    -- A version out for longer than `DyNeo.quarantine_window`
+    build = vim.fn.executable('mise') == 1 and 'mise use -g npm:mcp-hub@4.2.1'
+      or 'npm install -g mcp-hub@4.2.1',
     opts = {
       -- Every MCP tool call is confirmed, but for those a server lists in
       -- its own `autoApprove` (servers.json): a tool can write files, run

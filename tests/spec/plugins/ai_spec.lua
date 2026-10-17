@@ -16,6 +16,17 @@ describe('plugins.integration.ai', function()
     assert.are.equal('make', build[1])
   end)
 
+  it('installs adapters and MCP Hub at pinned versions', function()
+    for _, name in ipairs({ 'yetone/avante.nvim', 'ravitemer/mcphub.nvim' }) do
+      local build = spec_of(name).build
+      for _, step in ipairs(type(build) == 'table' and build or { build }) do
+        if type(step) == 'string' then
+          assert.is_nil(step:find('@latest', 1, true), step)
+        end
+      end
+    end
+  end)
+
   it(
     'warns rather than fails when the agy ACP server cannot install',
     function()
