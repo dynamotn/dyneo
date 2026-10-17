@@ -403,8 +403,9 @@ return {
               or 'claude-opus-5-5',
             ACP_PATH_TO_CLAUDE_CODE_EXECUTABLE = vim.fn.exepath('claude'),
             -- Avante's default is `bypassPermissions`, which runs every tool
-            -- of Claude Code unasked. Its shell and search read the disk
-            -- without going through Avante, so they are asked for instead.
+            -- of Claude Code unasked. Here Claude Code asks Avante first, and
+            -- Avante asks the user: its tools read and write the disk
+            -- outside the project, past `util.ai_guard`.
             ACP_PERMISSION_MODE = 'default',
           },
         },
@@ -421,18 +422,15 @@ return {
         -- The defaults bind the whole `<leader>a` group, over the keys of
         -- sidekick and Claude Code. The ones kept are under `keys` below.
         auto_set_keymaps = false,
-        -- Avante runs every tool without asking by default. Reading, and
-        -- editing inside the project, goes through on its own; a shell, a
-        -- deletion, or anything reaching past the project is asked for.
+        -- Avante runs every tool without asking by default. Its own tools
+        -- refuse a path outside the project, so reading and editing with
+        -- them goes through on its own; a shell or a deletion is asked for.
+        -- An ACP agent's requests are matched by their kind, which names no
+        -- path: only `think` goes through, and a `read`, `search` or `edit`
+        -- of Claude Code, which may reach `~/.ssh` as easily as the
+        -- project, is asked for.
         auto_approve_tool_permissions = {
-          -- Claude Code's requests are matched by their ACP kind; `think` is
-          -- also the name of Avante's own tool
-          'read',
-          'search',
           'think',
-          'edit',
-          -- Avante's own tools, by name
-
           'attempt_completion',
           'get_diagnostics',
           'git_diff',
