@@ -36,6 +36,19 @@ local function name_is(patterns, when)
   end
 end
 
+--- Whether the full path of the buffer ends in one of `patterns`
+---@param patterns string[] Lua patterns, anchored at the end by the caller
+---@return fun(match: table, pattern: integer, source: integer|string): boolean
+local function path_is(patterns)
+  return function(_, _, source)
+    local path = vim.api.nvim_buf_get_name(buffer(source))
+    for _, pattern in ipairs(patterns) do
+      if path:find(pattern) then return true end
+    end
+    return false
+  end
+end
+
 -- `chezmoi-template.nvim` injects the target language into every template,
 -- asking chezmoi for it rather than guessing from the name, so the gotmpl
 -- predicates below match nothing when it is in the spec: both at once would
@@ -57,7 +70,13 @@ local PREDICATES = {
   ['is-gh-action?'] = filetype_is({ 'yaml.gh-action' }),
   ['is-ci-pipeline?'] = filetype_is({ 'yaml.gitlab', 'yaml.az-pl' }),
   -- after/queries/toml/injections.scm
-  ['is-mise?'] = name_is({ '.*mise.*%.toml$' }),
+  -- The files mise reads: `mise.toml`, `.mise.local.toml` and the like,
+  -- `mise/config.toml` under `.config` or a project, and `conf.d`
+  ['is-mise?'] = path_is({
+    '/%.?mise[^/]*%.toml$',
+    '/%.?mise/config[^/]*%.toml$',
+    '/%.?mise/conf%.d/[^/]+%.toml$',
+  }),
   -- after/queries/gotmpl/injections.scm: the target language of a template,
   -- told by its file name
   ['is-bash-file?'] = name_is(

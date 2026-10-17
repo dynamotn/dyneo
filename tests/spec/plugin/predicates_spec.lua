@@ -76,4 +76,20 @@ describe('plugin/predicates', function()
     assert.is_true(ask('is-bash-file?', script))
     assert.is_false(ask('is-yaml-file?', script))
   end)
+  it('tells a file of mise by its path', function()
+    local paths = {
+      ['/p/mise.toml'] = true,
+      ['/p/.mise.local.toml'] = true,
+      ['/home/u/.config/mise/config.toml'] = true,
+      ['/p/.mise/config.local.toml'] = true,
+      ['/home/u/.config/mise/conf.d/node.toml'] = true,
+      ['/p/promise.toml'] = false,
+      ['/p/mise/Cargo.toml'] = false,
+      ['/p/pyproject.toml'] = false,
+    }
+    for path, expected in pairs(paths) do
+      local bufnr = h.buffer({ name = path, filetype = 'toml' })
+      assert.are.equal(expected, ask('is-mise?', bufnr), path)
+    end
+  end)
 end)
