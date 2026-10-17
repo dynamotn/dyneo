@@ -2,7 +2,22 @@ return {
   {
     -- Terminal
     'akinsho/nvim-toggleterm.lua',
-    event = 'VeryLazy',
+    -- Loaded by its key, or by a command (vim-test's strategy runs
+    -- `:TermExec`); once set up, `open_mapping` takes the key over
+    cmd = {
+      'TermExec',
+      'TermNew',
+      'TermSelect',
+      'ToggleTerm',
+      'ToggleTermToggleAll',
+      'ToggleTermSendCurrentLine',
+      'ToggleTermSendVisualLines',
+      'ToggleTermSendVisualSelection',
+      'ToggleTermSetName',
+    },
+    keys = {
+      { '<F3>', mode = { 'n', 'i' }, desc = 'Toggle terminal' },
+    },
     opts = {
       open_mapping = '<F3>',
     },

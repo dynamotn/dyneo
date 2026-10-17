@@ -781,6 +781,7 @@ Other keys
 `<C-s>`                insx   Save File
 `<C-x>`                nv     Decrement
 `<Down>`               nx     Down
+`<F3>`                 in     Toggle terminal
 `<M-[>`                in     Prev Copilot Suggestion  (LSP: copilot)
 `<M-]>`                in     Next Copilot Suggestion  (LSP: copilot)
 `<M-s>`                c      Toggle Flash Search
