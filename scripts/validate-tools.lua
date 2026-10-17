@@ -9,6 +9,11 @@
 --   nvim --clean --headless -l scripts/validate-tools.lua
 --
 -- Exits non-zero, and prints one line per problem, when something is off.
+-- It also exits non-zero when nothing could be checked at all (no plugins
+-- and no Mason registry under `stdpath('data')`, as on a fresh clone or a
+-- new `NVIM_APPNAME`): a check that cannot run must not read as one that
+-- passed. `VALIDATE_TOOLS_ALLOW_SKIP=1` lets that case pass, for a machine
+-- that knowingly has none of them.
 
 local root = vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p:h:h')
 local data = vim.fn.stdpath('data')
@@ -203,17 +208,26 @@ for _, problem in ipairs(problems) do
   print(problem)
 end
 
+local nothing = #skipped == vim.tbl_count(checkable)
 if #skipped > 0 then
   print(
     string.format(
       'config.languages: %s, so nothing that needs %s was checked',
-      #skipped == vim.tbl_count(checkable) and 'nothing to check against'
-        or 'partial check',
+      nothing and 'nothing to check against' or 'partial check',
       table.concat(skipped, ', ')
     )
   )
 elseif vim.tbl_isempty(problems) then
   print('config.languages: every tool resolves')
 end
+local skip_allowed = vim.env.VALIDATE_TOOLS_ALLOW_SKIP == '1'
+if nothing and not skip_allowed then
+  print(
+    'config.languages: install the plugins (or set'
+      .. ' VALIDATE_TOOLS_ALLOW_SKIP=1) to pass without a check'
+  )
+end
 
-os.exit(vim.tbl_isempty(problems) and 0 or 1)
+os.exit(
+  (vim.tbl_isempty(problems) and (skip_allowed or not nothing)) and 0 or 1
+)
