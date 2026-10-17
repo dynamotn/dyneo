@@ -23,23 +23,18 @@ return vim.list_contains(DyNeo.enabled_languages, 'cmake')
           { '<localleader>g', '<cmd>CMakeGenerate<cr>', desc = 'CMake Generate', ft = { 'cmake', 'c', 'cpp' } },
           { '<localleader>t', '<cmd>CMakeSelectBuildType<cr>', desc = 'CMake Build Type', ft = { 'cmake', 'c', 'cpp' } },
         },
+        -- Loaded for a buffer inside a CMake project, wherever Neovim was
+        -- started from
         init = function()
-          local loaded = false
-          local function check()
-            local cwd = vim.uv.cwd()
-            if vim.fn.filereadable(cwd .. '/CMakeLists.txt') == 1 then
+          local group =
+            vim.api.nvim_create_augroup('dyneo_cmake', { clear = true })
+          vim.api.nvim_create_autocmd('FileType', {
+            group = group,
+            pattern = { 'cmake', 'c', 'cpp' },
+            callback = function(args)
+              if not vim.fs.root(args.buf, 'CMakeLists.txt') then return end
+              vim.api.nvim_del_augroup_by_id(group)
               require('lazy').load({ plugins = { 'cmake-tools.nvim' } })
-              loaded = true
-            end
-          end
-          check()
-          vim.api.nvim_create_autocmd('DirChanged', {
-            group = vim.api.nvim_create_augroup(
-              'dyneo_cmake',
-              { clear = true }
-            ),
-            callback = function()
-              if not loaded then check() end
             end,
           })
         end,

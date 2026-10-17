@@ -1,0 +1,37 @@
+local h = require('helpers')
+
+describe('plugins.lang.cmake', function()
+  local restores, loaded, dir, cleanup
+
+  before_each(function()
+    h.globals()
+    loaded = {}
+    dir, cleanup = h.tmpdir()
+    restores = {
+      h.stub(package.loaded, 'lazy', {
+        load = function(opts) vim.list_extend(loaded, opts.plugins) end,
+      }),
+    }
+    for _, spec in ipairs(dofile(h.root .. '/lua/plugins/lang/cmake.lua')) do
+      if spec[1] == 'Civitasv/cmake-tools.nvim' then spec.init() end
+    end
+  end)
+  after_each(function()
+    for i = #restores, 1, -1 do
+      restores[i]()
+    end
+    pcall(vim.api.nvim_del_augroup_by_name, 'dyneo_cmake')
+    cleanup()
+  end)
+
+  it('loads cmake-tools for a file of a CMake project', function()
+    h.write(dir .. '/proj/CMakeLists.txt')
+    h.buffer({ name = dir .. '/other/x.c', filetype = 'c' })
+    assert.same({}, loaded)
+    h.buffer({ name = dir .. '/proj/src/main.cpp', filetype = 'cpp' })
+    assert.same({ 'cmake-tools.nvim' }, loaded)
+    -- Once is enough
+    h.buffer({ name = dir .. '/proj/src/util.c', filetype = 'c' })
+    assert.same({ 'cmake-tools.nvim' }, loaded)
+  end)
+end)

@@ -77,12 +77,16 @@ describe('plugin autocmds set up twice', function()
   it('keep one CMake project check', function()
     local spec =
       spec_of('lua/plugins/lang/cmake.lua', 'Civitasv/cmake-tools.nvim')
+    -- One hook per filetype it watches
+    local function hooks()
+      return #vim.api.nvim_get_autocmds({
+        group = 'dyneo_cmake',
+        event = 'FileType',
+      })
+    end
     spec.init()
+    local once = hooks()
     spec.init()
-    local hooks = vim.api.nvim_get_autocmds({
-      group = 'dyneo_cmake',
-      event = 'DirChanged',
-    })
-    assert.equals(1, #hooks)
+    assert.equals(once, hooks())
   end)
 end)
