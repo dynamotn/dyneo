@@ -81,13 +81,25 @@ describe('lint.linters.dyshellint', function()
       assert.are.equal(0, d.col)
     end)
 
-    it('is empty without a usable report', function()
-      assert.are.same({}, linter.parser(nil))
-      assert.are.same({}, linter.parser(''))
-      assert.are.same({}, linter.parser('not json'))
-      assert.are.same({}, linter.parser('[]'))
-      assert.are.same({}, linter.parser('{"findings": "x"}'))
-      assert.are.same({}, linter.parser('{"findings": []}'))
-    end)
+    it(
+      'is empty for a clean report',
+      function() assert.are.same({}, linter.parser('{"findings": []}')) end
+    )
+
+    it(
+      'reports output that is not a report, rather than a clean run',
+      function()
+        for _, output in ipairs({ '', 'not json', '"x"', '{"findings": "x"}' }) do
+          local diagnostics = linter.parser(output)
+          assert.are.equal(1, #diagnostics, output)
+          assert.are.equal('unreadable-report', diagnostics[1].code)
+          assert.are.equal(
+            vim.diagnostic.severity.ERROR,
+            diagnostics[1].severity
+          )
+        end
+        assert.are.equal('unreadable-report', linter.parser(nil)[1].code)
+      end
+    )
   end)
 end)

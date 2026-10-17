@@ -50,6 +50,18 @@ local function diagnostic(finding)
   }
 end
 
+--- What stands in for a report that could not be read, so a run that crashed
+--- never passes a script
+---@type vim.Diagnostic
+local unreadable = {
+  lnum = 0,
+  col = 0,
+  severity = vim.diagnostic.severity.ERROR,
+  source = 'dyshellint',
+  code = 'unreadable-report',
+  message = 'dyshellint gave a report that could not be read',
+}
+
 return {
   name = 'dyshellint',
   cmd = 'dyshellint',
@@ -66,17 +78,16 @@ return {
   stream = 'stdout',
   -- A non-zero status only means the buffer has findings.
   ignore_exitcode = true,
-  ---@param output string The JSON report, empty when the run produced none
+  ---@param output string The JSON report, printed even with nothing found
   ---@return vim.Diagnostic[]
   parser = function(output)
-    if output == nil or output == '' then return {} end
-    local ok, report = pcall(vim.json.decode, output)
+    local ok, report = pcall(vim.json.decode, output or '')
     if
       not ok
       or type(report) ~= 'table'
       or type(report.findings) ~= 'table'
     then
-      return {}
+      return { vim.deepcopy(unreadable) }
     end
     local diagnostics = {}
     for _, finding in ipairs(report.findings) do
