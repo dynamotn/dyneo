@@ -23,6 +23,28 @@ describe('scripts/lib/claude_hook.lua', function()
       assert.equals('deny', bash('git commit --no-verify -m x'))
     end)
 
+    it('sees through flags between a command and its verb', function()
+      assert.equals('deny', bash('chezmoi -S . apply'))
+      assert.equals('deny', bash('chezmoi --source=. destroy x'))
+      assert.equals('deny', bash('git commit -n -m x'))
+      assert.equals('deny', bash('git commit -anm x'))
+      assert.equals('deny', bash('sops --decrypt f.yaml'))
+      assert.equals('deny', bash('sops decrypt f.yaml'))
+      assert.equals('deny', bash('sops -d f.yaml'))
+      assert.equals('deny', bash('gpg -d f.gpg'))
+      assert.equals('deny', bash('gpg --decrypt f.gpg'))
+      assert.equals('deny', bash('chezmoi decrypt f'))
+      assert.equals('deny', bash('pass show web/x'))
+    end)
+
+    it('leaves alone a verb in the next command of a pipeline', function()
+      assert.is_nil(bash('chezmoi diff; echo apply'))
+      assert.is_nil(bash('git commit --amend -m x'))
+      assert.is_nil(bash('git commit -m x'))
+      assert.is_nil(bash('sops --encrypt f.yaml'))
+      assert.is_nil(bash('gpg --list-keys'))
+    end)
+
     it('refuses to decrypt or reach a credential store', function()
       assert.equals('deny', bash('age -d -i key secrets/x.age'))
       assert.equals('deny', bash('chezmoi-dycrypt'))
@@ -62,6 +84,26 @@ describe('scripts/lib/claude_hook.lua', function()
       assert.equals(
         'deny',
         decision({ tool_name = 'Read', tool_input = { file_path = '.env' } })
+      )
+    end)
+
+    it('refuses a glob that reaches a credential store', function()
+      assert.equals(
+        'deny',
+        decision({
+          tool_name = 'Glob',
+          tool_input = { pattern = 'secrets/data/**' },
+        })
+      )
+      assert.equals(
+        'deny',
+        decision({ tool_name = 'Grep', tool_input = { glob = '*.age' } })
+      )
+      assert.is_nil(
+        decision({ tool_name = 'Grep', tool_input = { glob = '!*.age' } })
+      )
+      assert.is_nil(
+        decision({ tool_name = 'Glob', tool_input = { pattern = '**/*.lua' } })
       )
     end)
 

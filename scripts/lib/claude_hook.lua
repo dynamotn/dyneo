@@ -34,26 +34,51 @@ M.SECRET_PATHS = {
 --- Commands refused outright, each with why and what to do instead
 ---@type { [1]: string, [2]: string }[]
 M.COMMANDS = {
+  -- `[^;|&]-` lets flags sit between a command and its verb
+  -- (`chezmoi -S . apply`) without reaching the next command of a pipeline
   {
-    'chezmoi%s+apply',
+    '%f[%w]chezmoi%f[%W][^;|&]-%f[%w]apply%f[%W]',
     'chezmoi apply writes over the real $HOME: show `chezmoi diff` and let the user apply',
   },
   {
-    'chezmoi%s+destroy',
+    '%f[%w]chezmoi%f[%W][^;|&]-%f[%w]destroy%f[%W]',
     'chezmoi destroy deletes from the real $HOME: ask the user',
   },
   {
-    'chezmoi%s+forget',
+    '%f[%w]chezmoi%f[%W][^;|&]-%f[%w]forget%f[%W]',
     'chezmoi forget drops a file from the source: ask the user',
   },
   {
     '%-%-no%-verify',
     'the hooks exist to protect the user: fix what they report instead',
   },
+  {
+    -- `-n` is `--no-verify` to `git commit`, alone or among other short flags
+    '%f[%w]commit%f[%W][^;|&]-%s%-%a*n%a*%f[%W]',
+    '`git commit -n` skips the hooks, which exist to protect the user',
+  },
   { 'chezmoi%-dycrypt', 'it decrypts secrets, which are off limits' },
+  {
+    '%f[%w]chezmoi%f[%W][^;|&]-%f[%w]decrypt%f[%W]',
+    'it decrypts secrets, which are off limits',
+  },
   { '%f[%w]age%s+%-d', 'it decrypts secrets, which are off limits' },
   { '%f[%w]age%s+%-%-decrypt', 'it decrypts secrets, which are off limits' },
-  { '%f[%w]sops%s+%-d', 'it decrypts secrets, which are off limits' },
+  {
+    '%f[%w]sops%f[%W][^;|&]-%s%-d%f[%W]',
+    'it decrypts secrets, which are off limits',
+  },
+  {
+    '%f[%w]sops%f[%W][^;|&]-%f[%w]decrypt%f[%W]',
+    'it decrypts secrets, which are off limits',
+  },
+  {
+    '%f[%w]gpg2?%f[%W][^;|&]-%s%-%-?d%a*%f[%W]',
+    'it decrypts secrets, which are off limits',
+  },
+  { '%f[%w]pass%s+show%f[%W]', 'it reveals a secret, which is off limits' },
+  { '%f[%w]op%s+read%f[%W]', 'it reveals a secret, which is off limits' },
+  { '%f[%w]vault%s+read%f[%W]', 'it reveals a secret, which is off limits' },
 }
 
 --- The tools that change a file, and so need asking before a lockfile
@@ -148,6 +173,14 @@ local function paths_of(input)
   local paths = {}
   for _, key in ipairs({ 'file_path', 'notebook_path', 'path' }) do
     if type(input[key]) == 'string' then table.insert(paths, input[key]) end
+  end
+  -- Glob's `pattern` and Grep's `glob` reach files as well, unless they
+  -- leave them out (`!*.age`)
+  for _, key in ipairs({ 'pattern', 'glob' }) do
+    local value = input[key]
+    if type(value) == 'string' and value:sub(1, 1) ~= '!' then
+      table.insert(paths, value)
+    end
   end
   return paths
 end
