@@ -47,11 +47,19 @@ jobs:
           - channel: latest
             neovim: nightly
             lockfile: lazy-lock.json
+            os: ubuntu-latest
           - channel: stable
             neovim: stable
             lockfile: lazy-lock.stable.json
-    name: neovim (${{ matrix.channel }})
-    runs-on: ubuntu-latest
+            os: ubuntu-latest
+          # The configuration's own machine is a Mac: BSD userland, no GNU
+          # `timeout`, `/tmp` a link into `/private`
+          - channel: latest
+            neovim: nightly
+            lockfile: lazy-lock.json
+            os: macos-latest
+    name: neovim (${{ matrix.channel }}${{ matrix.os == 'macos-latest' && ', macos' || '' }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -66,10 +74,15 @@ jobs:
       # `per_machine/config.lua` is rendered by chezmoi and is not in the
       # repository; one is written here only to pick the channel, the way a
       # machine on it would, and everything else stays at its default.
-      # The image has jq, yq, openssl and git, which specs run for real and
-      # fail without on CI; fd it lacks, and Ubuntu names it `fdfind`
+      # The images have jq, yq, openssl and git, which specs run for real and
+      # fail without on CI; fd they lack, and Ubuntu names it `fdfind`. macOS
+      # also lacks GNU `timeout`, which coreutils brings as `gtimeout`.
       - name: Install fd
+        if: runner.os == 'Linux'
         run: sudo apt-get install -y --no-install-recommends fd-find
+      - name: Install fd and coreutils
+        if: runner.os == 'macOS'
+        run: brew install fd coreutils
       - name: Link configuration
         run: |
           mkdir -p "$HOME/.config"
