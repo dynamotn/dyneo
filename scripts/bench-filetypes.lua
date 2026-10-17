@@ -163,9 +163,7 @@ vim.opt.rtp:prepend(root)
 dofile(root .. '/ftdetect/filetype.lua')
 local samples = dofile(root .. '/scripts/lib/samples.lua')
 
-local workdir = vim.fn.tempname()
-vim.fn.mkdir(workdir .. '/config', 'p')
-assert(vim.uv.fs_symlink(root, workdir .. '/config/nvim'))
+local workdir, config = dofile(root .. '/scripts/lib/workdir.lua').config(root)
 local generated = samples.generate(workdir .. '/samples', { all = true })
 if only then
   generated = vim.tbl_filter(function(s) return only[s.filetype] end, generated)
@@ -191,7 +189,7 @@ local function run_once(sample)
     }, {
       cwd = workdir .. '/samples',
       env = {
-        XDG_CONFIG_HOME = workdir .. '/config',
+        XDG_CONFIG_HOME = config,
         BENCH_FT_FILE = sample.path,
         BENCH_FT_SETTLE = vim.env.BENCH_FT_SETTLE,
       },

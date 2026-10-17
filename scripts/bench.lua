@@ -36,9 +36,7 @@ local scenarios = {
   { cmd = 'nvim --headless init.lua +q', args = { 'init.lua' } },
 }
 
-local workdir = vim.fn.tempname()
-vim.fn.mkdir(workdir .. '/config', 'p')
-assert(vim.uv.fs_symlink(root, workdir .. '/config/nvim'))
+local workdir, config = dofile(root .. '/scripts/lib/workdir.lua').config(root)
 
 ---@class bench.Run
 ---@field startup number `--- NVIM STARTED ---` clock, in ms
@@ -108,7 +106,7 @@ local function run_once(scenario)
   local result = vim
     .system(cmd, {
       cwd = root,
-      env = { XDG_CONFIG_HOME = workdir .. '/config' },
+      env = { XDG_CONFIG_HOME = config },
       text = true,
     })
     -- A configuration that hangs on start must fail the hook, not hold it

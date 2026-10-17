@@ -18,9 +18,9 @@ nvim --clean --headless -l scripts/bench.lua            # startup, by scenario
 nvim --clean --headless -l scripts/bench-filetypes.lua  # open/ready/reopen/plugins per filetype
 ```
 
-Both link the tree as `config/nvim` and ignore `NVIM_APPNAME`, so they
-measure `latest` only; report `stable` timings as not measured rather than run
-them under `NVIM_APPNAME=nvim-stable` (the child would load no config).
+Repeat both under `NVIM_APPNAME=nvim-stable mise exec neovim@stable --`; the
+link they start Neovim on is named after `NVIM_APPNAME`, so `stable` measures
+its own plugins.
 
 Save the numbers in the scratchpad and compare runs made the same way, not
 with README. Timings are noisy (read each script's header): the `plugins`
