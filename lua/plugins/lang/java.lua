@@ -51,9 +51,14 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
               return vim.fs.root(path, vim.lsp.config.jdtls.root_markers)
             end,
 
-            -- How to find the project name for a given root dir.
+            -- The name of a project's config and workspace dirs: the root's
+            -- own name to read, and a hash of its full path, so two projects
+            -- both called `api` never share an index
             project_name = function(root_dir)
-              return root_dir and vim.fs.basename(root_dir)
+              return root_dir
+                and vim.fs.basename(root_dir)
+                  .. '-'
+                  .. vim.fn.sha256(root_dir):sub(1, 8)
             end,
 
             -- Where are the config and workspace dirs for a project?
