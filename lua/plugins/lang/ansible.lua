@@ -24,9 +24,25 @@ return vim.list_contains(DyNeo.enabled_languages, 'ansible')
         opts = {
           servers = {
             ansiblels = {
+              -- Looked up as the server starts, not at startup: one `$PATH`
+              -- search and a `stat` that only an Ansible buffer pays for.
+              -- It replaces the `before_init` of `*`, so the project's local
+              -- settings are read here too, after it, and win.
+              before_init = function(_, config)
+                local python = mason_ansible_python()
+                if python then
+                  -- In place: the client keeps this very table
+                  local ansible = config.settings.ansible
+                  ansible.python = vim.tbl_extend(
+                    'force',
+                    ansible.python or {},
+                    { interpreterPath = python }
+                  )
+                end
+                require('codesettings').with_local_settings(config.name, config)
+              end,
               settings = {
                 ansible = {
-                  python = { interpreterPath = mason_ansible_python() },
                   -- nvim-lint runs ansible-lint already; the server running
                   -- it too would show each finding twice
                   validation = { lint = { enabled = false } },
