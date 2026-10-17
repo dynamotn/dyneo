@@ -466,6 +466,18 @@ function M.open(title, load)
   return bufnr
 end
 
+--- Whether `command` follows its log, printing until it is stopped
+---@param command string[]
+---@return boolean
+function M.follows(command)
+  for _, arg in ipairs(command) do
+    if arg == '-f' or arg == '--follow' or arg:find('^%-%-follow=') then
+      return arg ~= '--follow=false'
+    end
+  end
+  return false
+end
+
 --- A source that runs `command` and reads what it printed
 ---@param command string[]
 ---@return fun(on_lines: fun(lines: string[]?, err: string?, cut: boolean?))
@@ -493,6 +505,17 @@ local function from_command(command)
         local lines = vim.split(result.stdout or '', '\n', { trimempty = true })
         -- The last line of a cut read is half a record
         if result.cut then table.remove(lines) end
+        -- A followed source ends at the deadline by design; any other did
+        -- not finish, and what it printed so far is not the whole log
+        if result.timed_out and not result.cut and not M.follows(command) then
+          notify(
+            ('%s did not finish within %d s: showing what it printed'):format(
+              command[1],
+              M.TIMEOUT / 1000
+            ),
+            vim.log.levels.WARN
+          )
+        end
         on_lines(lines, nil, result.cut)
       end
     )

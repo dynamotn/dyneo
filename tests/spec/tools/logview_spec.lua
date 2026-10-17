@@ -274,6 +274,30 @@ describe('tools.logview', function()
       assert.is_true(vim.wait(10000, shown, 20))
       restore()
       vim.env.PATH = path
+      assert.same({}, notes)
+    end)
+
+    it('warns when a source did not finish in time', function()
+      vim.fn.mkdir(dir .. '/bin', 'p')
+      h.write(dir .. '/bin/journalctl', {
+        '#!/bin/sh',
+        [[echo '{"PRIORITY":"6","MESSAGE":"tick"}']],
+        'exec sleep 30',
+      })
+      vim.fn.setfperm(dir .. '/bin/journalctl', 'rwxr-xr-x')
+      local path = vim.env.PATH
+      vim.env.PATH = dir .. '/bin:' .. path
+      local restore = h.stub(logview, 'TIMEOUT', 2000)
+      logview.command({ fargs = { 'journal', '-u', 'nginx' } })
+      assert.is_true(vim.wait(10000, function() return #notes > 0 end, 20))
+      restore()
+      vim.env.PATH = path
+      assert.equals(
+        'journalctl did not finish within 2 s: showing what it printed',
+        notes[1]
+      )
+      assert.is_true(logview.follows({ 'kubectl', 'logs', 'p', '--follow' }))
+      assert.is_false(logview.follows({ 'kubectl', 'logs', 'p' }))
     end)
 
     it('stops a source that keeps printing, and says so', function()
