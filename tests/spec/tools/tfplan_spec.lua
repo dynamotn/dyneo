@@ -571,7 +571,7 @@ describe('tools.tfplan', function()
       h.write(bin .. '/infracost', {
         '#!/bin/sh',
         'echo "$@" > "' .. dir .. '/infracost.args"',
-        'stat -c %a "$3" > "' .. dir .. '/infracost.mode"',
+        'ls -l "$3" | cut -c1-10 > "' .. dir .. '/infracost.mode"',
         'test -s "$3" || exit 4',
         'echo \'{"currency":"USD","projects":[{"breakdown":{"resources":'
           .. '[{"name":"aws_instance.web[0]","monthlyCost":"7.25"}]}}]}\'',
@@ -622,7 +622,7 @@ describe('tools.tfplan', function()
       local args = table.concat(vim.fn.readfile(dir .. '/infracost.args'), ' ')
       local jsonfile = args:match('%-%-path (%S+)')
       assert.is_truthy(args:find('--format json', 1, true))
-      assert.same({ '600' }, vim.fn.readfile(dir .. '/infracost.mode'))
+      assert.same({ '-rw-------' }, vim.fn.readfile(dir .. '/infracost.mode'))
       assert.equals(0, vim.fn.filereadable(jsonfile))
 
       local cost_ns = vim.api.nvim_create_namespace('dy_tfplan_cost')
