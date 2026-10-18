@@ -42,4 +42,18 @@ describe('plugins.lang.json', function()
       { fileMatch = { 'package.json' }, url = 'store' },
     }, config.settings.json.schemas)
   end)
+
+  it('retries the schemas the server failed to fetch', function()
+    local client
+    table.insert(
+      restores,
+      h.stub(require('util.json_schema'), 'on_init', function(c) client = c end)
+    )
+    for _, spec in ipairs(dofile(h.root .. '/lua/plugins/lang/json.lua')) do
+      if spec[1] == 'neovim/nvim-lspconfig' then
+        spec.opts.servers.jsonls.on_init('jsonls client')
+      end
+    end
+    assert.are.equal('jsonls client', client)
+  end)
 end)

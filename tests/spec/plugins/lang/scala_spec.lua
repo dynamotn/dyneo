@@ -32,6 +32,33 @@ describe('plugins.lang.scala', function()
     assert.is_false(vim.list_contains(metals.ft, 'java'))
   end)
 
+  it('configures metals with the status bar off and DAP on attach', function()
+    local set_up = false
+    local module = require('metals')
+    module.bare_config = function() return { init_options = {} } end
+    module.setup_dap = function() set_up = true end
+    local config = metals.opts()
+    assert.are.equal('off', config.init_options.statusBarProvider)
+    assert.is_true(config.settings.verboseCompilation)
+    assert.are.equal('Test Explorer', config.settings.testUserInterface)
+    config.on_attach(nil, nil)
+    assert.is_true(set_up)
+  end)
+
+  it('debugs through metals rather than an adapter of its own', function()
+    local dap = { configurations = {} }
+    table.insert(restores, h.stub(package.loaded, 'dap', dap))
+    for _, spec in ipairs(dofile(h.root .. '/lua/plugins/lang/scala.lua')) do
+      if spec[1] == 'mfussenegger/nvim-dap' then spec.opts() end
+    end
+    assert.are.equal(2, #dap.configurations.scala)
+    assert.are.equal(
+      'runOrTestFile',
+      dap.configurations.scala[1].metals.runType
+    )
+    assert.are.equal('testTarget', dap.configurations.scala[2].metals.runType)
+  end)
+
   it('takes the Java sources of a Scala build once running', function()
     metals.config(metals, {})
     h.write(dir .. '/sbt/build.sbt')
