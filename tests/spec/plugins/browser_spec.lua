@@ -44,3 +44,85 @@ describe('plugins.integration.browser: open.nvim', function()
     end
   end)
 end)
+
+describe('plugins.integration.browser: firenvim', function()
+  local restores, specs
+
+  before_each(function()
+    h.globals()
+    DyNeo.firenvim_site_settings = {
+      ['https://example.org/.*'] = { takeover = 'never' },
+    }
+    restores = {}
+    specs = dofile(h.root .. '/lua/plugins/integration/browser.lua')
+  end)
+  after_each(function()
+    for i = #restores, 1, -1 do
+      restores[i]()
+    end
+    vim.g.firenvim_config = nil
+  end)
+
+  --- The spec of `name`
+  ---@param name string
+  ---@return table
+  local function spec_of(name)
+    for _, plugin in ipairs(specs) do
+      if plugin[1] == name then return plugin end
+    end
+    error('no spec for ' .. name)
+  end
+
+  it('keeps the default site next to the per-machine ones', function()
+    local sites = vim.g.firenvim_config.localSettings
+    assert.equals('always', sites['.*'].takeover)
+    assert.equals('never', sites['https://example.org/.*'].takeover)
+    assert.is_false(spec_of('glacambre/firenvim').enabled)
+  end)
+
+  it('installs through the loaded plugin, and hides the bars', function()
+    local loaded, installed
+    table.insert(
+      restores,
+      h.stub(package.loaded, 'lazy', {
+        load = function(opts) loaded = opts end,
+      })
+    )
+    table.insert(
+      restores,
+      h.stub(vim.fn, 'firenvim#install', function(force) installed = force end)
+    )
+    local firenvim = spec_of('glacambre/firenvim')
+    firenvim.build()
+    assert.same({ plugins = { 'firenvim' }, wait = true }, loaded)
+    assert.equals(0, installed)
+    local laststatus, showtabline = vim.o.laststatus, vim.o.showtabline
+    firenvim.config()
+    assert.equals(0, vim.o.laststatus)
+    assert.equals(0, vim.o.showtabline)
+    vim.o.laststatus, vim.o.showtabline = laststatus, showtabline
+  end)
+
+  it('registers the Jira opener with open.nvim, and opens the word', function()
+    local set_up, registered, opened = nil, {}, 0
+    table.insert(
+      restores,
+      h.stub(package.loaded, 'open', {
+        setup = function(opts) set_up = opts end,
+        register_opener = function(opener) table.insert(registered, opener) end,
+        open_cword = function() opened = opened + 1 end,
+      })
+    )
+    local open = spec_of('ofirgall/open.nvim')
+    local opts = {
+      self_defined_openers = { { name = 'jira', open_fn = function() end } },
+    }
+    open.config(nil, opts)
+    assert.equals(opts, set_up)
+    assert.same(opts.self_defined_openers, registered)
+    for _, key in ipairs(open.keys) do
+      if key[1] == 'gx' then key[2]() end
+    end
+    assert.equals(1, opened)
+  end)
+end)
