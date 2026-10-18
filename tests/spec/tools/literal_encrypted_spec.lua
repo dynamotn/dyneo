@@ -465,6 +465,112 @@ describe('tools.encrypted', function()
     assert.equals(0, vim.fn.filereadable(log))
   end)
 
+  describe('when a tool is gone or fails', function()
+    it('says why Ansible Vault did not write', function()
+      local vault = dir .. '/vault.yml'
+      h.write(vault, { '$ANSIBLE_VAULT;1.1;AES256', 'enc:secret' })
+      local bufnr = open(vault)
+      tool('ansible-vault', {
+        'case "$1" in',
+        '  decrypt) sed 1d "$4" | sed "s/^enc://";;',
+        '  encrypt) echo "no password" >&2; exit 1;;',
+        'esac',
+      })
+      assert.is_false(encrypted.write(bufnr))
+      assert.equals(
+        'Not written: no password'
+          .. '\nAnsible Vault cannot ask for a password here: set'
+          .. ' ANSIBLE_VAULT_PASSWORD_FILE, or vault_password_file in ansible.cfg',
+        notes[#notes]
+      )
+    end)
+
+    it('writes nothing once the tool is not installed', function()
+      local file = dir .. '/values.yaml'
+      h.write(file, { 'plain: a: 1', 'x: ENC[AES256_GCM,data:x]', 'sops:' })
+      local bufnr = open(file)
+      local restore = h.stub(vim.fn, 'executable', function() return 0 end)
+      local written = encrypted.write(bufnr)
+      restore()
+      assert.is_false(written)
+      assert.equals('sops is not installed: not written', notes[#notes])
+    end)
+
+    it('says when the encryption could not start', function()
+      local file = dir .. '/values.yaml'
+      h.write(file, { 'plain: a: 1', 'x: ENC[AES256_GCM,data:x]', 'sops:' })
+      local bufnr = open(file)
+      local restore = h.stub(
+        require('util.system'),
+        'sync',
+        function() error('spawn failed', 0) end
+      )
+      local written = encrypted.write(bufnr)
+      restore()
+      assert.is_false(written)
+      assert.equals('spawn failed', notes[#notes])
+    end)
+
+    it('leaves the ciphertext when the tool is not installed', function()
+      local file = dir .. '/values.yaml'
+      h.write(file, { 'plain: a: 1', 'x: ENC[AES256_GCM,data:x]', 'sops:' })
+      local restore = h.stub(vim.fn, 'executable', function() return 0 end)
+      local bufnr, decrypted = open(file)
+      restore()
+      assert.is_false(decrypted)
+      assert.equals('sops is not installed: left encrypted', notes[#notes])
+      assert.equals(
+        'plain: a: 1',
+        vim.api.nvim_buf_get_lines(bufnr, 0, 1, false)[1]
+      )
+      assert.is_true(require('util.sensitive').is_sensitive(bufnr))
+    end)
+
+    it('leaves a buffer too long to be a secret alone', function()
+      local lines = {}
+      for i = 1, 20001 do
+        lines[i] = 'x: ENC[AES256_GCM,data:x]'
+      end
+      local bufnr = h.buffer({ name = dir .. '/big.yaml', lines = lines })
+      assert.is_false(decrypt(bufnr))
+      assert.equals(0, vim.fn.filereadable(log))
+    end)
+
+    it('lists no recipients when the metadata names none', function()
+      local file = dir .. '/values.yaml'
+      h.write(file, { 'plain: a: 1', 'x: ENC[AES256_GCM,data:x]', 'sops:' })
+      open(file)
+      encrypted.keys()
+      assert.equals(
+        'No recipient found in the metadata of ' .. file,
+        notes[#notes]
+      )
+    end)
+
+    it('rotates nothing without sops, and says when sops failed', function()
+      local file = dir .. '/values.yaml'
+      h.write(file, { 'plain: a: 1', 'x: ENC[AES256_GCM,data:x]', 'sops:' })
+      open(file)
+      local restore = h.stub(vim.fn, 'confirm', function() return 1 end)
+      tool('sops', {
+        'case "$1" in',
+        '  decrypt) sed -n "s/^plain: //p" "$2";;',
+        '  updatekeys) echo "no key" >&2; exit 1;;',
+        'esac',
+      })
+      local before = #notes
+      encrypted.rotate()
+      assert.is_true(vim.wait(5000, function() return #notes > before end, 10))
+      assert.equals('sops failed: no key', notes[#notes])
+
+      local restore_exe = h.stub(vim.fn, 'executable', function() return 0 end)
+      encrypted.rotate()
+      restore_exe()
+      restore()
+      assert.equals('sops is not installed', notes[#notes])
+    end)
+  end)
+
   describe('keys', function()
     it('reads the recipients off the metadata only', function()
       local yaml = {
@@ -720,6 +826,27 @@ describe('tools.encrypted', function()
       )
     end)
 
+    it(
+      'takes the buffer out of diff mode once the old text is wiped',
+      function()
+        local bufnr = open(repo .. '/values.yaml')
+        encrypted.open_diff(bufnr, 'HEAD', 'sops', { 'password: old' })
+        local win = vim.fn.bufwinid(bufnr)
+        local scratch
+        for _, other in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+          if other ~= win then scratch = vim.api.nvim_win_get_buf(other) end
+        end
+        assert.are_not.equal(bufnr, scratch)
+        assert.is_true(vim.wo[win].diff)
+        vim.cmd('bwipeout! ' .. scratch)
+        -- The window of the buffer leaves diff mode on the next turn of the
+        -- loop, with the window still there
+        vim.wait(500)
+        assert.is_true(vim.api.nvim_win_is_valid(win))
+        assert.is_false(vim.wo[win].diff)
+      end
+    )
+
     it('says when the file is not in git at the revision', function()
       h.write(repo .. '/new.yaml', {
         'plain: a',
@@ -748,6 +875,36 @@ describe('tools.encrypted', function()
       restore()
       assert.is_nil(lines)
       assert.is_truthy(err:find('could not decrypt it', 1, true))
+    end)
+
+    it('fails on a ciphertext at the revision too large to read', function()
+      local bufnr = open(repo .. '/values.yaml')
+      local restore = h.stub(require('util.system'), 'MAX_BYTES', 10)
+      local lines, err
+      encrypted.clear_at(bufnr, 'HEAD', function(l, e)
+        lines, err = l, e or ''
+      end)
+      assert.is_true(vim.wait(5000, function() return err ~= nil end, 10))
+      restore()
+      assert.is_nil(lines)
+      assert.equals('values.yaml at HEAD is too large to read', err)
+    end)
+
+    it('fails when no private copy can be written', function()
+      local bufnr = open(repo .. '/values.yaml')
+      local fs_open = vim.uv.fs_open
+      local restore = h.stub(vim.uv, 'fs_open', function(path, ...)
+        if vim.fs.basename(path) == 'values.yaml' then return nil end
+        return fs_open(path, ...)
+      end)
+      local lines, err
+      encrypted.clear_at(bufnr, 'HEAD', function(l, e)
+        lines, err = l, e or ''
+      end)
+      assert.is_true(vim.wait(5000, function() return err ~= nil end, 10))
+      restore()
+      assert.is_nil(lines)
+      assert.equals('could not write a private copy', err)
     end)
 
     it('refuses a buffer that was not decrypted', function()
