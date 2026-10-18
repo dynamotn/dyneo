@@ -385,6 +385,52 @@ describe('config.keymaps', function()
     )
   end)
 
+  describe('lazygit', function()
+    local executable, opened
+    before_each(function()
+      executable, opened = vim.fn.executable, {}
+      rawset(
+        Snacks,
+        'lazygit',
+        function(opts) table.insert(opened, { opts = opts }) end
+      )
+    end)
+    after_each(function()
+      vim.fn.executable = executable
+      -- Gone already when the outer `after_each` ran first
+      if _G.Snacks then rawset(Snacks, 'lazygit', nil) end
+      pcall(vim.keymap.del, 'n', ' gg')
+      pcall(vim.keymap.del, 'n', ' gG')
+    end)
+
+    it('opens lazygit at the root, or where Neovim runs', function()
+      vim.fn.executable = function(name)
+        if name == 'lazygit' then return 1 end
+        return executable(name)
+      end
+      local restore_root = h.stub(
+        require('util.root'),
+        'git',
+        function() return '/repo' end
+      )
+      dofile(h.root .. '/lua/config/keymaps.lua')
+      map('n', ' gg').callback()
+      map('n', ' gG').callback()
+      restore_root()
+      assert.same({ { opts = { cwd = '/repo' } }, {} }, opened)
+    end)
+
+    it('maps nothing for it without the binary', function()
+      vim.fn.executable = function(name)
+        if name == 'lazygit' then return 0 end
+        return executable(name)
+      end
+      pcall(vim.keymap.del, 'n', ' gg')
+      dofile(h.root .. '/lua/config/keymaps.lua')
+      assert.same({}, map('n', ' gg'))
+    end)
+  end)
+
   it('leaves a key claimed by a plugin spec to it', function()
     for _, key in ipairs({ { 'n', '<C-c>' }, { 'x', '<C-r>' } }) do
       vim.keymap.del(key[1], key[2])
