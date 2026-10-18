@@ -273,6 +273,86 @@ describe('tools.breaking', function()
       assert.equals(1, vim.fn.getqflist()[1].lnum)
     end)
 
+    it('says what it needs before comparing', function()
+      vim.api.nvim_set_current_buf(h.buffer({ lines = { 'type A { x: ID }' } }))
+      breaking.diff(0, 'HEAD; rm -rf /')
+      breaking.diff(0)
+      h.write(dir .. '/notes.md', { '# notes' })
+      vim.cmd.edit(dir .. '/notes.md')
+      breaking.diff(0)
+      assert.same({
+        { 'Not a revision: HEAD; rm -rf /', vim.log.levels.ERROR },
+        { 'This buffer holds no file', vim.log.levels.WARN },
+        {
+          'Not a Protobuf or GraphQL file: `:DyOpenApiDiff` and `:DyAsyncApiDiff` compare the others',
+          vim.log.levels.WARN,
+        },
+      }, notes)
+    end)
+
+    it('says when graphql-inspector is not installed', function()
+      h.write(dir .. '/schema.graphql', { 'type User { id: ID }' })
+      vim.cmd.edit(dir .. '/schema.graphql')
+      vim.bo.filetype = 'graphql'
+      local restore_exe = h.stub(vim.fn, 'executable', function() return 0 end)
+      breaking.diff(0)
+      restore_exe()
+      assert.same({
+        'graphql-inspector is not installed: `:MasonInstall graphql-inspector`',
+        vim.log.levels.ERROR,
+      }, notes[1])
+    end)
+
+    it('says when git holds no schema beside the buffer', function()
+      h.write(dir .. '/schema.graphql', { 'type User { id: ID }' })
+      vim.cmd.edit(dir .. '/schema.graphql')
+      vim.bo.filetype = 'graphql'
+      fake('graphql-inspector', { 'exit 0' })
+      breaking.diff(0)
+      vim.wait(5000, function() return #notes > 0 end)
+      assert.same({
+        'No schema beside schema.graphql in git at HEAD',
+        vim.log.levels.WARN,
+      }, notes[1])
+    end)
+
+    it('says when graphql-inspector failed', function()
+      h.write(dir .. '/schema.graphql', { 'type User { id: ID }' })
+      vim.system({ 'git', 'add', '.' }, { cwd = dir }):wait()
+      vim
+        .system({
+          'git',
+          '-c',
+          'user.name=t',
+          '-c',
+          'user.email=t@t',
+          'commit',
+          '-qm',
+          'x',
+          '--no-verify',
+        }, { cwd = dir })
+        :wait()
+      vim.cmd.edit(dir .. '/schema.graphql')
+      vim.bo.filetype = 'graphql'
+      fake('graphql-inspector', { 'echo "cannot parse" >&2', 'exit 2' })
+      breaking.diff(0)
+      vim.wait(5000, function() return #notes > 0 end)
+      assert.same(
+        { 'graphql-inspector failed: cannot parse', vim.log.levels.ERROR },
+        notes[1]
+      )
+    end)
+
+    it('maps the diff on a contract', function()
+      local bufnr = h.buffer({ filetype = 'graphql' })
+      breaking.attach(bufnr)
+      local descs = vim.tbl_map(
+        function(map) return map.desc end,
+        vim.api.nvim_buf_get_keymap(bufnr, 'n')
+      )
+      assert.same({ 'Breaking Changes Since HEAD' }, descs)
+    end)
+
     it('compares a schema split over files as one', function()
       h.write(dir .. '/api/a.graphql', { 'type Query {', '  user: User', '}' })
       h.write(dir .. '/api/b.graphql', {
