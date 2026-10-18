@@ -62,6 +62,29 @@ describe('config.options', function()
     end
   end)
 
+  it('expands the abbreviations in a comment of code', function()
+    load()
+    local expand = vim.fn.maparg('gh', 'i', true, true).callback
+    local bufnr = h.buffer({ lines = { '-- gh', 'gh' } })
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.bo[bufnr].filetype = 'lua'
+    local captures = {}
+    table.insert(
+      restores,
+      h.stub(
+        vim.treesitter,
+        'get_captures_at_pos',
+        function() return captures end
+      )
+    )
+    vim.api.nvim_win_set_cursor(0, { 1, 5 })
+    assert.are.equal('gh', expand())
+    captures = { { capture = 'comment.line' } }
+    assert.are.equal('https://github.com/', expand())
+    captures = { { capture = 'string' } }
+    assert.are.equal('gh', expand())
+  end)
+
   it('expands the abbreviations in prose only', function()
     load()
     local expand = vim.fn.maparg('gh', 'i', true, true).callback
