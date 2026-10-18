@@ -376,6 +376,18 @@ describe('plugins.lsp.server', function()
       assert.is_nil(calls.config.stylua)
     end)
 
+    it('turns a server off with `false`', function()
+      local off = spec.opts(nil, { servers = { termuxls = false } })
+      local mason = configure(off)
+      assert.is_true(
+        vim.list_contains(mason.automatic_enable.exclude, 'termuxls')
+      )
+      assert.is_nil(calls.config.termuxls)
+      for _, call in ipairs(calls.enable) do
+        assert.are_not.equal('termuxls', call[1])
+      end
+    end)
+
     it('enables itself a server Mason has no package for', function()
       configure(opts)
       local enabled = vim.tbl_map(
