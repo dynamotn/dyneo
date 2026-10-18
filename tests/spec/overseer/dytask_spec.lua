@@ -333,5 +333,39 @@ describe('overseer.template.dytask', function()
       local task = require('overseer.template.dytask.ansible').builder()
       assert.are.equal(dir, task.cwd)
     end)
+
+    it('asks for no become password when the playbook needs none', function()
+      h.write(dir .. '/site.yml', { '- hosts: all', '  tasks: []' })
+      vim.cmd.edit(dir .. '/site.yml')
+      local task = require('overseer.template.dytask.ansible').builder()
+      assert.are.same({ 'ansible-playbook', dir .. '/site.yml' }, task.cmd)
+    end)
+
+    it('offers ansible only while the language is enabled', function()
+      local ansible = require('overseer.template.dytask.ansible')
+      assert.is_true(ansible.condition.callback())
+      restore[#restore + 1] = h.stub(DyNeo, 'enabled_languages', { 'go' })
+      assert.is_false(ansible.condition.callback())
+      restore[#restore + 1] = h.stub(DyNeo, 'enabled_languages', nil)
+      assert.is_false(ansible.condition.callback())
+    end)
+
+    it('generates the templates of the current file', function()
+      vim.cmd.edit(dir .. '/run.sh')
+      local found
+      for _, template in ipairs(lang.generator({ filetype = 'sh' })) do
+        if template.name == 'bash run' then found = template end
+      end
+      assert.is_not_nil(found)
+      -- The file is handed over as an absolute path
+      assert.are.same({ 'bash', dir .. '/run.sh' }, found.builder().cmd)
+    end)
+
+    it('generates nothing for a buffer without a file or a filetype', function()
+      vim.cmd.enew()
+      assert.are.same({}, lang.generator({ filetype = 'sh' }))
+      vim.cmd.edit(dir .. '/run.sh')
+      assert.are.same({}, lang.generator({}))
+    end)
   end)
 end)

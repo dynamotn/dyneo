@@ -496,6 +496,70 @@ describe('util.neogen', function()
     },
   })
 
+  vim.list_extend(cases, {
+    {
+      'sh',
+      'names the arguments dybatpho::expect_args declares',
+      lines = {
+        'foo() {',
+        '  dybatpho::expect_args name path -- "$@"',
+        '  echo "$1" "$3"',
+        '}',
+      },
+      cursor = { 3, 2 },
+      expect = {
+        '#######################################',
+        '# @description ',
+        '# @arg __SHDOC_ARG1@ string name',
+        '# @arg __SHDOC_ARG2@ string path',
+        '# @stdout ',
+        '# @exitcode 0 ',
+        '# @exitcode 1 ',
+        '#######################################',
+        'foo() {',
+        '  dybatpho::expect_args name path -- "$@"',
+        '  echo "$1" "$3"',
+        '}',
+      },
+    },
+    {
+      'sh',
+      'takes an empty expect_args at its word, not the $@ it passes',
+      lines = { 'foo() {', '  dybatpho::expect_args -- "$@"', '}' },
+      cursor = { 2, 2 },
+      expect = {
+        '#######################################',
+        '# @description ',
+        '# @noargs',
+        '# @stdout ',
+        '# @exitcode 0 ',
+        '# @exitcode 1 ',
+        '#######################################',
+        'foo() {',
+        '  dybatpho::expect_args -- "$@"',
+        '}',
+      },
+    },
+    {
+      'sh',
+      'documents a function reading no argument as taking none',
+      lines = { 'foo() {', '  echo hi', '}' },
+      cursor = { 2, 2 },
+      expect = {
+        '#######################################',
+        '# @description ',
+        '# @noargs',
+        '# @stdout ',
+        '# @exitcode 0 ',
+        '# @exitcode 1 ',
+        '#######################################',
+        'foo() {',
+        '  echo hi',
+        '}',
+      },
+    },
+  })
+
   for _, case in ipairs(cases) do
     local ft, name = case[1], case[2]
     it(ft .. ': ' .. name, function()
@@ -508,4 +572,365 @@ describe('util.neogen', function()
       assert.are.same(case.expect, generate(ft, case.lines, case.cursor))
     end)
   end
+
+  -- The extractors read a few methods of a node, so a tree shaped like the
+  -- grammar's stands in for a parser the machine may not have: what the
+  -- real parsers say is the language cases' business.
+  describe('on a tree of the grammar', function()
+    local restore
+
+    ---@class DyFakeNode
+    ---@field kind string
+    ---@field text string
+    ---@field fields table<string, DyFakeNode[]>
+    ---@field children DyFakeNode[]
+    ---@field prev? DyFakeNode
+    ---@field parent_node? DyFakeNode
+    ---@field row integer
+    ---@field col integer
+
+    --- A node of type `kind`, with the children, fields and text given
+    ---@param kind string
+    ---@param opts? { text?: string, fields?: table<string, DyFakeNode[]>, children?: DyFakeNode[], prev?: DyFakeNode, row?: integer, col?: integer }
+    ---@return DyFakeNode
+    local function node(kind, opts)
+      opts = opts or {}
+      local n = {
+        kind = kind,
+        text = opts.text or '',
+        fields = opts.fields or {},
+        children = opts.children or {},
+        prev = opts.prev,
+        row = opts.row or 0,
+        col = opts.col or 0,
+      }
+      function n:type() return self.kind end
+      function n:field(name) return self.fields[name] or {} end
+      function n:iter_children()
+        local i = 0
+        return function()
+          i = i + 1
+          return self.children[i]
+        end
+      end
+      function n:parent() return self.parent_node end
+      function n:prev_named_sibling() return self.prev end
+      function n:named_child(i) return self.children[i + 1] end
+      function n:range() return self.row, self.col end
+      for _, child in ipairs(n.children) do
+        child.parent_node = n
+      end
+      for _, list in pairs(n.fields) do
+        for _, child in ipairs(list) do
+          child.parent_node = child.parent_node or n
+        end
+      end
+      return n
+    end
+
+    --- Put `child` inside a node of `kind`
+    ---@param kind string
+    ---@param child DyFakeNode
+    ---@return DyFakeNode child
+    local function within(kind, child)
+      node(kind, { children = { child } })
+      return child
+    end
+
+    before_each(function()
+      restore = h.stub(
+        vim.treesitter,
+        'get_node_text',
+        function(n) return n.text end
+      )
+    end)
+    after_each(function() restore() end)
+
+    --- The parts of the configuration of `ft` the specs reach
+    ---@param ft string
+    ---@param kind string
+    ---@return fun(node: DyFakeNode): table extract
+    ---@return fun(node: DyFakeNode, types: string[]): DyFakeNode? locate
+    ---@return fun(node: DyFakeNode, kind: string): integer, integer position
+    local function parts(ft, kind)
+      local config = languages[ft]
+      local extract =
+        config.data[kind][table.concat(config.parent[kind], '|')]['0'].extract
+      local locate = function(n, types)
+        return config.locator({ current = n }, types or config.parent[kind])
+      end
+      return extract, locate, config.template.position
+    end
+
+    it('dart: documents a method from its body, above its metadata', function()
+      local extract, locate, position = parts('dart', 'func')
+      local annotation = node('annotation', { row = 1 })
+      local signature = node('function_signature', { row = 2 })
+      local method = node('method_signature', {
+        prev = annotation,
+        children = { signature },
+      })
+      local body = node('function_body', { prev = method })
+      node('class_body', { children = { method, body } })
+      assert.are.equal(method, locate(body))
+      -- From the name: the signature is wrapped, the method is documented
+      assert.are.equal(method, locate(signature))
+      -- A body with nothing before it is no method
+      assert.is_nil(locate(node('function_body')))
+      assert.are.same({ 1, 0 }, { position(method) })
+      assert.are.same({ 2, 0 }, { position(signature) })
+      assert.are.same({}, extract(method))
+    end)
+
+    it('elixir: tells a definition from any other call', function()
+      local extract, locate, position = parts('elixir', 'func')
+      local puts = node('call', {
+        fields = { target = { node('dot', { text = 'IO.puts' }) } },
+      })
+      local def = node('call', {
+        row = 3,
+        col = 2,
+        fields = { target = { node('identifier', { text = 'defp' }) } },
+        children = { node('do_block', { children = { puts } }) },
+      })
+      local module = node('call', {
+        row = 0,
+        fields = { target = { node('identifier', { text = 'defmodule' }) } },
+        children = { node('do_block', { children = { def } }) },
+      })
+      assert.are.equal(def, locate(puts))
+      assert.are.same({ private = { '' } }, extract(def))
+      assert.are.same({ module = { '' } }, extract(module))
+      assert.are.same({ 3, 2 }, { position(def) })
+      vim.bo.shiftwidth = 4
+      assert.are.same({ 1, 4 }, { position(module) })
+    end)
+
+    it('haskell: documents a declaration above its signature', function()
+      local _, locate, position = parts('haskell', 'func')
+      local other = node('function', {
+        row = 0,
+        fields = { name = { node('variable', { text = 'other' }) } },
+      })
+      local signature = node('signature', {
+        row = 1,
+        prev = other,
+        fields = { name = { node('variable', { text = 'fact' }) } },
+      })
+      local first = node('function', {
+        row = 2,
+        prev = signature,
+        fields = { name = { node('variable', { text = 'fact' }) } },
+      })
+      local last = node('function', {
+        row = 3,
+        prev = first,
+        fields = { name = { node('variable', { text = 'fact' }) } },
+      })
+      local declarations =
+        node('declarations', { children = { other, signature, first, last } })
+      assert.are.equal(last, locate(last))
+      assert.are.same({ 1, 0 }, { position(last) })
+      -- Without a signature, above the first equation of that name
+      local unsigned = node('function', {
+        row = 5,
+        prev = last,
+        fields = { name = { node('variable', { text = 'other' }) } },
+      })
+      within('declarations', unsigned)
+      assert.are.same({ 5, 0 }, { position(unsigned) })
+      -- A nameless binding stays where it is
+      local pattern = node('bind', { row = 6, prev = last })
+      assert.are.same({ 6, 0 }, { position(pattern) })
+      -- A binding of a `where` is local
+      local where = node('bind', {
+        fields = { name = { node('variable', { text = 'c' }) } },
+      })
+      node('where', { children = { where } })
+      assert.is_nil(locate(where))
+      assert.is_not_nil(declarations)
+    end)
+
+    it('scala: lists type parameters, parameters and the return', function()
+      local extract = parts('scala', 'func')
+      local method = node('function_definition', {
+        fields = { return_type = { node('type_identifier', { text = 'Int' }) } },
+        children = {
+          node('type_parameters', {
+            fields = { name = { node('identifier', { text = 'A' }) } },
+          }),
+          node('parameters', {
+            children = {
+              node('parameter', {
+                fields = { name = { node('identifier', { text = 'a' }) } },
+              }),
+              node(',', { text = ',' }),
+            },
+          }),
+        },
+      })
+      assert.are.same(
+        { tparams = { 'A' }, params = { 'a' }, ['return'] = { '' } },
+        extract(method)
+      )
+      local class = node('class_definition', {
+        children = {
+          node('class_parameters', {
+            children = {
+              node('class_parameter', {
+                fields = { name = { node('identifier', { text = 'x' }) } },
+              }),
+            },
+          }),
+        },
+      })
+      assert.are.same({ params = { 'x' } }, extract(class))
+      local unit = node('function_definition', {
+        fields = {
+          return_type = { node('type_identifier', { text = 'Unit' }) },
+        },
+      })
+      assert.are.same({}, extract(unit))
+    end)
+
+    it('swift: names parameters by their local name', function()
+      local extract = parts('swift', 'func')
+      local fn = node('function_declaration', {
+        children = {
+          node('parameter', {
+            fields = {
+              name = {
+                node('simple_identifier', { text = 'a' }),
+                node('user_type', { text = 'Int' }),
+              },
+            },
+          }),
+          node('throws', { text = 'throws' }),
+          node('->', { text = '->' }),
+        },
+      })
+      assert.are.same(
+        { params = { 'a' }, ['return'] = { '' }, throws = { '' } },
+        extract(fn)
+      )
+      local typed = node('function_declaration', {
+        children = { node('throws_clause', { text = 'throws(E)' }) },
+      })
+      assert.are.same({ throws = { '' } }, extract(typed))
+    end)
+
+    it('zig: documents only what a container declares', function()
+      local _, locate = parts('zig', 'func')
+      local fn = within('struct_declaration', node('function_declaration'))
+      assert.are.equal(fn, locate(fn))
+      local file = node('source_file')
+      assert.are.equal(file, locate(file, { 'source_file' }))
+      local nested = within('block', node('function_declaration'))
+      assert.is_nil(locate(nested))
+    end)
+
+    it('r: documents the assignment of a function', function()
+      local extract, locate = parts('r', 'func')
+      local params = node('parameters', {
+        children = {
+          node('parameter', {
+            fields = { name = { node('identifier', { text = 'a' }) } },
+          }),
+        },
+      })
+      local fn = node('function_definition', {
+        fields = { parameters = { params } },
+      })
+      local assignment = node('binary_operator', {
+        fields = {
+          operator = { node('<-', { text = '<-' }) },
+          rhs = { fn },
+        },
+      })
+      assert.are.equal(assignment, locate(fn))
+      assert.are.same(
+        { params = { 'a' }, ['return'] = { '' } },
+        extract(assignment)
+      )
+      -- A function with no parameter list
+      local bare = node('binary_operator', {
+        fields = {
+          operator = { node('=', { text = '=' }) },
+          rhs = { node('function_definition') },
+        },
+      })
+      assert.are.same({ ['return'] = { '' } }, extract(bare))
+      -- Neither a sum nor a function given a name
+      local sum = node('binary_operator', {
+        fields = {
+          operator = { node('+', { text = '+' }) },
+          rhs = { node('identifier', { text = 'b' }) },
+        },
+      })
+      assert.is_nil(locate(sum))
+      assert.is_nil(locate(node('function_definition')))
+    end)
+
+    it('ocaml: names the parameters of a top-level let', function()
+      local extract, locate = parts('ocaml', 'func')
+      local binding = node('let_binding', {
+        children = {
+          node('value_name', { text = 'add' }),
+          node('parameter', {
+            fields = { pattern = { node('value_pattern', { text = 'a' }) } },
+          }),
+          node('parameter', {
+            fields = { pattern = { node('unit', { text = '()' }) } },
+          }),
+        },
+      })
+      local definition = within(
+        'compilation_unit',
+        node('value_definition', { children = { binding } })
+      )
+      assert.are.equal(definition, locate(definition))
+      assert.are.same({ params = { 'a' } }, extract(definition))
+      -- A type carries no parameters
+      assert.are.same(
+        {},
+        extract(
+          node('type_definition', { children = { node('type_binding') } })
+        )
+      )
+      -- A `let ... in` is local
+      local inner = within('let_expression', node('value_definition'))
+      assert.is_nil(locate(inner))
+    end)
+
+    it('perl: heads the POD with the name, at the start of the line', function()
+      local extract, _, position = parts('perl', 'func')
+      local sub = node('subroutine_declaration_statement', {
+        row = 4,
+        col = 2,
+        fields = { name = { node('bareword', { text = 'add' }) } },
+      })
+      assert.are.same({ name = { 'add' } }, extract(sub))
+      assert.are.same(
+        { name = { '' } },
+        extract(node('subroutine_declaration_statement'))
+      )
+      assert.are.same({ 4, 0 }, { position(sub) })
+    end)
+
+    it('fish: names the arguments of --argument-names', function()
+      local extract = parts('fish', 'func')
+      local fn = node('function_definition', {
+        fields = {
+          option = {
+            node('word', { text = '-a' }),
+            node('word', { text = 'a' }),
+            node('word', { text = '--description' }),
+            node('word', { text = 'x' }),
+          },
+        },
+      })
+      assert.are.same({ args = { 'a' } }, extract(fn))
+      assert.are.same({}, extract(node('function_definition')))
+    end)
+  end)
 end)
