@@ -272,10 +272,18 @@ describe('plugins.executor.testing: neotest', function()
 end)
 
 describe('plugins.executor.testing: crazy-coverage', function()
-  local dir, cleanup, build
+  local dir, cleanup, build, tagged, restore_helptags
 
   before_each(function()
     dir, cleanup = h.tmpdir()
+    -- `:helptags` itself is Neovim's, whose nightly may break it: the spec
+    -- checks that the stub is written and handed over, not the tags file
+    tagged = {}
+    restore_helptags = h.stub(
+      vim.cmd,
+      'helptags',
+      function(path) table.insert(tagged, path) end
+    )
     for _, plugin in
       ipairs(dofile(h.root .. '/lua/plugins/executor/testing.lua'))
     do
@@ -285,20 +293,18 @@ describe('plugins.executor.testing: crazy-coverage', function()
     end
     vim.fn.mkdir(dir .. '/doc', 'p')
   end)
-  after_each(function() cleanup() end)
+  after_each(function()
+    restore_helptags()
+    cleanup()
+  end)
 
   it('lays down a vimdoc stub pointing at the Markdown', function()
     build({ dir = dir })
     local help = vim.fn.readfile(dir .. '/doc/crazy-coverage.txt')
     assert.is_true(vim.startswith(help[1], '*crazy-coverage.txt*'))
     assert.is_true(vim.list_contains(help, '\t' .. dir))
-    -- `helptags` ran on it
-    assert.is_true(
-      vim.list_contains(
-        vim.fn.readfile(dir .. '/doc/tags'),
-        'crazy-coverage\tcrazy-coverage.txt\t/*crazy-coverage*'
-      )
-    )
+    -- The directory is handed to `helptags`
+    assert.same({ dir .. '/doc' }, tagged)
   end)
 
   it('keeps a help file that is already there', function()
