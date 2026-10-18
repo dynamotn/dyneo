@@ -995,21 +995,9 @@ return {
     formatters = { 'tex-fmt' },
     autopairs = function(filetypes, rule, cond)
       return {
-        -- Add pair text after \begin
-        -- e.g., \begin{environment} ... \end{environment}
-        rule('\\begin{', '\\end{', filetypes)
-          :replace_endpair(function(opts)
-            local line = opts.line
-            local col = opts.col
-            local from = col - 8
-            local to = line:find('}', from)
-            if to then
-              local env_name = line:sub(from, to)
-              return '\\end{' .. env_name .. '}'
-            end
-            return '\\end{'
-          end)
-          :set_end_pair_length(5),
+        -- Add `\end{` after `\begin{`: the rule runs as `{` is typed, before
+        -- the environment has a name, and puts the pair right after it
+        rule('\\begin{', '\\end{', filetypes):set_end_pair_length(5),
 
         -- Add pair text after \left
         -- e.g., \left( ... \right)

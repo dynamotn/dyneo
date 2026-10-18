@@ -509,10 +509,11 @@ describe('config.languages callbacks', function()
 
     it('close LaTeX environments, fractions and ConTeXt starts', function()
       local rules = rules_of(languages.latex)
-      local begin = rules['\\begin{'].calls.replace_endpair[1][1]
-      assert.equals('\\end{', begin({ line = '\\begin{', col = 8 }))
-      local closed = begin({ line = '\\begin{itemize}', col = 8 })
-      assert.is_truthy(closed:match('^\\end{.*}$'))
+      -- Closed with `\end{` as `{` is typed, before the name is there
+      local begin = rules['\\begin{']
+      assert.equals('\\end{', begin.finish)
+      assert.is_nil(begin.calls.replace_endpair)
+      assert.same({ { 5 } }, begin.calls.set_end_pair_length)
       assert.is_true(rules['\\frac{'].calls.with_move[1][1]({ char = '}' }))
       assert.is_false(rules['\\frac{'].calls.with_move[1][1]({ char = 'x' }))
       local start = rules['\\start(%w*) $'].calls.replace_endpair[1][1]
