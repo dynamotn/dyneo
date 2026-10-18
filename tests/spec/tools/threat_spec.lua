@@ -98,6 +98,11 @@ describe('tools.threat', function()
     )
   end)
 
+  it('turns down a subcommand it does not know', function()
+    threat.command({ fargs = { 'nope' } })
+    assert.same({ 'Unknown subcommand: nope' }, notes)
+  end)
+
   it('says when there is no model yet', function()
     threat.command({ fargs = {} })
     assert.equals('No threat model yet: `:DyThreat new` writes one', notes[1])

@@ -174,6 +174,35 @@ describe('tools.nfr', function()
     end
   end)
 
+  it('refuses a negative rate', function()
+    local spec, err = nfr.parse({ '99.9', 'rps=-5' })
+    assert.is_nil(spec)
+    assert.equals('Not a rate: rps=-5', err)
+  end)
+
+  it('asks for the terms when none are given', function()
+    local notes = {}
+    local restore = h.stub(
+      vim,
+      'notify',
+      function(msg, level) table.insert(notes, { msg, level }) end
+    )
+    local answer = ' 99.9  rps=10 '
+    local restore_input = h.stub(vim.ui, 'input', function(opts, on_confirm)
+      assert.is_truthy(opts.prompt:find('Terms', 1, true))
+      on_confirm(answer)
+    end)
+    nfr.command({ fargs = {} })
+    answer = '   '
+    nfr.command({ fargs = {} })
+    answer = nil
+    nfr.command({ fargs = {} })
+    restore_input()
+    restore()
+    assert.equals(1, #notes)
+    assert.is_truthy(notes[1][1]:find('Availability 99.9%', 1, true))
+  end)
+
   it('notifies the report, or why there is none', function()
     local notes = {}
     local restore = h.stub(

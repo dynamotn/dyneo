@@ -146,6 +146,34 @@ describe('tools.query', function()
     assert.is_false(pcall(vim.api.nvim_get_autocmds, { group = group }))
   end)
 
+  it('says when a run was cut', function()
+    query.MAX_OUTPUT = 4
+    json_buffer({ '{"a": 1}' })
+    local q = assert(query.open('.a'))
+    assert.same({ 'args' }, result_of(q, 'args'))
+    local win = vim.fn.win_findbuf(q.result)[1]
+    assert.equals(' jq: 1 lines, cut at 0 KiB', vim.wo[win].winbar)
+  end)
+
+  it('says when the tool is not installed', function()
+    vim.fn.delete(dir .. '/bin/jq')
+    vim.env.PATH = dir .. '/bin'
+    json_buffer({ '{}' })
+    assert.is_nil(query.open('.'))
+    assert.same({ 'jq is not installed' }, notes)
+  end)
+
+  it('closes the playground when one of its buffers is wiped', function()
+    json_buffer({ '{}' })
+    local q = assert(query.open('.'))
+    result_of(q, 'args')
+    vim.api.nvim_buf_delete(q.result, { force = true })
+    assert.is_true(
+      vim.wait(2000, function() return next(query.open_queries) == nil end, 20)
+    )
+    assert.is_false(vim.api.nvim_buf_is_valid(q.expr))
+  end)
+
   it('turns down a buffer that is neither JSON nor YAML', function()
     vim.api.nvim_set_current_buf(h.buffer({ lines = { 'x' } }))
     assert.is_nil(query.open())

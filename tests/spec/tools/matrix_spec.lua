@@ -129,6 +129,16 @@ describe('tools.matrix', function()
     }, notes)
   end)
 
+  it('puts a new table after the cursor outside a decision record', function()
+    local at, block = matrix.placement({ '# Notes', '', 'text' }, 3)
+    assert.equals(3, at)
+    assert.same(matrix.TEMPLATE, block)
+    -- A record with no Decision section is no different
+    at, block = matrix.placement({ '# 1. Pick', '', '## Context' }, 1)
+    assert.equals(1, at)
+    assert.same(matrix.TEMPLATE, block)
+  end)
+
   it('writes a new one as the options of a decision record', function()
     vim.api.nvim_set_current_buf(h.buffer({
       lines = {

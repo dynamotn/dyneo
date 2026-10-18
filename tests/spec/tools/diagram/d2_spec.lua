@@ -180,6 +180,38 @@ describe('tools.diagram.d2.snacks', function()
     assert.are.same({ '-c', '2048', '4096' }, vim.list_slice(sips, 5, 7))
   end)
 
+  it('drops the thumbnail and reports when the crop fails', function()
+    executables['rsvg-convert'] = nil
+    executables.qlmanage = 1
+    executables.sips = 1
+    local thumbnail
+    stub(
+      vim,
+      'system',
+      h.system_double(function(cmd)
+        table.insert(commands, cmd)
+        if cmd[1] == 'd2' then
+          h.write(cmd[3], { '<svg viewBox="0 0 200 100">', '</svg>' })
+        elseif cmd[1] == 'qlmanage' then
+          -- The thumbnail Quick Look would have written
+          thumbnail = cmd[6]
+            .. '/'
+            .. vim.fn.fnamemodify(cmd[7], ':t')
+            .. '.png'
+          h.write(thumbnail, { 'png' })
+        elseif cmd[1] == 'sips' then
+          return { code = 1, stderr = 'sips: no such file' }
+        end
+        return { code = 0, stderr = '' }
+      end)
+    )
+    preview({ 'a -> b' })
+    assert.is_not_nil(command_of('sips'))
+    assert.is_nil(vim.uv.fs_stat(thumbnail))
+    assert.is_truthy(notified[#notified].msg:find('sips', 1, true))
+    assert.are.equal(vim.log.levels.ERROR, notified[#notified].level)
+  end)
+
   it('reports when no converter is installed', function()
     executables['rsvg-convert'] = nil
     preview({ 'a -> b' })
@@ -276,5 +308,21 @@ describe('tools.diagram.d2.snacks', function()
       { 'kitten', '@', '--to', 'unix:/tmp/kitty', 'launch', '--type=overlay' },
       vim.list_slice(kitten, 1, 6)
     )
+  end)
+
+  it('opens the picture externally when the kitty overlay fails', function()
+    vim.env.ZELLIJ = '0'
+    stub(vim.env, 'KITTY_LISTEN_ON', 'unix:/tmp/kitty')
+    executables.kitten = 1
+    results.kitten = { code = 1, stderr = 'kitten: connection refused' }
+    local opened
+    stub(vim.ui, 'open', function(path) opened = path end)
+    preview({ 'a -> b' })
+    vim.wait(1000, function() return opened ~= nil end)
+    assert.is_truthy(opened:match('%.png$'))
+    local last = notified[#notified]
+    assert.are.equal(vim.log.levels.WARN, last.level)
+    assert.is_truthy(last.msg:find('kitty overlay failed', 1, true))
+    assert.is_truthy(last.msg:find('connection refused', 1, true))
   end)
 end)

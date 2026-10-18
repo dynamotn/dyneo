@@ -334,6 +334,57 @@ describe('tools.inspect', function()
     assert.equals('subject= /CN=libressl.test', lines[3])
   end)
 
+  it('says what it cannot read, and what openssl refused', function()
+    local lines, err
+    inspect.pem({ label = 'THING', text = 'x' }, function(l, e)
+      lines, err = l, e
+    end)
+    assert.is_nil(lines)
+    assert.equals('No reader for a THING block', err)
+
+    vim.fn.mkdir(dir .. '/bin', 'p')
+    h.write(dir .. '/bin/openssl', {
+      '#!/bin/sh',
+      'cat > /dev/null',
+      'echo "unable to load certificate" >&2',
+      'exit 1',
+    })
+    vim.fn.setfperm(dir .. '/bin/openssl', 'rwxr-xr-x')
+    local path = vim.env.PATH
+    vim.env.PATH = dir .. '/bin:' .. path
+    err = nil
+    inspect.pem({ label = 'CERTIFICATE', text = 'x' }, function(l, e)
+      lines, err = l, e
+    end)
+    vim.wait(5000, function() return lines ~= nil or err ~= nil end, 10)
+    vim.env.PATH = path
+    assert.is_nil(lines)
+    assert.equals('openssl could not read it: unable to load certificate', err)
+  end)
+
+  it('checks nothing without openssl', function()
+    vim.api.nvim_set_current_buf(h.buffer({
+      lines = {
+        '-----BEGIN CERTIFICATE-----',
+        'x',
+        '-----END CERTIFICATE-----',
+      },
+    }))
+    local notes = {}
+    local restore = h.stub(
+      vim,
+      'notify',
+      function(msg, level) table.insert(notes, { msg, level }) end
+    )
+    local path = vim.env.PATH
+    vim.env.PATH = dir .. '/none'
+    inspect.check_expiry()
+    vim.env.PATH = path
+    restore()
+    assert.same({ { 'openssl is not installed', vim.log.levels.ERROR } }, notes)
+    assert.same({}, vim.diagnostic.get(0))
+  end)
+
   it('says when nothing is under the cursor', function()
     vim.api.nvim_set_current_buf(h.buffer({ lines = { 'nothing' } }))
     local notes = {}

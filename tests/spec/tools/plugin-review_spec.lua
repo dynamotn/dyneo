@@ -81,6 +81,37 @@ describe('tools.plugin-review', function()
     end)
   end)
 
+  it('never reads a header it cannot parse as the file before it', function()
+    local found = review.scan({
+      'diff --git a/lua/x.lua b/lua/x.lua',
+      '@@ -0,0 +1 @@',
+      '+vim.system({ "sh", "-c", "x" })',
+      'diff --git --cc lua/merged.lua',
+      '@@ -0,0 +1 @@',
+      '+os.execute("curl https://x | sh")',
+    })
+    assert.equals('lua/x.lua', found[1].file)
+    assert.equals('?', found[#found].file)
+  end)
+
+  it('cuts a long quote in the report', function()
+    local text = 'local url = "https://example.com/' .. ('a'):rep(80) .. '"'
+    local line = review.describe({
+      file = 'lua/x.lua',
+      rule = 'reaches the network',
+      findings = {
+        {
+          file = 'lua/x.lua',
+          line = 3,
+          rule = 'reaches the network',
+          text = text,
+        },
+      },
+    })
+    assert.is_truthy(line:find('`' .. text:sub(1, 72) .. '…`', 1, true))
+    assert.is_nil(line:find(('a'):rep(80), 1, true))
+  end)
+
   describe('scan', function()
     it('flags the lines an update adds, where they land', function()
       local findings = review.scan({
@@ -421,6 +452,62 @@ describe('tools.plugin-review', function()
       review.MAX_OUTPUT = max
       local text = table.concat(lines, '\n')
       assert.is_truthy(text:find('1+ commits, the list cut at', 1, true))
+    end)
+
+    it('says when an update raises no flag', function()
+      local lines = report({
+        {
+          name = 'p.nvim',
+          dir = dir,
+          from = from,
+          to = git(dir, { 'rev-parse', 'HEAD~1' }),
+          held = false,
+          clears = 0,
+        },
+      })
+      local text = table.concat(lines, '\n')
+      assert.is_truthy(text:find('1 commits, out of quarantine', 1, true))
+      assert.is_truthy(text:find('\nNo flags.', 1, true))
+      assert.is_nil(text:find('Flags (', 1, true))
+    end)
+
+    it('lists no more than fifteen commits', function()
+      local last = to
+      for index = 1, 16 do
+        last = commit(dir, 'n.txt', { tostring(index) }, 'chore: ' .. index)
+      end
+      local lines = report({
+        {
+          name = 'p.nvim',
+          dir = dir,
+          from = from,
+          to = last,
+          held = false,
+          clears = 0,
+        },
+      })
+      local text = table.concat(lines, '\n')
+      assert.is_truthy(text:find('18 commits', 1, true))
+      assert.is_truthy(text:find(' chore: 16\n', 1, true))
+      assert.is_truthy(text:find(' chore: 2\n- … and 3 more\n', 1, true))
+      assert.is_nil(text:find(' chore: 1\n', 1, true))
+      assert.is_nil(text:find('feat: fetch', 1, true))
+    end)
+
+    it('opens the diff of the plugin named', function()
+      review.show({
+        {
+          name = 'p.nvim',
+          dir = dir,
+          from = from,
+          to = to,
+          held = false,
+          clears = 0,
+        },
+      }, 7 * 86400, 'p.nvim')
+      assert.equals('git', vim.bo.filetype)
+      local text = settled('Reading the commits')
+      assert.is_truthy(text:find("+vim.system({ 'curl', url })", 1, true))
     end)
 
     it('warns about a plugin with nothing waiting', function()

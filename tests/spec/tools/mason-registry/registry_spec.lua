@@ -36,6 +36,27 @@ describe('tools.mason-registry', function()
     assert.is_nil(index.init)
   end)
 
+  it('registers dytoy and normalizes every package under mason', function()
+    local registered, normalized = 0, {}
+    local restores = {
+      h.stub(package.loaded, 'mason-core.installer.compiler', {}),
+      h.stub(package.loaded, 'tools.mason-dytoy', {
+        register = function() registered = registered + 1 end,
+        normalize = function(spec) table.insert(normalized, spec.name) end,
+      }),
+    }
+    h.unload('tools.mason-registry')
+    local ok, err = pcall(require, 'tools.mason-registry')
+    for i = #restores, 1, -1 do
+      restores[i]()
+    end
+    h.unload('tools.mason-registry')
+    assert.is_true(ok, err)
+    assert.equals(1, registered)
+    table.sort(normalized)
+    assert.are.same(package_names(), normalized)
+  end)
+
   it('finds some packages', function() assert.is_true(#package_names() > 0) end)
 
   local categories = {

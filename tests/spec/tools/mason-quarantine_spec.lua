@@ -176,6 +176,55 @@ describe('tools.mason-quarantine', function()
       assert.same({}, calls)
     end)
 
+    it('reads pages until one holds an aged release', function()
+      local pages = {}
+      package.loaded['mason-core.spawn'] = {
+        gh = function(args)
+          local page = tonumber(args[2]:match('page=(%d+)$'))
+          table.insert(calls, { 'gh', args[2] })
+          local batch = pages[page]
+          if not batch then return Result.failure('gh: no such page') end
+          return Result.success({ stdout = vim.json.encode(batch) })
+        end,
+      }
+      -- A full first page of fresh releases, the aged one on the second
+      pages[1] = {}
+      for index = 1, 100 do
+        pages[1][index] = release('fresh' .. index, DAY)
+      end
+      pages[2] = {
+        release('rc', 30 * DAY, { prerelease = true }),
+        release('old', 30 * DAY),
+      }
+      assert.same(
+        { 'old' },
+        quarantine.github.get_all_release_versions('o/r'):get_or_nil()
+      )
+      assert.equals(2, #calls)
+      assert.equals(
+        'old',
+        quarantine.github.get_latest_release('o/r'):get_or_nil().tag_name
+      )
+
+      -- Nothing old enough on a short page: a failure, never the newest
+      pages = { { release('fresh', DAY) } }
+      local result = quarantine.github.get_latest_release('o/r')
+      assert.is_true(result:is_failure())
+      assert.equals(
+        'No release of o/r is older than the 7 day quarantine.',
+        result:err_or_nil()
+      )
+
+      -- A later page that cannot be read ends the search with what was read
+      pages = { pages[1] }
+      for index = 2, 100 do
+        pages[1][index] = release('fresh' .. index, DAY)
+      end
+      result = quarantine.github.get_all_release_versions('o/r')
+      assert.is_true(result:is_failure())
+      assert.matches('No release of o/r', result:err_or_nil())
+    end)
+
     it('hands git tags to the first upstream that answers', function()
       local result = quarantine.github.get_latest_tag('o/r')
       assert.same({ tag = 'v1' }, result:get_or_nil())

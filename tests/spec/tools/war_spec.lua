@@ -108,6 +108,11 @@ describe('tools.war', function()
     }, notes)
   end)
 
+  it('turns down a subcommand it does not know', function()
+    war.command({ fargs = { 'nope' } })
+    assert.same({ 'Unknown subcommand: nope' }, notes)
+  end)
+
   it('says when there is no review yet', function()
     war.check()
     assert.equals('No review yet: `:DyWar new` writes one', notes[1])

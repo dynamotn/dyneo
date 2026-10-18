@@ -154,6 +154,26 @@ describe('tools.actions', function()
     )
   end)
 
+  it('pins nothing without gh, from the mapping of a workflow', function()
+    vim.env.PATH = dir .. '/bin'
+    local bufnr = h.buffer({ lines = { '      - uses: actions/checkout@v4' } })
+    vim.api.nvim_set_current_buf(bufnr)
+    actions.pin()
+    assert.same({ 'gh is not installed' }, notes)
+
+    actions.attach(bufnr)
+    local pin
+    for _, map in ipairs(vim.api.nvim_buf_get_keymap(bufnr, 'n')) do
+      if map.desc == 'Pin Actions To Commits (CI)' then pin = map.callback end
+    end
+    pin()
+    assert.same({ 'gh is not installed', 'gh is not installed' }, notes)
+    assert.equals(
+      '      - uses: actions/checkout@v4',
+      vim.api.nvim_buf_get_lines(bufnr, 0, 1, false)[1]
+    )
+  end)
+
   it('says when there is nothing to pin', function()
     actions.pin(h.buffer({ lines = { 'jobs: {}' } }))
     assert.same({ 'Every action is pinned already' }, notes)
