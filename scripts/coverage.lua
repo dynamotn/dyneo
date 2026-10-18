@@ -55,19 +55,70 @@ stats.save(coverage.luacov.statsfile, data)
 
 require('luacov.reporter.lcov').report()
 
-local report = coverage.luacov.reportfile
-local lines = vim.fn.readfile(report)
-local hit, found = 0, 0
-for i, line in ipairs(lines) do
-  if vim.startswith(line, 'SF:' .. root .. '/') then
-    lines[i] = 'SF:' .. line:sub(#root + 5)
-  elseif vim.startswith(line, 'LH:') then
-    hit = hit + tonumber(line:sub(4))
-  elseif vim.startswith(line, 'LF:') then
-    found = found + tonumber(line:sub(4))
+-- luacov reads the source to decide which lines count, and takes a line
+-- that only continues a call -- a table of options as an argument -- for
+-- one that runs; LuaJIT gives such a line no bytecode of its own, so the
+-- hook never reports it and it reads as missed however often the call ran.
+-- The lines that can be reported are those with bytecode, read off the
+-- compiled file and its nested functions, as cluacov does in C.
+local jit_util = require('jit.util')
+---@param fn function|userdata A function or a prototype of one
+---@param lines table<integer, true>
+local function bytecode_lines(fn, lines)
+  for pc = 1, jit_util.funcinfo(fn).bytecodes do
+    local line = jit_util.funcinfo(fn, pc).currentline
+    if line then lines[line] = true end
+  end
+  -- The nested functions are among the constants, from the end
+  local i = 1
+  while true do
+    local constant = jit_util.funck(fn, -i)
+    if constant == nil then break end
+    if type(constant) == 'proto' then bytecode_lines(constant, lines) end
+    i = i + 1
   end
 end
-vim.fn.writefile(lines, report)
+---@param file string
+---@return table<integer, true>
+local function reportable(file)
+  local lines = {}
+  local chunk = loadfile(file)
+  if chunk then bytecode_lines(chunk, lines) end
+  return lines
+end
+
+local report = coverage.luacov.reportfile
+local lines = vim.fn.readfile(report)
+local kept = {}
+local hit, found = 0, 0
+local file_hit, file_found, active = 0, 0, {}
+for _, line in ipairs(lines) do
+  if vim.startswith(line, 'SF:') then
+    active = reportable(line:sub(4))
+    file_hit, file_found = 0, 0
+    if vim.startswith(line, 'SF:' .. root .. '/') then
+      line = 'SF:' .. line:sub(#root + 5)
+    end
+    table.insert(kept, line)
+  elseif vim.startswith(line, 'DA:') then
+    local number, hits = line:match('^DA:(%d+),(%d+)')
+    hits = tonumber(hits)
+    if hits > 0 or active[tonumber(number)] then
+      file_found = file_found + 1
+      if hits > 0 then file_hit = file_hit + 1 end
+      table.insert(kept, line)
+    end
+  elseif vim.startswith(line, 'LH:') then
+    hit = hit + file_hit
+    table.insert(kept, 'LH:' .. file_hit)
+  elseif vim.startswith(line, 'LF:') then
+    found = found + file_found
+    table.insert(kept, 'LF:' .. file_found)
+  else
+    table.insert(kept, line)
+  end
+end
+vim.fn.writefile(kept, report)
 print(
   ('coverage: %.1f%% of %d lines, report in %s'):format(
     found == 0 and 0 or hit * 100 / found,

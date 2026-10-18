@@ -1949,8 +1949,10 @@ into `.tests/` when the configuration has never been started.
 `scripts/coverage.sh` runs the same specs under luacov, cloned into `.tests/`
 at a pinned commit, and writes an lcov report to `.tests/coverage/lcov.info`
 with the totals on its last line of output.  A file no spec loaded is in the
-report with every line missed.  CI runs it on the `latest` job and uploads
-the report to Coveralls, which the badge in `README.md` reads.
+report with every line missed, and a line LuaJIT gives no bytecode of its own
+-- a table of options continuing a call -- is left out, as the hook can never
+report it.  CI runs it on the `latest` job and uploads the report to
+Coveralls, which the badge in `README.md` reads.
 
 A case that needs a tree-sitter parser this machine lacks is skipped, except
 on CI (`$CI` set), where it fails: CI builds the parsers first with >sh
