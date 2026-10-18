@@ -129,17 +129,26 @@ end
 
 --- Queue every `vim.notify` until something replaces it (noice), or for
 --- 500 ms, then replay the queue through it
+---
+--- What replaces it may wrap the queue rather than drop it -- a watcher that
+--- delegates to whatever `vim.notify` was -- and the replay then comes back
+--- through the queue: from the replay on it passes everything straight to
+--- the notifier it started with.
 function M.lazy_notify()
-  local notifs = {}
-  local function temp(...) table.insert(notifs, vim.F.pack_len(...)) end
-
+  local notifs, replayed = {}, false
   local orig = vim.notify
+  local function temp(...)
+    if replayed then return orig(...) end
+    table.insert(notifs, vim.F.pack_len(...))
+  end
   vim.notify = temp
 
   local timer = assert(vim.uv.new_timer())
   local check = assert(vim.uv.new_check())
 
   local replay = function()
+    if replayed then return end
+    replayed = true
     timer:stop()
     check:stop()
     if vim.notify == temp then vim.notify = orig end
@@ -147,6 +156,7 @@ function M.lazy_notify()
       for _, notif in ipairs(notifs) do
         vim.notify(vim.F.unpack_len(notif))
       end
+      notifs = {}
     end)
   end
 
