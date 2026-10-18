@@ -251,6 +251,13 @@ function M.skip_installs()
       end
     end
   end)
+  -- Its `build` installs the `mcp-hub` server with npm; without it, the
+  -- release's `setup` reports an error rather than wait for the install.
+  M.before_config('mcphub.nvim', function()
+    if vim.fn.executable('mcp-hub') == 1 then return end
+    table.insert(installs.download, 'mcp-hub')
+    require('mcphub').setup = function() end
+  end)
   return installs
 end
 
