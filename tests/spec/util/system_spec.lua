@@ -83,6 +83,18 @@ describe('util.system', function()
     assert.are.equal(1000, #result.stdout + #result.stderr)
   end)
 
+  it('answers once cut while a child still holds the output', function()
+    local began = vim.uv.now()
+    local result = system.sync(
+      { 'sh', '-c', 'sleep 10 & head -c 2000 /dev/zero; wait' },
+      { max_bytes = 1000, timeout = 4000 }
+    )
+    assert.is_true(result.cut)
+    assert.is_false(result.timed_out)
+    assert.are.equal(1000, #result.stdout)
+    assert.is_true(vim.uv.now() - began < 3000)
+  end)
+
   it('keeps a stream the caller turned off out of the result', function()
     local result = system.sync({ 'sh', '-c', 'echo out' }, { stdout = false })
     assert.is_nil(result.stdout)
@@ -128,6 +140,16 @@ describe('util.system', function()
       local result = run({ 'sh', '-c', 'yes' }, { max_bytes = 1000 })
       assert.is_true(result.cut)
       assert.are.equal(1000, #result.stdout + #result.stderr)
+    end)
+
+    it('answers once cut while a child still holds the output', function()
+      local result = run(
+        { 'sh', '-c', 'sleep 10 & head -c 2000 /dev/zero; wait' },
+        { max_bytes = 1000 }
+      )
+      assert.is_true(result.cut)
+      assert.is_false(result.timed_out)
+      assert.are.equal(1000, #result.stdout)
     end)
 
     it('stops a command at the deadline and says so', function()
