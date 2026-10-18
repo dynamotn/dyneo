@@ -207,6 +207,20 @@ describe('tools.workspace_diagnostics', function()
     assert.are.equal(vim.log.levels.WARN, notified[1].level)
   end)
 
+  it('honours a cap lowered while files are being read', function()
+    files({ ['a.lua'] = { 'x' }, ['b.lua'] = { 'y' } })
+    local c = client()
+    wd.populate(c)
+    -- Both reads are under way; only one may be sent now
+    wd.config.max_files = 1
+    vim.wait(2000, function() return #notified > 0 end)
+    assert.are.equal(1, #sent_paths(c, 'textDocument/didOpen'))
+    assert.are.equal(
+      'fake: 1 files sent, stopped at `max_files`',
+      notified[1].msg
+    )
+  end)
+
   it('reports when the files cannot be listed', function()
     listing = nil
     local c = client()
@@ -253,6 +267,59 @@ describe('tools.workspace_diagnostics', function()
     c.sent, notified = {}, {}
     populate(c)
     assert.are.same({ 'a.lua' }, sent_paths(c, 'textDocument/didOpen'))
+  end)
+
+  it('serves a new client once another has gone away', function()
+    files({ ['a.lua'] = { 'x' } })
+    local first = client()
+    populate(first)
+    -- The first has stopped and is no longer looked up: its documents are
+    -- forgotten as the next client's state is made
+    local second = client()
+    second.id = first.id + 1
+    notified = {}
+    populate(second)
+    assert.are.same({ 'a.lua' }, sent_paths(second, 'textDocument/didOpen'))
+    assert.are.equal('fake: 1 files sent', notified[1].msg)
+  end)
+
+  it('takes the root from the workspace folder, else the directory', function()
+    files({ ['a.lua'] = { 'x' } })
+    local c = client()
+    c.root_dir = nil
+    c.workspace_folders = { { uri = vim.uri_from_fname(dir) } }
+    populate(c)
+    assert.are.same({ 'a.lua' }, sent_paths(c, 'textDocument/didOpen'))
+
+    c.workspace_folders = nil
+    local cwd = vim.fn.getcwd()
+    vim.cmd.cd(dir)
+    c.sent, notified = {}, {}
+    populate(c)
+    vim.cmd.cd(cwd)
+    assert.are.equal('fake: 1 files sent', notified[1].msg)
+    assert.are.same({ 'a.lua' }, sent_paths(c, 'textDocument/didOpen'))
+  end)
+
+  it('leaves out a file whose contents say another language', function()
+    files({
+      ['run'] = { '#!/bin/sh', 'echo' },
+      ['notes'] = { 'plain words' },
+      ['a.lua'] = { 'x' },
+    })
+    local c = client()
+    populate(c)
+    assert.are.same({ 'a.lua' }, sent_paths(c, 'textDocument/didOpen'))
+    assert.are.equal('fake: 1 files sent', notified[1].msg)
+  end)
+
+  it('goes on with the next batch when none of a batch is read', function()
+    files({ ['a.txt'] = { 'x' }, ['b.txt'] = { 'y' }, ['c.lua'] = { 'z' } })
+    wd.config.batch = 1
+    local c = client()
+    populate(c)
+    assert.are.same({ 'c.lua' }, sent_paths(c, 'textDocument/didOpen'))
+    assert.are.equal('fake: 1 files sent', notified[1].msg)
   end)
 
   it('abandons a run overtaken by a stopped client', function()

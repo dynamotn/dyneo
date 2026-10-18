@@ -162,6 +162,46 @@ describe('tools.adr', function()
       assert.equals('Unknown status: bogus', notes[#notes])
     end)
 
+    it('asks for the status when it is not given', function()
+      adr.new('A')
+      local choice = 'Deprecated'
+      local restore_select = h.stub(
+        vim.ui,
+        'select',
+        function(items, opts, on_choice)
+          assert.same(adr.STATUSES, items)
+          assert.equals('Status', opts.prompt)
+          on_choice(choice)
+        end
+      )
+      adr.command({ fargs = { 'status' } })
+      local function status()
+        return adr.parse(
+          vim.api.nvim_buf_get_lines(0, 0, -1, false),
+          vim.api.nvim_buf_get_name(0)
+        ).status
+      end
+      assert.equals('Deprecated', status())
+      choice = nil
+      adr.command({ fargs = { 'status' } })
+      restore_select()
+      assert.equals('Deprecated', status())
+    end)
+
+    it(
+      'supersedes through the command, and turns down what it does not know',
+      function()
+        adr.new('Use MySQL')
+        adr.command({ fargs = { 'supersede', 'Use', 'Postgres' } })
+        assert.equals(
+          dir .. '/docs/adr/0002-use-postgres.md',
+          vim.api.nvim_buf_get_name(0)
+        )
+        adr.command({ fargs = { 'nope' } })
+        assert.equals('Unknown subcommand: nope', notes[#notes])
+      end
+    )
+
     it('supersedes the record open, linking both ways', function()
       adr.new('Use MySQL')
       local old = vim.api.nvim_buf_get_name(0)

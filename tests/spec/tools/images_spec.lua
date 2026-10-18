@@ -219,6 +219,69 @@ describe('tools.images', function()
     assert.same({ 'Every image is pinned already' }, notes)
   end)
 
+  it('orders findings of one severity by id', function()
+    local findings = images.findings({
+      matches = {
+        { vulnerability = { id = 'GHSA-b', severity = 'High' } },
+        { vulnerability = { id = 'GHSA-a', severity = 'High' } },
+        { vulnerability = { id = 'GHSA-b', severity = 'High' } },
+      },
+    })
+    assert.same({ HIGH = 3 }, findings.counts)
+    assert.same({ 'GHSA-a', 'GHSA-b' }, findings.ids)
+  end)
+
+  it('scans the current buffer with grype when trivy is missing', function()
+    tool('grype', {
+      [[echo '{"matches":[{"vulnerability":{"id":"GHSA-1","severity":"Critical"}}]}']],
+    })
+    vim.api.nvim_set_current_buf(h.buffer({ lines = { 'FROM golang:1.23' } }))
+    images.scan()
+    assert.is_true(vim.wait(5000, function() return #notes > 1 end, 10))
+    assert.is_truthy(
+      notes[2]:find('^1 images scanned, 1 with known vulnerabilities$')
+    )
+    assert.same(
+      { '--quiet -o json golang:1.23' },
+      vim.fn.readfile(dir .. '/calls')
+    )
+    assert.equals(1, #vim.diagnostic.get(0))
+  end)
+
+  it('pins the current buffer with skopeo when crane is missing', function()
+    tool('skopeo', { 'echo "' .. DIGEST .. '"' })
+    vim.api.nvim_set_current_buf(h.buffer({ lines = { 'FROM golang:1.23' } }))
+    images.pin()
+    assert.is_true(vim.wait(5000, function() return #notes > 0 end, 10))
+    assert.same({ '1 images pinned' }, notes)
+    assert.same(
+      { 'inspect --format {{.Digest}} docker://golang:1.23' },
+      vim.fn.readfile(dir .. '/calls')
+    )
+    assert.equals(
+      'FROM golang:1.23@' .. DIGEST,
+      vim.api.nvim_buf_get_lines(0, 0, 1, false)[1]
+    )
+  end)
+
+  it('says when it has nothing to look digests up with', function()
+    images.pin(h.buffer({ lines = { 'FROM golang:1.23' } }))
+    assert.same({ 'Neither crane nor skopeo is installed' }, notes)
+  end)
+
+  it('pins nothing in a buffer edited while it looked digests up', function()
+    tool('crane', { 'sleep 0.3', 'echo "' .. DIGEST .. '"' })
+    local bufnr = h.buffer({ lines = { 'FROM golang:1.23' } })
+    images.pin(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, 0, false, { '# edited' })
+    assert.is_true(vim.wait(5000, function() return #notes > 0 end, 10))
+    assert.same({ 'The file changed meanwhile: nothing pinned' }, notes)
+    assert.same(
+      { '# edited', 'FROM golang:1.23' },
+      vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    )
+  end)
+
   it('looks up no more than a few digests at once', function()
     -- Each lookup leaves a mark while it runs; the most marks seen together
     -- is how many ran at once

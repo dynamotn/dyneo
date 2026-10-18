@@ -117,6 +117,78 @@ describe('tools.c4', function()
     assert.equals('zz/likec4.config.ts', found)
   end)
 
+  it('takes a root too large to walk as holding a code config', function()
+    c4.SCAN_LIMIT = 2
+    for i = 1, 5 do
+      h.write(dir .. '/model/' .. i .. '.c4', { 'model {}' })
+    end
+    local found
+    c4.code_config(dir, function(config) found = config end)
+    assert.is_true(vim.wait(1000, function() return found ~= nil end))
+    assert.equals('any likec4.config.* among its files', found)
+    -- Remembered: the walk is not done again
+    found = nil
+    c4.code_config(dir, function(config) found = config end)
+    assert.equals('any likec4.config.* among its files', found)
+  end)
+
+  it('asks which view to draw when there are several', function()
+    fake({ 'mkdir -p "$5" && touch "$5/index.d2" "$5/deploy.d2"' })
+    local choice = 'deploy'
+    local restore_select = h.stub(
+      vim.ui,
+      'select',
+      function(items, opts, on_choice)
+        assert.same({ 'deploy', 'index' }, items)
+        assert.equals('View', opts.prompt)
+        on_choice(choice)
+      end
+    )
+    c4.show()
+    vim.wait(5000, function() return previewed ~= nil end)
+    assert.equals(c4.out_dir(dir) .. '/deploy.d2', previewed)
+    -- Dismissed: nothing drawn
+    previewed, choice = nil, nil
+    c4.show()
+    vim.wait(500, function() return previewed ~= nil end)
+    restore_select()
+    assert.is_nil(previewed)
+    assert.same({}, notes)
+  end)
+
+  it('maps the preview in a LikeC4 buffer', function()
+    fake({ 'mkdir -p "$5" && touch "$5/index.d2"' })
+    local bufnr = vim.api.nvim_get_current_buf()
+    c4.attach(bufnr)
+    local preview
+    for _, map in ipairs(vim.api.nvim_buf_get_keymap(bufnr, 'n')) do
+      if map.desc == 'Preview View (LikeC4)' then preview = map.callback end
+    end
+    preview()
+    vim.wait(5000, function() return previewed ~= nil end)
+    assert.equals(c4.out_dir(dir) .. '/index.d2', previewed)
+  end)
+
+  it('says when the buffer is in no workspace', function()
+    local loose = h.tmpdir()
+    h.write(loose .. '/x.c4', { 'model {}' })
+    vim.cmd.edit(loose .. '/x.c4')
+    c4.show()
+    assert.same(
+      { 'This buffer is in no LikeC4 workspace', vim.log.levels.WARN },
+      notes[1]
+    )
+    vim.fn.delete(loose, 'rf')
+  end)
+
+  it('reports a failure that says nothing of its own', function()
+    fake({ 'exit 1' })
+    c4.show()
+    vim.wait(5000, function() return #notes > 0 end)
+    assert.equals(vim.log.levels.ERROR, notes[1][2])
+    assert.is_truthy(notes[1][1]:find('^likec4 gen d2 failed: .+'))
+  end)
+
   it('asks about a code config that appeared after a draw', function()
     fake({ 'mkdir -p "$5" && touch "$5/index.d2"' })
     c4.show()

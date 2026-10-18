@@ -164,6 +164,59 @@ describe('tools.deps', function()
     end
   )
 
+  it(
+    'points a deep-scan warning at the gate when the injection is not valid',
+    function()
+      local items = deps.go_arch_lint(
+        vim.json.encode({
+          Payload = {
+            ArchWarningsDeepScan = {
+              {
+                Gate = {
+                  ComponentName = 'g',
+                  MethodName = 'New',
+                  Definition = {
+                    Valid = true,
+                    File = 'g.go',
+                    Line = 3,
+                    Offset = 2,
+                  },
+                },
+                Dependency = {
+                  ComponentName = 'd',
+                  Name = 'db',
+                  Injection = { Valid = false, File = '' },
+                },
+              },
+            },
+          },
+        }),
+        '/p'
+      )
+      assert.same({
+        {
+          filename = '/p/g.go',
+          lnum = 3,
+          col = 2,
+          type = 'E',
+          text = 'g may not be given d (db to New)',
+        },
+      }, items)
+    end
+  )
+
+  it('points an import of a module it cannot find at the root', function()
+    local items = deps.import_linter(
+      'shop.low must not import shop.high:\n-   shop.low.red -> shop.high.x (l.2)',
+      dir
+    )
+    assert.equals(dir, items[1].filename)
+    assert.equals(
+      'shop.low must not import shop.high: shop.low.red → shop.high.x',
+      items[1].text
+    )
+  end)
+
   it('reads the broken contracts of import-linter', function()
     h.write(dir .. '/src/shop/low/blue.py', {})
     local items = deps.import_linter(
@@ -319,6 +372,22 @@ describe('tools.deps', function()
       )
       vim.wait(200)
       assert.is_nil(vim.uv.fs_stat(dir .. '/bin/go-arch-lint.ran'))
+    end)
+
+    it('says when the project has no rules', function()
+      vim.fn.delete(dir .. '/.go-arch-lint.yml')
+      deps.check()
+      assert.equals(vim.log.levels.WARN, notes[1][2])
+      assert.is_truthy(notes[1][1]:find('No dependency rules here', 1, true))
+    end)
+
+    it('says when the tool is not installed', function()
+      vim.env.PATH = dir .. '/bin'
+      deps.check()
+      vim.wait(5000, function() return #notes > 1 end)
+      assert.equals(vim.log.levels.ERROR, notes[#notes][2])
+      assert.is_truthy(notes[#notes][1]:find('go-arch-lint', 1, true))
+      assert.same({}, vim.fn.getqflist())
     end)
 
     it('says when nothing breaks', function()

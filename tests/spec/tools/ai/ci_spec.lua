@@ -129,6 +129,61 @@ describe('tools.ai.ci', function()
     assert.same({}, delivered)
   end)
 
+  it('says when the log passed its limit and the file was cut', function()
+    ai_ci.MAX_FILE = 8
+    table.insert(
+      restores,
+      h.stub(
+        require('util.forge'),
+        'api_text',
+        function(_, _, _, on_done) on_done('tail of the log', true) end
+      )
+    )
+    ai_ci.explain()
+    wait_for(function() return #delivered > 0 end)
+    assert.is_truthy(notes[1]:find('its end is missing', 1, true))
+    assert.is_truthy(delivered[1].text:find('jobs:\n  \n(cut)', 1, true))
+  end)
+
+  it('keeps a sensitive pipeline file from AI', function()
+    table.insert(
+      restores,
+      h.stub(package.loaded, 'util.sensitive', {
+        is_sensitive = function() return true end,
+        reasons = function() return { 'holds a key' } end,
+      })
+    )
+    ai_ci.explain()
+    assert.same({}, delivered)
+    assert.is_truthy(notes[1]:find('Kept from AI: holds a key', 1, true))
+  end)
+
+  it('says when the prompt is missing', function()
+    local prompts = require('tools.ai.prompts')
+    table.insert(
+      restores,
+      h.stub(prompts, 'template', function() return nil end)
+    )
+    ai_ci.explain()
+    assert.same({}, delivered)
+    assert.is_truthy(notes[1]:find('No prompt ' .. ai_ci.PROMPT, 1, true))
+  end)
+
+  it('passes on why the pipeline could not be fetched', function()
+    table.insert(
+      restores,
+      h.stub(
+        ci,
+        'fetch',
+        function(_, _, _, on_done) on_done(nil, 'gh: 403') end
+      )
+    )
+    ai_ci.explain()
+    wait_for(function() return #notes > 0 end)
+    assert.equals('gh: 403', notes[1])
+    assert.same({}, delivered)
+  end)
+
   describe('tail', function()
     it('keeps the end of a long log, from a whole line', function()
       ai_ci.TAIL = 10

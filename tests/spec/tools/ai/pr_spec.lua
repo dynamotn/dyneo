@@ -84,6 +84,56 @@ describe('tools.ai.pr', function()
     )
   end)
 
+  it('copies the edited description with <localleader>y', function()
+    local bufnr = pr.show('```\n# title\n\nbody\n```')
+    vim.api.nvim_buf_set_lines(bufnr, 2, 3, false, { 'edited body' })
+    local copy
+    for _, map in ipairs(vim.api.nvim_buf_get_keymap(bufnr, 'n')) do
+      if map.desc == 'Copy Description' then copy = map.callback end
+    end
+    copy()
+    assert.equals('# title\n\nedited body', vim.fn.getreg('"'))
+    assert.is_truthy(notes[1]:find('Copied', 1, true))
+  end)
+
+  it('says when the diff was cut', function()
+    local text = pr.build({ body = '{diff}' }, {
+      change = { paths = { 'a.txt' }, diff = '+x', cut = true },
+      base = 'main',
+      branch = 'feat/two',
+      commits = {},
+      conventional = false,
+    })
+    assert.equals('+x\n(diff cut at 512 KiB)', text)
+  end)
+
+  it('says when the prompt is missing', function()
+    local prompts = require('tools.ai.prompts')
+    table.insert(
+      restores,
+      h.stub(prompts, 'template', function() return nil end)
+    )
+    pr.describe()
+    assert.is_truthy(notes[1]:find('No prompt ' .. pr.PROMPT, 1, true))
+    assert.same({}, asked)
+  end)
+
+  it('says when the buffer is in no work tree', function()
+    vim.api.nvim_set_current_buf(h.buffer({ name = dir .. '/loose.txt' }))
+    pr.describe()
+    assert.is_true(vim.wait(5000, function() return #notes > 0 end, 20))
+    assert.is_truthy(notes[1]:find('Not in a git work tree', 1, true))
+    assert.same({}, asked)
+  end)
+
+  it('asks for a base when there is no main branch', function()
+    git('branch', '-m', 'main', 'trunk')
+    pr.describe()
+    assert.is_true(vim.wait(5000, function() return #notes > 0 end, 20))
+    assert.is_truthy(notes[1]:find('No main branch', 1, true))
+    assert.same({}, asked)
+  end)
+
   it('compares with the branch it is given', function()
     pr.describe('feat/two')
     assert.is_true(vim.wait(5000, function() return #notes > 0 end, 20))
