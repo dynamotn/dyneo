@@ -119,6 +119,82 @@ describe('tools.model', function()
     }, header.tensors)
   end)
 
+  it('reads the floats IEEE 754 spells out of the ordinary', function()
+    local bytes = table.concat({
+      'GGUF',
+      le(3, 4),
+      le(0, 8),
+      le(2, 8),
+      kv('a.inf', 6, '\0\0\128\127'),
+      kv('a.tiny', 6, '\1\0\0\0'),
+    })
+    local header = assert(model.header(file('f.gguf', bytes)))
+    assert.same(
+      { { 'a.inf', 'inf' }, { 'a.tiny', '1.4013e-45' } },
+      header.metadata
+    )
+    assert.equals('2.00 KiB', model.size(2048))
+    assert.equals('12 B', model.size(12))
+  end)
+
+  it('counts a long array, whatever it holds', function()
+    local u8 = le(0, 4) .. le(1, 8) .. '\1'
+    local strings = le(8, 4) .. le(1, 8) .. str('s')
+    local bytes = table.concat({
+      'GGUF',
+      le(3, 4),
+      le(0, 8),
+      le(4, 8),
+      kv('a.ints', 9, le(4, 4) .. le(10, 8) .. le(1, 4):rep(10)),
+      kv('a.bools', 9, le(7, 4) .. le(10, 8) .. ('\1'):rep(10)),
+      -- Past the items shown, an array of arrays is walked, not read
+      kv('a.arrays', 9, le(9, 4) .. le(10, 8) .. u8:rep(10)),
+      kv('a.strings', 9, le(9, 4) .. le(9, 8) .. strings:rep(9)),
+    })
+    local header = assert(model.header(file('a.gguf', bytes)))
+    assert.same({
+      { 'a.ints', '[10 u32]' },
+      { 'a.bools', '[10 bool]' },
+      { 'a.arrays', '[10 array]' },
+      { 'a.strings', '[9 array]' },
+    }, header.metadata)
+  end)
+
+  it('refuses a value of a type it does not know', function()
+    local u8 = le(0, 4) .. le(1, 8) .. '\1'
+    local function gguf(entries)
+      return 'GGUF'
+        .. le(3, 4)
+        .. le(0, 8)
+        .. le(#entries, 8)
+        .. table.concat(entries)
+    end
+    local cases = {
+      ['kind.gguf'] = gguf({ kv('k', 13, '') }),
+      -- The ninth array, walked rather than read, holds an unknown type
+      ['item.gguf'] = gguf({
+        kv('k', 9, le(9, 4) .. le(9, 8) .. u8:rep(8) .. le(13, 4) .. le(1, 8)),
+      }),
+      -- And one nested deeper than is walked
+      ['deep.gguf'] = gguf({
+        kv(
+          'k',
+          9,
+          le(9, 4) .. le(9, 8) .. u8:rep(8) .. (le(9, 4) .. le(1, 8)):rep(3)
+        ),
+      }),
+    }
+    local errors = {}
+    for name, bytes in pairs(cases) do
+      local header, err = model.header(file(name, bytes))
+      assert.is_nil(header, name)
+      errors[name] = err
+    end
+    assert.matches('unknown metadata type 13', errors['kind.gguf'])
+    assert.matches('unknown metadata type 13', errors['item.gguf'])
+    assert.matches('nested too deep', errors['deep.gguf'])
+  end)
+
   it('adds the parameters up', function()
     local path = file('m.gguf', GGUF)
     local lines = model.lines(path, assert(model.header(path)))
