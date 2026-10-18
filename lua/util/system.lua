@@ -154,6 +154,8 @@ function M.run(cmd, opts, on_done)
   local timeout = opts.timeout or M.RUN_TIMEOUT
   -- Loop time, the clock the deadline's own timer runs on
   local began = vim.uv.now()
+  -- Set once the deadline stopped the command from here
+  local deadline = false
   local ok, started = pcall(vim.system, cmd, {
     cwd = opts.cwd,
     env = opts.env,
@@ -168,8 +170,11 @@ function M.run(cmd, opts, on_done)
     -- 124 is also a command's own exit code, `timeout(1)`'s say: only one
     -- that was killed, or ran until the deadline, was stopped by it
     local timed_out = not cut
-      and completed.code == M.TIMED_OUT
-      and (completed.signal ~= 0 or vim.uv.now() - began >= timeout)
+      and (
+        completed.code == M.TIMED_OUT
+          and (completed.signal ~= 0 or vim.uv.now() - began >= timeout)
+        or (deadline and completed.signal ~= 0)
+      )
     -- The deadline stops the command itself; a detached one leaves what it
     -- started behind unless the group goes too
     if timed_out and opts.detach and process and process.pid then
@@ -190,9 +195,16 @@ function M.run(cmd, opts, on_done)
     return nil
   end
   process = started
-  -- `vim.system` stops the command at the deadline itself; this is for the
-  -- output something it started still holds open
-  answer_after(timeout + M.GRACE, M.TIMED_OUT, 9, true)
+  -- `vim.system` stops the command at the deadline itself, but not what a
+  -- detached one started, which goes with its group here; and the exit is
+  -- only reported once the output closes, which something it started can
+  -- hold open, so the answer is given without it `M.GRACE` later
+  guard:start(timeout, 0, function()
+    if answered then return end
+    deadline = true
+    stop(started, opts.detach)
+    answer_after(M.GRACE, M.TIMED_OUT, 9, true)
+  end)
   return process
 end
 
