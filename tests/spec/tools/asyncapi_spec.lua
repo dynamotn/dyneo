@@ -177,5 +177,97 @@ describe('tools.asyncapi', function()
         vim.log.levels.ERROR,
       }, notes[1])
     end)
+
+    it('says when the CLI is not installed', function()
+      local restore_exe = h.stub(vim.fn, 'executable', function() return 0 end)
+      asyncapi.diff(0)
+      restore_exe()
+      assert.same({
+        'asyncapi is not installed: `:MasonInstall asyncapi-cli`',
+        vim.log.levels.ERROR,
+      }, notes[1])
+    end)
+
+    it('says when the buffer holds no file', function()
+      fake({ [[echo '[]']] })
+      vim.api.nvim_set_current_buf(h.buffer({ lines = doc }))
+      asyncapi.diff(0)
+      assert.same(
+        { 'This buffer holds no file', vim.log.levels.WARN },
+        notes[1]
+      )
+    end)
+
+    it('says when the document is not in git at the revision', function()
+      fake({ [[echo '[]']] })
+      h.write(dir .. '/new-asyncapi.yaml', doc)
+      vim.cmd.edit(dir .. '/new-asyncapi.yaml')
+      asyncapi.diff(0, 'HEAD')
+      vim.wait(5000, function() return #notes > 0 end)
+      assert.same(
+        { 'new-asyncapi.yaml is not in git at HEAD', vim.log.levels.WARN },
+        notes[1]
+      )
+      assert.is_nil(vim.uv.fs_stat(dir .. '/.asyncapi-base-new-asyncapi.yaml'))
+    end)
+
+    it('says when the CLI printed no JSON, or too much of it', function()
+      fake({ 'echo garbage' })
+      asyncapi.diff(0)
+      vim.wait(5000, function() return #notes > 0 end)
+      assert.same(
+        { 'asyncapi diff failed: asyncapi exited 0', vim.log.levels.ERROR },
+        notes[1]
+      )
+
+      local system = require('util.system')
+      local restore_max = h.stub(system, 'MAX_BYTES', 1024)
+      fake({ "yes '[{}]' | head -c 65536" })
+      asyncapi.diff(0)
+      vim.wait(5000, function() return #notes > 1 end)
+      restore_max()
+      assert.same({
+        'asyncapi diff failed: more output than can be read',
+        vim.log.levels.ERROR,
+      }, notes[2])
+    end)
+
+    it('does nothing for a buffer wiped while the CLI ran', function()
+      fake({ 'sleep 1', [[echo '[]']] })
+      local bufnr = vim.api.nvim_get_current_buf()
+      asyncapi.diff(bufnr)
+      vim.wait(200)
+      vim.cmd('bwipeout! ' .. bufnr)
+      assert.is_false(vim.wait(3000, function() return #notes > 0 end))
+      assert.is_nil(vim.uv.fs_stat(dir .. '/.asyncapi-base-asyncapi.yaml'))
+    end)
+
+    it('removes the copies it still holds when Neovim leaves', function()
+      fake({ [[echo '[]']] })
+      asyncapi.diff(0)
+      vim.wait(5000, function() return #notes > 0 end)
+      -- A copy a run has not removed yet, as when the CLI is still at work
+      local left = dir .. '/.asyncapi-base-left.yaml'
+      h.write(left, { 'copy' })
+      asyncapi._leftover[left] = true
+      -- A state file that is not JSON counts as empty
+      h.write(asyncapi.STATE, { 'not json' })
+      vim.api.nvim_exec_autocmds('VimLeavePre', { group = 'dy_asyncapi' })
+      assert.is_nil(vim.uv.fs_stat(left))
+      assert.same(
+        {},
+        vim.json.decode(table.concat(vim.fn.readfile(asyncapi.STATE)))
+      )
+    end)
+
+    it('maps the diff on a document', function()
+      local bufnr = vim.api.nvim_get_current_buf()
+      asyncapi.attach(bufnr)
+      local descs = vim.tbl_map(
+        function(map) return map.desc end,
+        vim.api.nvim_buf_get_keymap(bufnr, 'n')
+      )
+      assert.same({ 'Breaking Changes Since HEAD (AsyncAPI)' }, descs)
+    end)
   end)
 end)
