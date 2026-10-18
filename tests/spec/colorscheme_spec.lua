@@ -32,14 +32,22 @@ local plugins_of = {
 }
 
 describe('colorscheme', function()
-  local opts, locked
+  local opts, specs
 
   before_each(function()
     h.globals()
     opts = dofile(h.root .. '/lua/plugins/ui/colorscheme.lua')[1].opts
-    locked = vim.json.decode(
-      table.concat(vim.fn.readfile(h.root .. '/lazy-lock.json'), '\n')
-    )
+    -- The plugin specs, not the lockfile: lazy.nvim rewrites the lockfile
+    -- without the plugins a machine leaves out (gitlab.nvim and its
+    -- diffview-plus.nvim without `glab`), so on CI it names fewer plugins
+    -- than the configuration does
+    local files =
+      vim.fn.globpath(h.root .. '/lua/plugins', '**/*.lua', false, true)
+    specs = {}
+    for _, file in ipairs(files) do
+      table.insert(specs, table.concat(vim.fn.readfile(file), '\n'))
+    end
+    specs = table.concat(specs, '\n')
   end)
 
   it('only names integrations of plugins in the configuration', function()
@@ -47,7 +55,8 @@ describe('colorscheme', function()
     for name in pairs(opts.integrations) do
       local found = false
       for _, plugin in ipairs(plugins_of[name] or {}) do
-        found = found or locked[plugin] ~= nil
+        -- `owner/plugin` in its spec, or in a `dependencies` list
+        found = found or specs:find('/' .. plugin .. "'", 1, true) ~= nil
       end
       if not found then table.insert(stale, name) end
     end

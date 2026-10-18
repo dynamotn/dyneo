@@ -65,6 +65,11 @@ end
 --- `max_bytes`: a log followed with `-f` or a query that never ends does not
 --- fill the memory. What was kept comes back with `cut` set, which is not a
 --- failure by itself -- the caller says it was cut.
+---
+--- The exit is only reported once the output closes, and something the
+--- command started can keep it open long after the command itself is gone,
+--- past the deadline or past the cap. The answer is given without it then,
+--- `M.GRACE` later, and whatever comes after is dropped.
 ---@param cmd string[]
 ---@param opts? DyRunOpts
 ---@param on_done fun(result: DyRunResult)
@@ -72,14 +77,15 @@ end
 function M.run(cmd, opts, on_done)
   opts = opts or {}
   local answered = false
-  ---@type uv.uv_timer_t?
-  local guard
+  -- One timer for both: the deadline and, once stopped, the wait for the
+  -- output to close
+  local guard = assert(vim.uv.new_timer())
   ---@param result table
   local function finish(result)
     if answered then return end
     answered = true
     -- A command that ends in time leaves no timer behind until its deadline
-    if guard and not guard:is_closing() then
+    if not guard:is_closing() then
       guard:stop()
       guard:close()
     end
@@ -106,6 +112,28 @@ function M.run(cmd, opts, on_done)
   local size, cut = 0, false
   ---@type vim.SystemObj?
   local process
+  --- Answer with what was kept, `delay` from now, should the output still be
+  --- open then
+  ---@param delay integer Milliseconds
+  ---@param code integer What the answer says the command exited with
+  ---@param signal integer
+  ---@param timed_out boolean
+  local function answer_after(delay, code, signal, timed_out)
+    guard:stop()
+    guard:start(delay, 0, function()
+      if answered then return end
+      if process then stop(process, opts.detach) end
+      finish({
+        code = code,
+        signal = signal,
+        stdout = table.concat(streams.stdout),
+        stderr = table.concat(streams.stderr),
+        cut = cut,
+        timed_out = timed_out,
+        missing = false,
+      })
+    end)
+  end
   local function reader(name)
     return function(_, data)
       if not data or cut then return end
@@ -113,7 +141,11 @@ function M.run(cmd, opts, on_done)
       if size > max then
         cut = true
         data = data:sub(1, #data - (size - max))
-        if process then stop(process, opts.detach) end
+        if process then
+          stop(process, opts.detach)
+          -- What a stopped command reports: no exit code, the signal
+          answer_after(M.GRACE, 0, 15, false)
+        end
       end
       table.insert(streams[name], data)
     end
@@ -158,23 +190,9 @@ function M.run(cmd, opts, on_done)
     return nil
   end
   process = started
-  -- The exit is only reported once the output closes, and something the
-  -- command started can keep it open long past the deadline: the answer is
-  -- given without it then, and whatever comes after is dropped
-  guard = assert(vim.uv.new_timer())
-  guard:start(timeout + M.GRACE, 0, function()
-    if answered then return end
-    stop(started, opts.detach)
-    finish({
-      code = M.TIMED_OUT,
-      signal = 9,
-      stdout = table.concat(streams.stdout),
-      stderr = table.concat(streams.stderr),
-      cut = cut,
-      timed_out = true,
-      missing = false,
-    })
-  end)
+  -- `vim.system` stops the command at the deadline itself; this is for the
+  -- output something it started still holds open
+  answer_after(timeout + M.GRACE, M.TIMED_OUT, 9, true)
   return process
 end
 
@@ -281,6 +299,8 @@ function M.sync(cmd, opts)
   ---@type vim.SystemObj?
   local obj
   local size, cut = 0, false
+  ---@type integer? Loop time the command was stopped at the cap
+  local cut_at
   ---@type table<string, string[]>
   local kept = {}
   -- Streams the caller reads itself, or turned off, are left as they are
@@ -292,7 +312,7 @@ function M.sync(cmd, opts)
         if opts.text then data = data:gsub('\r\n', '\n') end
         size = size + #data
         if size > max then
-          cut = true
+          cut, cut_at = true, vim.uv.now()
           data = data:sub(1, #data - (size - max))
           if obj then pcall(obj.kill, obj, 'sigterm') end
         end
@@ -323,10 +343,14 @@ function M.sync(cmd, opts)
   -- Not `obj:wait()`: past the deadline it kills the command and then waits
   -- as long again for the output something it started still holds open.
   -- Fast events only, as it does: nothing scheduled runs in the middle.
+  -- A command stopped at the cap gets `M.GRACE` for its output to close.
   local ok, err = pcall(
     vim.wait,
     timeout,
-    function() return result ~= nil end,
+    function()
+      return result ~= nil
+        or (cut_at ~= nil and vim.uv.now() - cut_at >= M.GRACE)
+    end,
     nil,
     true
   )
@@ -340,6 +364,15 @@ function M.sync(cmd, opts)
   end
   if opts.detach and obj.pid then pcall(vim.uv.kill, -obj.pid, 'sigkill') end
   pcall(obj.kill, obj, 'sigkill')
+  if ok and cut then
+    -- Something the command started holds its output open: what was kept
+    -- is the answer, as a stopped command reports it
+    local answer = { code = 0, signal = 15, cut = true, timed_out = false }
+    for name, chunks in pairs(kept) do
+      answer[name] = table.concat(chunks)
+    end
+    return answer
+  end
   return {
     code = M.TIMED_OUT,
     signal = 9,
