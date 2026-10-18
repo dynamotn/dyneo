@@ -12,7 +12,7 @@ return {
     'LSP',
   },
   source = {
-    id = 'pkg:golang/github.com/dynamotn/terragrunt-ls@v0.1.0',
+    id = 'pkg:golang/github.com/gruntwork-io/terragrunt-ls@v0.0.6',
   },
   bin = {
     ['terragrunt-ls'] = 'golang:terragrunt-ls',
