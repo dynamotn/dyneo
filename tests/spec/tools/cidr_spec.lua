@@ -71,6 +71,46 @@ describe('tools.cidr', function()
     assert.equals(3, entries[2].lnum)
   end)
 
+  it('takes a range under a key of no network kind for a subnet', function()
+    local entries = cidr.collect({
+      'cidr_range = "10.0.0.0/16"',
+      'subnets = [',
+      '  "10.0.1.0/24",',
+      ']',
+    }, 'main.tf')
+    assert.same(
+      { false, false },
+      vim.tbl_map(function(e) return e.network end, entries)
+    )
+  end)
+
+  it(
+    'describes the range under the cursor, and says when there is none',
+    function()
+      local notes = {}
+      local restore = h.stub(
+        vim,
+        'notify',
+        function(msg) table.insert(notes, msg) end
+      )
+      vim.api.nvim_set_current_buf(
+        h.buffer({ lines = { 'cidr_block = "10.0.0.0/16" # vpc' } })
+      )
+      vim.api.nvim_win_set_cursor(0, { 1, 15 })
+      cidr.command({ fargs = {} })
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+      cidr.command({ fargs = {} })
+      cidr.command({ fargs = { 'nope' } })
+      cidr.check()
+      restore()
+      vim.cmd('silent! %bwipeout!')
+      assert.is_truthy(notes[1]:find('Network   10.0.0.0/16', 1, true))
+      assert.equals('No IPv4 range under the cursor', notes[2])
+      assert.equals('Unknown subcommand: nope', notes[3])
+      assert.equals('This buffer holds no file', notes[4])
+    end
+  )
+
   it('flags the same range twice, and subnets inside subnets', function()
     local entries = cidr.collect({
       'cidr = "10.0.0.0/16"',

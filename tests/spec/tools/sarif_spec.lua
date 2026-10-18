@@ -230,6 +230,34 @@ describe('tools.sarif', function()
       assert.matches('not read', notes[1])
     end)
 
+    it('says so of a report that is not there', function()
+      sarif.load(dir .. '/none.sarif')
+      assert.matches('does not exist', notes[1])
+    end)
+
+    it('takes the path given, the buffer, or asks for one', function()
+      h.write(dir .. '/a.sarif', { '{"runs": [{"results": []}]}' })
+      sarif.command({ args = dir .. '/a.sarif' })
+      assert.matches('No findings', notes[1])
+
+      vim.cmd.edit(dir .. '/a.sarif')
+      sarif.command({ args = '' })
+      assert.matches('No findings', notes[2])
+
+      vim.cmd.enew()
+      local answer = dir .. '/a.sarif'
+      local restore_input = h.stub(vim.ui, 'input', function(opts, on_confirm)
+        assert.equals('file', opts.completion)
+        on_confirm(answer)
+      end)
+      sarif.command({ args = '' })
+      answer = ''
+      sarif.command({ args = '' })
+      restore_input()
+      vim.cmd('silent! %bwipeout!')
+      assert.equals(3, #notes)
+    end)
+
     it('says when a report has no findings', function()
       h.write(dir .. '/empty.sarif', { '{"runs": [{"results": []}]}' })
       sarif.load(dir .. '/empty.sarif')
