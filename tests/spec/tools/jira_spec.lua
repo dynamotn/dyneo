@@ -131,6 +131,212 @@ describe('tools.jira', function()
     assert.same({ false, 'jira gave no answer within 0.2 seconds' }, answer)
   end)
 
+  it('says when jira-cli is not installed', function()
+    local restore = h.stub(vim.fn, 'executable', function() return 0 end)
+    local answer
+    jira.run({ 'me' }, function(ok, lines, err) answer = { ok, lines, err } end)
+    restore()
+    assert.is_false(answer[1])
+    assert.same({}, answer[2])
+    assert.is_truthy(answer[3]:find('^jira%-cli is not installed'))
+  end)
+
+  describe('with jira faked', function()
+    local answer, calls, restore_run
+
+    before_each(function()
+      answer, calls = { true, {}, '' }, {}
+      restore_run = h.stub(jira, 'run', function(args, on_done)
+        table.insert(calls, args)
+        on_done(unpack(answer, 1, 3))
+      end)
+    end)
+    after_each(function() restore_run() end)
+
+    it('says why listing failed, unless told to be quiet', function()
+      answer = { false, {}, 'not logged in' }
+      local got
+      jira.list('x', function(...) got = { ... } end)
+      assert.same({ {}, 'not logged in' }, got)
+      assert.equals('Listing issues failed: not logged in', notes[1].msg)
+      jira.list('x', function(...) got = { ... } end, { quiet = true })
+      assert.equals(1, #notes)
+    end)
+
+    it('reports a failure with no reason as one', function()
+      answer = { false, {}, '' }
+      jira.open('OPS-1')
+      assert.same({ 'open', 'OPS-1' }, calls[1])
+      assert.same(
+        { msg = 'jira failed', level = vim.log.levels.ERROR },
+        notes[1]
+      )
+    end)
+
+    it('views an issue in a split, or says why it cannot', function()
+      answer = { true, { '# OPS-1', 'Fix it' }, '' }
+      jira.view('OPS-1')
+      assert.equals('markdown', vim.bo.filetype)
+      assert.same(
+        { '# OPS-1', 'Fix it' },
+        vim.api.nvim_buf_get_lines(0, 0, -1, false)
+      )
+      answer = { false, {}, 'no such issue' }
+      jira.view('OPS-2')
+      assert.same(
+        { msg = 'no such issue', level = vim.log.levels.ERROR },
+        notes[1]
+      )
+    end)
+
+    it('copies or inserts the key, or asks what to do', function()
+      local issue =
+        { key = 'OPS-1', type = '', status = '', summary = 'Fix it' }
+      jira.act('copy', issue)
+      assert.equals('Copied OPS-1', notes[1].msg)
+      local offered
+      local restore = h.stub(vim.ui, 'select', function(items, opts, choose)
+        offered = { opts.prompt, vim.tbl_map(opts.format_item, items) }
+        choose(nil)
+      end)
+      jira.menu(issue)
+      restore()
+      assert.same({
+        'OPS-1 Fix it',
+        vim.tbl_map(function(a) return a[2] end, jira.ACTIONS),
+      }, offered)
+      restore = h.stub(
+        vim.ui,
+        'select',
+        function(items, _, choose) choose(items[6]) end
+      )
+      vim.api.nvim_set_current_buf(h.buffer({ lines = { 'fix: ' } }))
+      vim.api.nvim_win_set_cursor(0, { 1, 4 })
+      jira.menu(issue)
+      restore()
+      assert.equals('fix: OPS-1', vim.api.nvim_get_current_line())
+    end)
+
+    it('refuses to start a second branch for the branch checked out', function()
+      local restore = h.stub(
+        jira,
+        'current_key',
+        function(on_done) on_done('OPS-12') end
+      )
+      jira.command({ fargs = { 'branch' } })
+      restore()
+      assert.same({}, calls)
+      assert.equals('Already on a branch of OPS-12', notes[1].msg)
+    end)
+
+    it('asks for the JQL of a search given none', function()
+      local picked
+      local restore_pick = h.stub(
+        jira,
+        'pick',
+        function(opts) picked = opts end
+      )
+      local restore = h.stub(
+        vim.ui,
+        'input',
+        function(_, on_confirm) on_confirm(' ') end
+      )
+      jira.command({ fargs = { 'search' } })
+      assert.is_nil(picked)
+      restore()
+      restore = h.stub(
+        vim.ui,
+        'input',
+        function(_, on_confirm) on_confirm('project = OPS') end
+      )
+      jira.command({ fargs = { 'search' } })
+      restore()
+      restore_pick()
+      assert.same({ jql = 'project = OPS', title = 'Jira search' }, picked)
+    end)
+
+    describe('pick', function()
+      local picked, previewed, closed, restore_snacks
+
+      before_each(function()
+        picked, previewed, closed = nil, nil, 0
+        restore_snacks = h.stub(_G, 'Snacks', {
+          picker = {
+            pick = function(opts) picked = opts end,
+            preview = { cmd = function(cmd) previewed = cmd end },
+          },
+        })
+        answer = {
+          true,
+          { 'OPS-1\tBug\tTo Do\tFix it', 'OPS-123\tTask\tDone\tLonger key' },
+          '',
+        }
+      end)
+      after_each(function() restore_snacks() end)
+
+      local picker = {
+        close = function() closed = closed + 1 end,
+      }
+
+      it('says when no issue matches', function()
+        answer = { true, {}, '' }
+        jira.pick()
+        assert.is_nil(picked)
+        assert.equals('No issues match ' .. jira.DEFAULT_JQL, notes[1].msg)
+      end)
+
+      it('offers the issues, keys lined up, with a preview', function()
+        jira.pick({ title = 'Mine' })
+        assert.equals('Mine', picked.title)
+        assert.equals('OPS-1 To Do Fix it', picked.items[1].text)
+        local line = picked.format(picked.items[1])
+        assert.same({ 'OPS-1  ', 'SnacksPickerLabel' }, line[1])
+        assert.equals('To Do', line[3][1])
+        picked.preview({ item = picked.items[2] })
+        assert.same(
+          { 'jira', 'issue', 'view', 'OPS-123', '--plain' },
+          previewed
+        )
+      end)
+
+      it(
+        'does the action asked, or asks for one, on the issue confirmed',
+        function()
+          local acted = {}
+          local restore = h.stub(
+            jira,
+            'act',
+            function(action, item) table.insert(acted, { action, item.key }) end
+          )
+          local menued
+          local restore_menu = h.stub(
+            jira,
+            'menu',
+            function(item) menued = item.key end
+          )
+          jira.pick({ action = 'open' })
+          picked.confirm(picker, nil)
+          picked.confirm(picker, picked.items[1])
+          jira.pick()
+          picked.confirm(picker, picked.items[2])
+          picked.actions.jira_branch(picker, picked.items[1])
+          picked.actions.jira_open(picker, nil)
+          picked.actions.jira_insert(picker, picked.items[2])
+          restore_menu()
+          restore()
+          assert.equals(6, closed)
+          assert.same({
+            { 'open', 'OPS-1' },
+            { 'branch', 'OPS-1' },
+            { 'insert', 'OPS-123' },
+          }, acted)
+          assert.equals('OPS-123', menued)
+          assert.equals('Start a branch', picked.win.input.keys['<C-b>'].desc)
+        end
+      )
+    end)
+  end)
+
   describe('commands', function()
     local calls, restore_run
 
@@ -310,6 +516,33 @@ describe('tools.jira', function()
         git({ 'branch', '--show-current' })
       )
       assert.equals('Switched to fix/OPS-12-login-fails', notes[#notes].msg)
+    end)
+
+    it('says why git could not switch', function()
+      local real = vim.fn.exepath('git')
+      local bin = dir .. '/bin'
+      h.write(bin .. '/git', {
+        '#!/bin/sh',
+        'if [ "$3" = switch ]; then echo "hook failed" >&2; exit 1; fi',
+        'exec "' .. real .. '" "$@"',
+      })
+      vim.fn.setfperm(bin .. '/git', 'rwxr-xr-x')
+      local path = vim.env.PATH
+      vim.env.PATH = bin .. ':' .. path
+      local restore = h.stub(
+        vim.ui,
+        'input',
+        function(_, on_confirm) on_confirm('fix/x') end
+      )
+      jira.branch({ key = 'OPS-1', type = 'Bug', status = '', summary = 'x' })
+      local done = vim.wait(10000, function() return #notes > 0 end)
+      vim.env.PATH = path
+      restore()
+      assert.is_true(done)
+      assert.same(
+        { msg = 'hook failed', level = vim.log.levels.ERROR },
+        notes[1]
+      )
     end)
 
     it('stops a switch that hangs, and says so', function()
