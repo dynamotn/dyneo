@@ -4,10 +4,12 @@ local h = require('helpers')
 --- at `dir` so nothing is written to the real data and state folders
 ---@param name string
 ---@param dir string
+---@param subdir? string `lsp` unless given: `after/lsp` for an override
 ---@return vim.lsp.Config
-local function load(name, dir)
+local function load(name, dir, subdir)
   local restore = h.stub(vim.fn, 'stdpath', function() return dir end)
-  local ok, config = pcall(dofile, h.root .. '/lsp/' .. name .. '.lua')
+  local ok, config =
+    pcall(dofile, h.root .. '/' .. (subdir or 'lsp') .. '/' .. name .. '.lua')
   restore()
   assert(ok, config)
   return config
@@ -84,6 +86,22 @@ describe('lsp', function()
       end
     end
   end)
+
+  -- `after/lsp/` overrides what nvim-lspconfig ships for a server, merged
+  -- over the plugin's own file, so each is a partial config
+  for _, file in ipairs(vim.fn.glob(h.root .. '/after/lsp/*.lua', false, true)) do
+    local name = vim.fn.fnamemodify(file, ':t:r')
+    it('after/lsp/' .. name .. ' is a well-formed override', function()
+      local config = load(name, dir, 'after/lsp')
+      assert.are.equal('table', type(config))
+      if config.cmd ~= nil then assert(is_string_list(config.cmd), 'cmd') end
+    end)
+  end
+
+  it(
+    'starts yls without its request log',
+    function() assert.same({ 'yls' }, load('yls', dir, 'after/lsp').cmd) end
+  )
 
   it('termuxls only claims shell dialects', function()
     for _, ft in ipairs(load('termuxls', dir).filetypes) do
