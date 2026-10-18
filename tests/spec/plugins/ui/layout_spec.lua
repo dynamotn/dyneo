@@ -238,6 +238,16 @@ describe('plugins.ui.layout', function()
       assert.equals(old, Offset.get())
     end)
 
+    it('skips a side edgy has no layout for', function()
+      spec_of('akinsho/bufferline.nvim').opts()
+      stub(package.loaded, 'edgy', {})
+      layout.right = nil
+      layout.left.wins = { 1 }
+      local ret = Offset.get()
+      assert.equals(30, ret.total_size)
+      assert.equals('', ret.right)
+    end)
+
     it('leaves room for the sidebars edgy shows', function()
       spec_of('akinsho/bufferline.nvim').opts()
       stub(package.loaded, 'edgy', {})

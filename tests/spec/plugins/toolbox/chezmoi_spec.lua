@@ -152,6 +152,14 @@ describe('plugins.toolbox.chezmoi', function()
     ---@param lines? string[]
     ---@param target? string What the plugin seeded
     ---@return string
+    it('keeps one handler when set up again', function()
+      load(true)['dpezto/chezmoi-template.nvim'].init()
+      assert.equals(
+        1,
+        #vim.api.nvim_get_autocmds({ group = 'chezmoi_plain_partials' })
+      )
+    end)
+
     local function typed(name, lines, target)
       local bufnr = h.buffer({ name = name, lines = lines or { 'plain' } })
       vim.b[bufnr].chezmoi_target_lang = target

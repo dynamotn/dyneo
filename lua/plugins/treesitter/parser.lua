@@ -151,8 +151,11 @@ return {
 
       -- install missing parsers
       opts.ensure_installed = Plugin.dedup(opts.ensure_installed)
+      -- By parser name: `TS.have` takes a filetype, and a filetype given to
+      -- another parser (`c` to `cpp`) would answer for that one instead
+      local installed = TS.get_installed()
       local install = vim.tbl_filter(
-        function(parser_name) return not TS.have(parser_name) end,
+        function(parser_name) return installed[parser_name] == nil end,
         opts.ensure_installed or {}
       )
       if #install > 0 then

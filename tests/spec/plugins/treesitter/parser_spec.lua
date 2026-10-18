@@ -128,8 +128,26 @@ describe('plugins.treesitter.parser', function()
       assert.is_true(TS.get_installed().cue)
     end)
 
+    it(
+      'checks a parser by its own name, not a filetype given to another',
+      function()
+        -- `c` buffers go to the `cpp` parser, which says nothing of `c`'s
+        treesitter.installed = { 'lua', 'cpp' }
+        local plugin = spec()
+        local opts = vim.deepcopy(plugin.opts)
+        table.insert(opts.ensure_installed, 'c')
+        table.insert(opts.ensure_installed, 'cpp')
+        plugin.config(nil, opts)
+        assert.equals('cpp', vim.treesitter.language.get_lang('c'))
+        assert.is_true(vim.list_contains(installs[1].langs, 'c'))
+        assert.is_false(vim.list_contains(installs[1].langs, 'cpp'))
+      end
+    )
+
     it('installs nothing when the bundle is there', function()
-      stub(TS, 'have', function() return true end)
+      stub(TS, 'get_installed', function()
+        return setmetatable({}, { __index = function() return true end })
+      end)
       local plugin = spec()
       plugin.config(nil, vim.deepcopy(plugin.opts))
       assert.same({}, installs)
