@@ -59,6 +59,24 @@ describe('util.project_rtp', function()
     assert.equals(dir .. '/.nvim', require('util.project_rtp').current())
     vim.opt.rtp:remove(dir .. '/.nvim')
   end)
+  it('puts the folder back once lazy.nvim has reset the runtimepath', function()
+    vim.fn.mkdir(dir .. '/.nvim', 'p')
+    table.insert(restores, h.stub(vim.secure, 'read', function() return '' end))
+    local project_rtp = require('util.project_rtp')
+    assert.equals(dir .. '/.nvim', project_rtp.startup_path())
+    vim.opt.rtp:remove(dir .. '/.nvim')
+    project_rtp.setup()
+    assert.is_true(vim.list_contains(vim.opt.rtp:get(), dir .. '/.nvim'))
+    -- Already there: not added twice
+    project_rtp.setup()
+    local count = 0
+    for _, path in ipairs(vim.opt.rtp:get()) do
+      if path == dir .. '/.nvim' then count = count + 1 end
+    end
+    assert.equals(1, count)
+    vim.opt.rtp:remove(dir .. '/.nvim')
+  end)
+
   it('asks again once the trust database changes', function()
     vim.fn.mkdir(dir .. '/.nvim', 'p')
     local reads, mtime = 0, 1

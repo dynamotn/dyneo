@@ -152,6 +152,51 @@ describe('util.lualine', function()
       assert.are.equal(2, calls)
     end)
 
+    it('shows a symlink into the project by its name under the root', function()
+      root, cwd = dir .. '/proj', dir .. '/proj'
+      h.write(root .. '/src/real.lua', { '' })
+      vim.fn.mkdir(dir .. '/home', 'p')
+      assert(
+        vim.uv.fs_symlink(root .. '/src/real.lua', dir .. '/home/link.lua')
+      )
+      vim.cmd.edit(dir .. '/home/link.lua')
+      assert.are.equal(
+        'src/<DyNeo_Bold>real.lua</>',
+        lualine.pretty_path()(component())
+      )
+    end)
+
+    it('compares paths case-folded on Windows', function()
+      table.insert(
+        restores,
+        h.stub(
+          vim.fn,
+          'has',
+          function(what) return what == 'win32' and 1 or 0 end
+        )
+      )
+      root, cwd = dir:upper(), dir:upper()
+      assert.are.equal('src/<DyNeo_Bold>main.lua</>', path_of('src/main.lua'))
+    end)
+
+    it('starts the cache over once it is full', function()
+      lualine.PATH_CACHE_SIZE = 1
+      assert.are.equal('<DyNeo_Bold>a.lua</>', path_of('a.lua'))
+      assert.are.equal('<DyNeo_Bold>b.lua</>', path_of('b.lua'))
+      assert.are.equal('<DyNeo_Bold>a.lua</>', path_of('a.lua'))
+    end)
+
+    it('marks a read-only buffer', function()
+      h.write(dir .. '/ro.lua', { '' })
+      vim.cmd.edit(dir .. '/ro.lua')
+      vim.bo.readonly = true
+      assert.are.equal(
+        '<DyNeo_Bold>ro.lua</><DyNeo_MatchParen>RO</>',
+        lualine.pretty_path({ readonly_icon = 'RO' })(component())
+      )
+      vim.bo.readonly = false
+    end)
+
     it('is empty for a buffer with no file', function()
       vim.cmd.enew()
       assert.are.equal('', lualine.pretty_path()(component()))
@@ -169,6 +214,13 @@ describe('util.lualine', function()
       local part = lualine.root_dir({ icon = 'R' })
       assert.is_true(part.cond())
       assert.are.equal('R project', part[1]())
+    end)
+
+    it('names a root elsewhere, unless told not to', function()
+      cwd = dir .. '/work'
+      root = dir .. '/project'
+      assert.are.equal('R project', lualine.root_dir({ icon = 'R' })[1]())
+      assert.is_false(lualine.root_dir({ other = false }).cond())
     end)
 
     it('can leave a parent root out', function()

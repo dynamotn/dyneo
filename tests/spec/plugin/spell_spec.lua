@@ -175,6 +175,17 @@ describe('plugin/spell', function()
       )
     end)
 
+    it('takes the selection in Visual mode, apostrophe and all', function()
+      local bufnr = h.buffer({ lines = { "Neovim's" } })
+      vim.api.nvim_set_current_buf(bufnr)
+      vim.api.nvim_feedkeys(vim.keycode('0v$h zp'), 'mx', false)
+      assert.are.same(
+        { "Neovim's" },
+        vim.fn.readfile(dir .. '/spell/proper.txt')
+      )
+      assert.are.equal('n', vim.fn.mode())
+    end)
+
     it('refuses an empty word', function()
       add('t', '')
       assert.is_nil(vim.uv.fs_stat(dir .. '/spell/technical.txt'))

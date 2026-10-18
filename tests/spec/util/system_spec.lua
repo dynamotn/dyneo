@@ -76,6 +76,27 @@ describe('util.system', function()
     end
   )
 
+  it('takes the group of a detached run down at its deadline', function()
+    local marker = dir .. '/still-running'
+    h.write(dir .. '/spawner', {
+      '#!/bin/sh',
+      '(sleep 1; touch "' .. marker .. '") &',
+      'sleep 5',
+    })
+    vim.fn.setfperm(dir .. '/spawner', 'rwxr-xr-x')
+    local result
+    system.run(
+      { dir .. '/spawner' },
+      { timeout = 200, detach = true },
+      function(r) result = r end
+    )
+    assert.is_true(vim.wait(3000, function() return result ~= nil end))
+    assert.is_true(result.timed_out)
+    assert.are.equal(system.TIMED_OUT, result.code)
+    vim.wait(1500)
+    assert.are.equal(0, vim.fn.filereadable(marker))
+  end)
+
   it('stops a command at the cap and says it was cut', function()
     local result = system.sync({ 'sh', '-c', 'yes' }, { max_bytes = 1000 })
     assert.is_true(result.cut)

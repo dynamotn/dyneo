@@ -197,6 +197,75 @@ describe('util.forge', function()
       end)
     end)
 
+    it('says when the CLI is not installed', function()
+      vim.env.PATH = dir .. '/bin'
+      local data, err = call(
+        { kind = 'github', host = 'github.com', slug = 'o/r', name = 'gh' },
+        'x'
+      )
+      assert.is_nil(data)
+      assert.equals('gh is not installed', err)
+    end)
+
+    it('takes half a JSON document for no answer', function()
+      local max = require('util.system').MAX_BYTES
+      cli('gh', {
+        ('head -c %d /dev/zero | tr "\\0" a'):format(max + 1024),
+        'exit 0',
+      })
+      local data, err = call(
+        { kind = 'github', host = 'github.com', slug = 'o/r', name = 'gh' },
+        'x'
+      )
+      assert.is_nil(data)
+      assert.equals('gh api answered with more than can be read', err)
+    end)
+
+    describe('api_text', function()
+      local remote =
+        { kind = 'gitlab', host = 'gitlab.com', slug = 'g/p', name = 'origin' }
+
+      local function call_text(max_bytes)
+        local done, text, cut, err = false, nil, nil, nil
+        forge.api_text(remote, 'jobs/1/trace', max_bytes, function(t, c, e)
+          done, text, cut, err = true, t, c, e
+        end)
+        assert.is_true(vim.wait(5000, function() return done end, 10))
+        return text, cut, err
+      end
+
+      it('hands over the text, cut at the size given', function()
+        cli('glab', {
+          'echo "$@" > "' .. dir .. '/glab.args"',
+          'printf "line one\\nline two\\n"',
+        })
+        local text, cut, err = call_text(1024)
+        assert.equals('line one\nline two\n', text)
+        assert.is_false(cut)
+        assert.is_nil(err)
+        assert.same(
+          { 'api --hostname gitlab.com jobs/1/trace' },
+          vim.fn.readfile(dir .. '/glab.args')
+        )
+        text, cut = call_text(4)
+        assert.equals('line', text)
+        assert.is_true(cut)
+      end)
+
+      it('says why there is no text', function()
+        cli('glab', { 'echo "HTTP 403" >&2', 'exit 1' })
+        local text, cut, err = call_text(1024)
+        assert.is_nil(text)
+        assert.is_false(cut)
+        assert.equals('HTTP 403', err)
+        vim.env.PATH = dir .. '/bin'
+        vim.fn.delete(dir .. '/bin/glab')
+        text, cut, err = call_text(1024)
+        assert.is_nil(text)
+        assert.equals('glab is not installed', err)
+      end)
+    end)
+
     it('says why there is no answer', function()
       cli('gh', { 'echo "HTTP 404" >&2', 'exit 1' })
       local remote =
