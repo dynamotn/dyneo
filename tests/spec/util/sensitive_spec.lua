@@ -304,6 +304,18 @@ describe('util.sensitive', function()
       end)
     end
 
+    it('names the filetype and the path that hold a buffer back', function()
+      local commit = h.buffer({
+        name = dir .. '/.git/COMMIT_EDITMSG',
+        filetype = 'gitcommit',
+      })
+      assert.are.same({ 'filetype gitcommit' }, sensitive.reasons(commit))
+      local env = h.buffer({ name = dir .. '/prod.env' })
+      local reasons = sensitive.reasons(env)
+      assert.are.equal(1, #reasons)
+      assert.is_truthy(reasons[1]:match('^path .*prod%.env$'))
+    end)
+
     it('says what it found and where', function()
       local bufnr = h.buffer({
         name = dir .. '/main.lua',

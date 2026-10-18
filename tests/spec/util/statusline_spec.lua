@@ -169,6 +169,23 @@ describe('util.statusline', function()
       h.unload('util.plugin')
     end)
 
+    it('forgets a buffer again once its client has detached', function()
+      package.loaded['util.plugin'] = { on_load = function() end }
+      statusline.setup()
+      lang.lsp = { 'lua_ls' }
+      clients = { { name = 'lua_ls', id = 1 } }
+      assert.equals('L 1', statusline.lsp_status('L '))
+      -- Still listed while the event runs, as Neovim has it
+      vim.api.nvim_exec_autocmds('LspDetach', {
+        group = 'dyneo_statusline',
+        buffer = vim.api.nvim_get_current_buf(),
+      })
+      clients = {}
+      vim.wait(100, function() return statusline.lsp_status('L ') ~= 'L 1' end)
+      assert.equals('L 0/1!', statusline.lsp_status('L '))
+      h.unload('util.plugin')
+    end)
+
     it('forgets the tools on focus and on a Mason install', function()
       local listeners = {}
       package.loaded['util.plugin'] = { on_load = function(_, fn) fn() end }
@@ -207,6 +224,18 @@ describe('util.statusline', function()
   end
 
   describe('pick_lsp', function()
+    it('redraws the statusline once a choice is made', function()
+      local refreshed = {}
+      package.loaded['lualine'] =
+        { refresh = function(opts) table.insert(refreshed, opts) end }
+      lang.lsp = { 'lua_ls' }
+      clients = { { name = 'lua_ls', id = 1 } }
+      statusline.pick_lsp()
+      confirm(item('lua_ls'))
+      assert.is_true(vim.wait(500, function() return #refreshed > 0 end))
+      assert.are.same({ { place = { 'statusline' } } }, refreshed)
+    end)
+
     it('says so when there is no server', function()
       statusline.pick_lsp()
       assert.is_nil(picked)

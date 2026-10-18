@@ -29,6 +29,64 @@ describe('util.gitlab_auth', function()
     assert.is_nil(auth.host_of('/a/local/path'))
   end)
 
+  describe('through the CLIs', function()
+    local calls, reply, restores
+
+    before_each(function()
+      calls = {}
+      restores = {
+        h.stub(package.loaded, 'util.system', {
+          sync = function(cmd, opts)
+            table.insert(calls, cmd)
+            assert.is_true(opts.text)
+            return reply(cmd)
+          end,
+        }),
+        h.stub(
+          vim.fn,
+          'executable',
+          function(name) return name == 'glab' and 1 or 0 end
+        ),
+      }
+    end)
+    after_each(function()
+      for i = #restores, 1, -1 do
+        restores[i]()
+      end
+    end)
+
+    it('reads the URL of a remote, trimmed, or nil', function()
+      reply = function() return { code = 0, stdout = ' git@x.org:g/p.git\n' } end
+      assert.equals('git@x.org:g/p.git', auth.remote_url('/repo', 'origin'))
+      assert.same(
+        { 'git', '-C', '/repo', 'remote', 'get-url', 'origin' },
+        calls[1]
+      )
+      reply = function() return { code = 2, stdout = 'fatal' } end
+      assert.is_nil(auth.remote_url('/repo', 'origin'))
+      reply = function() return { code = 0 } end
+      assert.is_nil(auth.remote_url('/repo', 'origin'))
+    end)
+
+    it('asks glab for the token of a host', function()
+      reply = function() return { code = 0, stdout = 'glpat-x\n' } end
+      assert.equals('glpat-x', auth.glab_token('git.example.org'))
+      assert.same(
+        { 'glab', 'config', 'get', 'token', '--host', 'git.example.org' },
+        calls[1]
+      )
+      reply = function() return { code = 1, stdout = '' } end
+      assert.is_nil(auth.glab_token('git.example.org'))
+    end)
+
+    it('asks nothing of a glab that is not installed', function()
+      restores[2]()
+      restores[2] = h.stub(vim.fn, 'executable', function() return 0 end)
+      assert.is_nil(auth.glab_token('git.example.org'))
+      assert.same({}, calls)
+    end)
+  end)
+
   describe('auth', function()
     local restores, saved_env
 

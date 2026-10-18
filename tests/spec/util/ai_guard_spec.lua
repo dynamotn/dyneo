@@ -297,6 +297,56 @@ describe('util.ai_guard', function()
       assert.equals('asked', api.ask())
     end)
 
+    it('adds none of its files to Avante, nor reads them', function()
+      local selector, utils = {}, {}
+      local added, read
+      selector.add_selected_file, added = fn('added')
+      utils.read_file_from_buf_or_disk, read = fn('content')
+      package.loaded['avante.file_selector'] = selector
+      package.loaded['avante.utils'] = utils
+      package.loaded['avante.config'] = { provider = 'claude-code' }
+      ai_guard.guard_avante()
+      assert.is_nil(selector.add_selected_file(selector, kept))
+      assert.equals(0, #added)
+      local content, err = utils.read_file_from_buf_or_disk(kept)
+      assert.is_nil(content)
+      assert.is_truthy(err:find('keeps AI local', 1, true))
+      assert.equals(0, #read)
+      package.loaded['avante.config'].provider = 'ollama'
+      assert.equals('added', selector.add_selected_file(selector, kept))
+      assert.equals('content', utils.read_file_from_buf_or_disk(kept))
+    end)
+
+    it('shows Copilot as inactive in the statusline there', function()
+      package.loaded['sidekick.status'] = { get = function() return nil end }
+      package.loaded['sidekick.config'] = {
+        copilot = { status = { enabled = true } },
+        get_clients = function() return { {} } end,
+      }
+      ai_guard.guard_sidekick()
+      assert.same(
+        { busy = false, kind = 'Inactive', message = 'AI kept local' },
+        package.loaded['sidekick.status'].get(h.buffer({ name = kept }))
+      )
+    end)
+
+    it('judges a selection with no file by its buffer', function()
+      local selection = {}
+      local send_calls
+      selection.update_selection = fn()
+      selection.send_selection_update, send_calls = fn()
+      selection.get_latest_selection = fn()
+      package.loaded['claudecode.selection'] = selection
+      package.loaded['claudecode'] = { send_at_mention = fn(true) }
+      ai_guard.guard_claudecode()
+      edit(kept)
+      selection.send_selection_update({ text = 'x' })
+      assert.equals(0, #send_calls)
+      edit(plain)
+      selection.send_selection_update({ text = 'x' })
+      assert.equals(1, #send_calls)
+    end)
+
     it('mentions none of its files to Claude Code', function()
       local claudecode = {}
       local calls
@@ -663,6 +713,14 @@ describe('util.ai_guard', function()
       vim.cmd('DyAiGuardAllow!')
       assert.is_true(sensitive.is_sensitive(0))
       assert.is_truthy(said():find('back on', 1, true))
+    end)
+
+    it('refuses to waive a buffer marked sensitive', function()
+      edit(plain)
+      sensitive.mark(0, 'decrypted by sops')
+      vim.cmd('DyAiGuardAllow')
+      assert.is_true(sensitive.is_sensitive(0))
+      assert.is_truthy(said():find('sensitive as decrypted by sops', 1, true))
     end)
 
     it('refuses to waive a file sensitive by its name', function()

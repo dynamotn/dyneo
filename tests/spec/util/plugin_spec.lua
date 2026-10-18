@@ -49,6 +49,15 @@ describe('util.plugin', function()
       assert.is_true(plugin.set_default('foldmethod', 'marker'))
     end)
 
+    it('leaves an option a script outside $VIMRUNTIME set', function()
+      local dir, cleanup = h.tmpdir()
+      h.write(dir .. '/ftplugin.vim', { 'setlocal foldmethod=syntax' })
+      vim.cmd.source(dir .. '/ftplugin.vim')
+      assert.is_false(plugin.set_default('foldmethod', 'expr'))
+      assert.are.equal('syntax', vim.wo.foldmethod)
+      cleanup()
+    end)
+
     it('leaves an option something else changed', function()
       vim.wo.foldmethod = 'syntax'
       assert.is_false(plugin.set_default('foldmethod', 'expr'))
@@ -209,6 +218,60 @@ describe('util.plugin', function()
       assert.is_true(set[1].opts.silent)
       assert.is_false(set[2].opts.silent)
     end)
+  end)
+
+  it('notifies through lazy.nvim under its own title', function()
+    local lazy_util = require('lazy.core.util')
+    local notified = {}
+    local restores = {}
+    for _, level in ipairs({ 'info', 'warn', 'error' }) do
+      table.insert(
+        restores,
+        h.stub(
+          lazy_util,
+          level,
+          function(msg, opts) table.insert(notified, { level, msg, opts.title }) end
+        )
+      )
+    end
+    plugin.info('a')
+    plugin.warn('b', { title = 'Mine' })
+    plugin.error('c')
+    for _, restore in ipairs(restores) do
+      restore()
+    end
+    assert.same({
+      { 'info', 'a', 'DyNeo' },
+      { 'warn', 'b', 'Mine' },
+      { 'error', 'c', 'DyNeo' },
+    }, notified)
+  end)
+
+  it('warns about a Mason package path that is not there', function()
+    local config = require('lazy.core.config')
+    local warned = {}
+    local restores = {
+      h.stub(config, 'headless', function() return false end),
+      h.stub(plugin, 'warn', function(msg) table.insert(warned, msg) end),
+    }
+    local dir, cleanup = h.tmpdir()
+    local mason = vim.env.MASON
+    vim.env.MASON = dir
+    local path = plugin.get_pkg_path('stylua', 'bin/stylua')
+    assert.equals(dir .. '/packages/stylua/bin/stylua', path)
+    assert.is_true(vim.wait(500, function() return #warned > 0 end))
+    assert.is_truthy(warned[1]:find('**stylua**', 1, true))
+    assert.is_truthy(warned[1]:find('bin/stylua', 1, true))
+    -- One that is there warns nothing
+    h.write(dir .. '/packages/stylua/bin/stylua', { '' })
+    plugin.get_pkg_path('stylua', 'bin/stylua')
+    vim.wait(100)
+    assert.equals(1, #warned)
+    vim.env.MASON = mason
+    for i = #restores, 1, -1 do
+      restores[i]()
+    end
+    cleanup()
   end)
 
   it('builds the path of a Mason package without warning', function()

@@ -46,6 +46,31 @@ describe('util.ai_audit', function()
     assert.equals('/repo/.env', history[2].what)
   end)
 
+  it('names a buffer that is gone by its number', function()
+    local bufnr = h.buffer()
+    vim.api.nvim_buf_delete(bufnr, { force = true })
+    assert.equals(('[buffer %d]'):format(bufnr), audit.describe_buffer(bufnr))
+  end)
+
+  it('keeps only the newer half of a log past a megabyte', function()
+    local line = vim.json.encode({
+      time = 1,
+      integration = 'Copilot',
+      action = 'sent',
+      what = ('/repo/%s.lua'):format(('x'):rep(100)),
+    })
+    local lines = {}
+    for i = 1, math.ceil(1024 * 1024 / #line) + 1 do
+      lines[i] = line
+    end
+    h.write(audit.file(), lines)
+    audit.record('Copilot', 'sent', '/repo/new.lua', nil, 2)
+    local kept = vim.fn.readfile(audit.file())
+    assert.is_true(#kept < #lines)
+    assert.is_true(#kept >= math.floor(#lines / 2))
+    assert.truthy(kept[#kept]:find('/repo/new.lua', 1, true))
+  end)
+
   it('skips a line of the file that does not decode', function()
     h.write(audit.file(), {
       '{"time":1,"integration":"Avante","action":"sent","what":"/x"}',

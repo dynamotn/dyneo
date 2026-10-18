@@ -25,6 +25,33 @@ describe('util.cmp', function()
     'kitty',
   }
 
+  describe('actions', function()
+    after_each(function()
+      vim.snippet.stop()
+      vim.cmd('silent! %bwipeout!')
+    end)
+
+    it('jumps to the next tabstop of an active snippet', function()
+      vim.api.nvim_set_current_buf(h.buffer({ lines = { '' } }))
+      vim.snippet.expand('${1:first} ${2:second}')
+      assert.is_false(vim.snippet.active({ direction = -1 }))
+      assert.is_true(cmp.actions.snippet_forward())
+      vim.wait(
+        100,
+        function() return vim.snippet.active({ direction = -1 }) end
+      )
+      -- On the second tabstop now, with the first behind it
+      assert.is_true(vim.snippet.active({ direction = -1 }))
+      cmp.actions.snippet_stop()
+      assert.is_false(vim.snippet.active())
+    end)
+
+    it('does nothing without a snippet', function()
+      assert.is_nil(cmp.actions.snippet_forward())
+      cmp.actions.snippet_stop()
+    end)
+  end)
+
   describe('sources', function()
     it(
       'gives the common sources for *',

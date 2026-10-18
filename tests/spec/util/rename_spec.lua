@@ -59,6 +59,30 @@ describe('util.rename', function()
     assert.same({ 'old' }, vim.fn.readfile(dir .. '/a.lua'))
   end)
 
+  it('asks for the target when none is given', function()
+    local prompts = {}
+    local answer_with
+    table.insert(
+      restore,
+      h.stub(vim.ui, 'input', function(opts, on_confirm)
+        table.insert(prompts, opts)
+        on_confirm(answer_with)
+      end)
+    )
+    answer_with = nil
+    rename.rename_file()
+    assert.same({}, renamed)
+    answer_with = ''
+    rename.rename_file()
+    assert.same({}, renamed)
+    answer_with = dir .. '/b.lua'
+    rename.rename_file()
+    assert.same({ { from = dir .. '/a.lua', to = dir .. '/b.lua' } }, renamed)
+    assert.equals(3, #prompts)
+    assert.equals('file', prompts[1].completion)
+    assert.equals(vim.fn.fnamemodify(dir .. '/a.lua', ':.'), prompts[1].default)
+  end)
+
   it('says so for a buffer with no file', function()
     vim.cmd.enew()
     rename.rename_file({ to = dir .. '/b.lua' })

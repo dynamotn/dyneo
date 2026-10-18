@@ -43,6 +43,35 @@ describe('util.dap', function()
       assert.is_nil(dap_util.package('unknown'))
     end)
 
+    it('reads the map off the plugin file under lazy.nvim, once', function()
+      local dir, cleanup = h.tmpdir()
+      h.write(dir .. '/source.lua', {
+        'return { nvim_dap_to_package = { python = "debugpy" } }',
+      })
+      local asked = {}
+      local restores = {
+        h.stub(package.loaded, 'lazy.core.config', {}),
+        h.stub(package.loaded, 'util.plugin', {
+          get_plugin_path = function(name, path)
+            table.insert(asked, { name, path })
+            return dir .. '/source.lua'
+          end,
+        }),
+      }
+      h.unload('util.dap')
+      local fresh = require('util.dap')
+      assert.equals('debugpy', fresh.package('python'))
+      assert.is_nil(fresh.package('unknown'))
+      assert.same({
+        { 'mason-nvim-dap.nvim', 'lua/mason-nvim-dap/mappings/source.lua' },
+      }, asked)
+      for i = #restores, 1, -1 do
+        restores[i]()
+      end
+      h.unload('util.dap')
+      cleanup()
+    end)
+
     it(
       'is nil when mason-nvim-dap is not available',
       function() assert.is_nil(dap_util.package('python')) end
