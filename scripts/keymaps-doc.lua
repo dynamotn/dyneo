@@ -50,8 +50,43 @@ end
 ---@type string[]
 local dead = {}
 
--- Every plugin, whatever this machine turns off
-package.preload['per_machine'] = function() DyNeo.used_full_plugins = true end
+-- Every plugin, whatever this machine turns off: with an Obsidian vault,
+-- which obsidian.nvim is only on for, and which may be any directory here
+-- since nothing is opened in it
+package.preload['per_machine'] = function()
+  DyNeo.used_full_plugins = true
+  DyNeo.obsidian.vaults = function() return { { name = 'notes', path = root } } end
+end
+
+--- Call `fn` as on a machine that has every binary, and is a Mac: a mapping
+--- turned on by `executable` (lazygit, mcphub for npm, flutter-tools for
+--- dart, R.nvim for R), by `has('mac')` (xcodebuild) or by the Neovim it
+--- runs on (`has('nvim-0.13')`: ci.nvim) is in the file whichever machine or
+--- channel writes it. Only while `fn` runs: what runs afterwards sees the
+--- machine as it is.
+---@generic T
+---@param fn fun(): T
+---@return T
+local function as_full_machine(fn)
+  local executable, has = vim.fn.executable, vim.fn.has
+  vim.fn.executable = function() return 1 end
+  vim.fn.has = function(feature)
+    if feature == 'mac' or feature:match('^nvim%-') then return 1 end
+    return has(feature)
+  end
+  local ok, result = pcall(fn)
+  vim.fn.executable, vim.fn.has = executable, has
+  if not ok then error(result, 0) end
+  return result
+end
+
+-- `config.keymaps` asks for binaries as it maps, after the specs resolved
+package.preload['config.keymaps'] = function()
+  return as_full_machine(
+    assert(loadfile(vim.fs.joinpath(root, 'lua/config/keymaps.lua')))
+  )
+end
+
 -- ... without installing the ones it has not got: their specs are read,
 -- never loaded. `config.lazy` asks for `util.plugin` once lazy.nvim is on
 -- the runtimepath and before `setup`, which is the moment to step in.
@@ -71,24 +106,12 @@ package.preload['util.plugin'] = function()
       change_detection = { enabled = false },
     })
     if spec ~= nil then opts.spec = spec end
-    -- A spec turned on by a binary (`enabled` or `cond` asking
-    -- `executable`: mcphub for npm, flutter-tools for dart, R.nvim for R) or
-    -- by the Neovim it runs on (`has('nvim-0.13')`: ci.nvim) is read as on a
-    -- machine that has them all, so the file does not change with the
-    -- machine or the channel it is written on. Only while the specs resolve:
-    -- what runs afterwards sees the machine as it is.
+    -- The specs' `enabled` and `cond` resolve as on the full machine
     local LazyPlugin = require('lazy.core.plugin')
     local load = LazyPlugin.load
     LazyPlugin.load = function(...)
-      local executable, has = vim.fn.executable, vim.fn.has
-      vim.fn.executable = function() return 1 end
-      vim.fn.has = function(feature)
-        if feature:match('^nvim%-') then return 1 end
-        return has(feature)
-      end
-      local ok, err = pcall(load, ...)
-      vim.fn.executable, vim.fn.has = executable, has
-      if not ok then error(err, 0) end
+      local args = { ... }
+      return as_full_machine(function() return load(unpack(args)) end)
     end
     return setup(opts)
   end
