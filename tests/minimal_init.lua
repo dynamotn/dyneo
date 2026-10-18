@@ -48,13 +48,14 @@ end
 
 ---@param name string Directory name under lazy.nvim's root
 ---@param url string Where to clone it from when it is missing
+---@param commit? string The one to check out; `lazy-lock.json`'s unless given
 ---@return string
-local function dependency(name, url)
+local function dependency(name, url, commit)
   local installed =
     vim.fs.joinpath(vim.fn.stdpath('data') --[[@as string]], 'lazy', name)
   if vim.uv.fs_stat(installed) then return installed end
   local local_copy = vim.fs.joinpath(root, '.tests', name)
-  local commit = locked_commit(name)
+  commit = commit or locked_commit(name)
   if not vim.uv.fs_stat(local_copy) then
     git({ 'init', '--quiet', local_copy })
     git({ '-C', local_copy, 'remote', 'add', 'origin', url })
@@ -108,5 +109,38 @@ vim.treesitter.start = function(...) pcall(treesitter_start, ...) end
 
 -- Specs live outside `lua/`, so their shared helpers are found by path.
 package.path = vim.fs.joinpath(root, 'tests', '?.lua') .. ';' .. package.path
+
+-- With `DYNEO_COVERAGE` set (`scripts/coverage.sh`), luacov counts the lines
+-- the specs run, from a hook on every line, which the JIT would skip: the
+-- specs run slower, and only on request. Every spec's Neovim adds its count
+-- to the one stats file `tests/luacov.lua` names, which `scripts/test.sh`
+-- runs them one at a time for. Neovim does not close its Lua state on exit,
+-- so the save luacov leaves to a finalizer is done on `VimLeavePre`.
+if vim.env.DYNEO_COVERAGE then
+  local luacov = dependency(
+    'luacov',
+    'https://github.com/lunarmodules/luacov',
+    'b1f9eae400da976b93edb7f94cf5d05f538a0655' -- v0.17.0
+  )
+  -- The reporter `scripts/coverage.lua` draws the lcov file with, checked
+  -- out here so that everything coverage needs comes from one place
+  dependency(
+    'luacov-reporter-lcov',
+    'https://github.com/daurnimator/luacov-reporter-lcov',
+    '188e8fb734646d2600dffe398d9bbad29ecb149a' -- v0.2
+  )
+  package.path = vim.fs.joinpath(luacov, 'src', '?.lua') .. ';' .. package.path
+  local coverage = dofile(vim.fs.joinpath(root, 'tests', 'luacov.lua'))(root)
+  vim.fn.mkdir(coverage.dir, 'p')
+  jit.off()
+  local runner = require('luacov.runner')
+  runner.init(coverage.luacov)
+  vim.api.nvim_create_autocmd('VimLeavePre', {
+    callback = function()
+      debug.sethook(nil)
+      runner.save_stats()
+    end,
+  })
+end
 
 vim.cmd.runtime({ 'plugin/plenary.vim', bang = true })

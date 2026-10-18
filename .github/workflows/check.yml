@@ -44,10 +44,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # The one job that counts coverage: under luacov the specs run
+          # slower, and one report of the same specs is enough
           - channel: latest
             neovim: nightly
             lockfile: lazy-lock.json
             os: ubuntu-latest
+            coverage: true
           - channel: stable
             neovim: stable
             lockfile: lazy-lock.stable.json
@@ -149,7 +152,15 @@ jobs:
       # Plenary and lazy.nvim come from the plugins just installed, so the
       # specs run against the same commits the configuration does.
       - name: Unit tests
-        run: ./scripts/test.sh
+        run: ${{ matrix.coverage && './scripts/coverage.sh' || './scripts/test.sh' }}
+      # The workflow's own token is enough for a public repository; the
+      # action takes the lcov file coverage.sh wrote
+      - name: Report coverage
+        if: matrix.coverage
+        uses: coverallsapp/github-action@8d6379e14d29928660c4ba802d8e85393440b329 # v2.3.8
+        with:
+          file: .tests/coverage/lcov.info
+          format: lcov
       - name: Validate tool names
         run: nvim --clean --headless -l scripts/validate-tools.lua
       # A dead or conflicting mapping fails here, and so does a reference the

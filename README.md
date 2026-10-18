@@ -13,6 +13,7 @@ a supply chain on a leash
 [![Neovim Minimum Version][badge-neovim]][neovim]
 [![Lua][badge-lua]][lua]
 [![Built on lazy.nvim][badge-lazy]][lazy]
+[![Coverage][badge-coverage]][coverage]
 [![License: GPLv3][badge-license]][license]
 
 <sub><i>DyNeo</i> reads as <i>đi nào</i>, Vietnamese for "let's go" —
@@ -26,6 +27,8 @@ and as <b>Dy</b>namo + <b>Neo</b>vim.</sub>
 [lua]: https://lua.org
 [badge-lazy]: https://img.shields.io/badge/built%20on-lazy.nvim-blueviolet.svg?style=flat-square
 [lazy]: https://lazy.folke.io
+[badge-coverage]: https://img.shields.io/coveralls/github/dynamotn/dyneo/main?style=flat-square
+[coverage]: https://coveralls.io/github/dynamotn/dyneo?branch=main
 [badge-license]: https://img.shields.io/badge/License-GPLv3-blue.svg?style=flat-square
 [license]: https://www.gnu.org/licenses/gpl-3.0
 
@@ -230,6 +233,7 @@ Configuration, mappings and commands live inside Neovim:
 
 ```sh
 scripts/test.sh [path]     # plenary-busted specs
+scripts/coverage.sh [path] # the same under luacov, lcov report in .tests/coverage/
 scripts/check-startup.sh   # load everything, open a file of each language
 scripts/keymaps-doc.sh     # regenerate doc/dyneo-keymaps.txt
 pre-commit run --all-files # all of the above, and more

@@ -39,11 +39,15 @@ describe('DyNeo settings', function()
     assert.is_true(#files > 100, tostring(#files))
     for _, file in ipairs(files) do
       for number, line in ipairs(vim.fn.readfile(file)) do
-        for _, name in ipairs(declared) do
-          assert.is_nil(
-            line:find('_G.' .. name .. '%f[^%w_]'),
-            ('%s:%d still uses _G.%s'):format(file, number, name)
-          )
+        -- One check for the few lines that mention `_G` at all, before the
+        -- one per setting: under luacov every line costs
+        if line:find('_G.', 1, true) then
+          for _, name in ipairs(declared) do
+            assert.is_nil(
+              line:find('_G.' .. name .. '%f[^%w_]'),
+              ('%s:%d still uses _G.%s'):format(file, number, name)
+            )
+          end
         end
       end
     end
