@@ -508,6 +508,190 @@ describe('tools.openapi', function()
     end)
   end)
 
+  it('finds no operation where the keys hold none', function()
+    assert.is_nil(openapi.operation_at({ 'openapi: 3.0.3', 'info:' }, 2))
+    -- Nothing at the top level: the keys run out before a path does
+    assert.is_nil(openapi.operation_at({ '  a:', '    b:' }, 2))
+  end)
+
+  it(
+    'takes the first of the examples, and nothing of an unknown type',
+    function()
+      assert.equals('ex', openapi.example(DOC, { examples = { 'ex' } }))
+      assert.equals(vim.NIL, openapi.example(DOC, { type = 'null' }))
+    end
+  )
+
+  it('takes the body from the named examples of the request', function()
+    local doc = vim.deepcopy(DOC)
+    doc.paths['/pets/{petId}'].put.requestBody.content['application/json'] = {
+      examples = { one = { value = { name = 'Rex' } } },
+    }
+    local request =
+      openapi.request(doc, { path = '/pets/{petId}', method = 'put' })
+    assert.is_truthy(request.body:find('"name": "Rex"', 1, true))
+    local hurl = openapi.hurl(request)
+    assert.is_true(vim.list_contains(hurl, 'Content-Type: application/json'))
+    assert.equals('}', hurl[#hurl])
+  end)
+
+  it('refuses a kind of request it does not write', function()
+    local notes = {}
+    local restore = h.stub(
+      vim,
+      'notify',
+      function(msg) table.insert(notes, msg) end
+    )
+    openapi.command({ fargs = { 'nope' } })
+    restore()
+    assert.same({ 'Unknown kind: nope' }, notes)
+  end)
+
+  describe('decode', function()
+    it('says when the buffer is not JSON', function()
+      local bufnr = h.buffer({ lines = { 'nope' }, filetype = 'json' })
+      local doc, err
+      openapi.decode(bufnr, function(d, e)
+        doc, err = d, e
+      end)
+      assert.is_nil(doc)
+      assert.equals('Not a JSON document', err)
+    end)
+
+    it('needs yq for YAML, and says when yq could not read it', function()
+      local bufnr = h.buffer({ lines = { 'a: [' }, filetype = 'yaml' })
+      local restore = h.stub(vim.fn, 'executable', function() return 0 end)
+      local doc, err
+      openapi.decode(bufnr, function(d, e)
+        doc, err = d, e
+      end)
+      restore()
+      assert.is_nil(doc)
+      assert.equals('yq is needed to read an OpenAPI document in YAML', err)
+
+      local dir, cleanup = h.tmpdir()
+      h.write(
+        dir .. '/bin/yq',
+        { '#!/bin/sh', 'echo "bad yaml" >&2', 'exit 1' }
+      )
+      vim.fn.setfperm(dir .. '/bin/yq', 'rwxr-xr-x')
+      local path = vim.env.PATH
+      vim.env.PATH = dir .. '/bin:' .. path
+      err = nil
+      openapi.decode(bufnr, function(d, e)
+        doc, err = d, e
+      end)
+      assert.is_true(vim.wait(5000, function() return err ~= nil end, 10))
+      vim.env.PATH = path
+      cleanup()
+      assert.equals('yq could not read it: bad yaml', err)
+    end)
+  end)
+
+  describe('diff before the spec is read', function()
+    local notes, restore
+
+    before_each(function()
+      notes = {}
+      restore = h.stub(
+        vim,
+        'notify',
+        function(msg) table.insert(notes, msg) end
+      )
+    end)
+    after_each(function() restore() end)
+
+    it('needs oasdiff, and a file', function()
+      local restore_exe = h.stub(vim.fn, 'executable', function() return 0 end)
+      openapi.diff(0)
+      restore_exe()
+      restore_exe = h.stub(vim.fn, 'executable', function() return 1 end)
+      vim.api.nvim_set_current_buf(h.buffer({ lines = YAML }))
+      openapi.diff(0)
+      restore_exe()
+      assert.same(
+        { 'oasdiff is not installed', 'This buffer holds no file' },
+        notes
+      )
+    end)
+
+    it('says when git could not run', function()
+      local restore_exe = h.stub(
+        vim.fn,
+        'executable',
+        function(name) return name == 'git' and 0 or 1 end
+      )
+      local bufnr = h.buffer({ name = '/tmp/x/openapi.yaml', lines = YAML })
+      openapi.diff(bufnr)
+      assert.is_true(vim.wait(5000, function() return #notes > 0 end, 10))
+      restore_exe()
+      assert.same({ 'git could not run' }, notes)
+    end)
+
+    it('says when the spec is not in git at the revision', function()
+      local dir, cleanup = h.tmpdir()
+      vim.system({ 'git', 'init', '-q' }, { cwd = dir }):wait()
+      h.write(dir .. '/openapi.yaml', YAML)
+      local restore_exe = h.stub(
+        vim.fn,
+        'executable',
+        function(name) return name == 'oasdiff' and 1 or 0 end
+      )
+      vim.cmd.edit(dir .. '/openapi.yaml')
+      openapi.diff(0)
+      restore_exe()
+      restore_exe = h.stub(vim.fn, 'executable', function() return 1 end)
+      openapi.diff(0, 'HEAD')
+      assert.is_true(vim.wait(5000, function() return #notes > 1 end, 10))
+      restore_exe()
+      cleanup()
+      assert.same(
+        { 'git could not run', 'openapi.yaml is not in git at HEAD' },
+        notes
+      )
+    end)
+
+    it('removes the copies it still holds when Neovim leaves', function()
+      local dir, cleanup = h.tmpdir()
+      h.write(dir .. '/openapi.yaml', YAML)
+      local path = vim.env.PATH
+      vim.env.PATH = dir .. '/no-bin'
+      openapi.compare(0, 'HEAD', dir .. '/openapi.yaml', 'old', { 'new' }, true)
+      vim.env.PATH = path
+      local left = dir .. '/.oasdiff-base-left.yaml'
+      h.write(left, { 'copy' })
+      openapi._leftover[left] = true
+      vim.api.nvim_exec_autocmds(
+        'VimLeavePre',
+        { group = 'dy_openapi_leftover' }
+      )
+      assert.is_nil(vim.uv.fs_stat(left))
+      cleanup()
+    end)
+
+    it('says when oasdiff printed something that is not JSON', function()
+      local dir, cleanup = h.tmpdir()
+      h.write(dir .. '/openapi.yaml', YAML)
+      h.write(dir .. '/bin/oasdiff', { '#!/bin/sh', 'echo garbage' })
+      vim.fn.setfperm(dir .. '/bin/oasdiff', 'rwxr-xr-x')
+      local path = vim.env.PATH
+      vim.env.PATH = dir .. '/bin:' .. path
+      vim.cmd.edit(dir .. '/openapi.yaml')
+      openapi.compare(
+        vim.api.nvim_get_current_buf(),
+        'HEAD',
+        dir .. '/openapi.yaml',
+        'old',
+        YAML,
+        false
+      )
+      assert.is_true(vim.wait(5000, function() return #notes > 0 end, 10))
+      vim.env.PATH = path
+      cleanup()
+      assert.same({ 'oasdiff printed something that is not JSON' }, notes)
+    end)
+  end)
+
   it('reads YAML through yq', function()
     if vim.fn.executable('yq') ~= 1 then
       assert(not vim.env.CI, 'no yq on CI')

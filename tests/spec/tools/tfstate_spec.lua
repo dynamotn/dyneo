@@ -257,6 +257,177 @@ describe('tools.tfstate', function()
     assert.equals('tofu state list failed:\nBackend not initialized', notes[1])
   end)
 
+  it('says when neither tofu nor terraform is installed', function()
+    local restore = h.stub(vim.fn, 'executable', function() return 0 end)
+    edit_at(2)
+    tfstate.show()
+    restore()
+    assert.same({ 'Neither tofu nor terraform is installed' }, notes)
+  end)
+
+  it('says when the buffer holds no file', function()
+    vim.api.nvim_set_current_buf(h.buffer({ lines = MAIN }))
+    tfstate.show()
+    tfstate.list_orphans()
+    assert.same(
+      { 'This buffer holds no file', 'This buffer holds no file' },
+      notes
+    )
+  end)
+
+  it('says when the cursor is in no block', function()
+    edit_at(4)
+    tfstate.show()
+    assert.same({ 'The cursor is in no resource, data or module block' }, notes)
+  end)
+
+  it('shows every address of a module', function()
+    tofu({ 'module.vpc.aws_vpc.main', 'module.vpc.aws_subnet.a' })
+    edit_at(15)
+    tfstate.show()
+    settle(function() return vim.bo.buftype == 'nofile' end)
+    assert.same(
+      { 'module.vpc.aws_vpc.main', 'module.vpc.aws_subnet.a' },
+      vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    )
+    assert.equals('tfstate://module.vpc', vim.api.nvim_buf_get_name(0))
+  end)
+
+  it('says when the block is not in the state', function()
+    tofu({})
+    edit_at(2)
+    tfstate.show()
+    settle(function() return #notes > 0 end)
+    assert.equals(
+      'aws_s3_bucket.logs is not in the state; <localleader>I writes an import block',
+      notes[1]
+    )
+  end)
+
+  it('shows nothing when no instance is picked', function()
+    tofu({ 'aws_instance.web[0]', 'aws_instance.web[1]' })
+    local restore = h.stub(
+      vim.ui,
+      'select',
+      function(_, _, choose) choose(nil) end
+    )
+    edit_at(6)
+    tfstate.show()
+    settle(function() return vim.fn.filereadable(log) == 1 end)
+    vim.wait(200)
+    restore()
+    assert.equals(1, #vim.fn.readfile(log))
+    assert.is_not.equals('nofile', vim.bo.buftype)
+  end)
+
+  it('says when the state printed more than can be read', function()
+    h.write(
+      dir .. '/bin/tofu',
+      { '#!/bin/sh', "yes 'aws_s3_bucket.logs' | head -c 4096" }
+    )
+    vim.fn.setfperm(dir .. '/bin/tofu', 'rwxr-xr-x')
+    local restore = h.stub(require('util.system'), 'MAX_BYTES', 64)
+    edit_at(2)
+    tfstate.show()
+    settle(function() return #notes > 0 end)
+    restore()
+    assert.equals(
+      'tofu state list failed:\nmore output than can be read',
+      notes[1]
+    )
+  end)
+
+  it('says when every object of the state is declared', function()
+    tofu({ 'aws_s3_bucket.logs', 'module.vpc.aws_vpc.main' })
+    edit_at(1)
+    tfstate.list_orphans()
+    settle(function() return #notes > 0 end)
+    assert.equals('Every object of the state is declared in ' .. dir, notes[1])
+  end)
+
+  describe('import', function()
+    it('imports a resource only', function()
+      edit_at(15)
+      tfstate.import()
+      assert.same({ 'Only a resource is imported' }, notes)
+    end)
+
+    it('writes nothing without an ID', function()
+      tofu({})
+      local restore = h.stub(
+        vim.ui,
+        'input',
+        function(_, answer) answer('') end
+      )
+      edit_at(2)
+      tfstate.import()
+      settle(function() return vim.fn.filereadable(log) == 1 end)
+      vim.wait(200)
+      restore()
+      assert.same(MAIN, vim.api.nvim_buf_get_lines(0, 0, -1, false))
+    end)
+
+    it('writes nothing into a buffer that went away', function()
+      tofu({})
+      local bufnr = vim.api.nvim_get_current_buf()
+      local restore = h.stub(vim.ui, 'input', function(_, answer)
+        vim.cmd('bwipeout! ' .. vim.api.nvim_get_current_buf())
+        answer('i-1')
+      end)
+      edit_at(2)
+      bufnr = vim.api.nvim_get_current_buf()
+      tfstate.import()
+      settle(function() return not vim.api.nvim_buf_is_valid(bufnr) end)
+      vim.wait(200)
+      restore()
+      assert.same({}, notes)
+    end)
+
+    it(
+      'says when the block left the buffer while the state was read',
+      function()
+        tofu({})
+        local restore = h.stub(vim.ui, 'input', function(_, answer)
+          vim.api.nvim_buf_set_lines(0, 0, 3, false, {})
+          answer('i-1')
+        end)
+        edit_at(2)
+        tfstate.import()
+        settle(function() return #notes > 0 end)
+        restore()
+        assert.equals('aws_s3_bucket.logs is no longer in the buffer', notes[1])
+      end
+    )
+
+    it('says a counted resource needs the key of the instance', function()
+      tofu({})
+      local restore = h.stub(
+        vim.ui,
+        'input',
+        function(_, answer) answer('i-1') end
+      )
+      edit_at(6)
+      tfstate.import()
+      settle(function() return #notes > 0 end)
+      restore()
+      assert.equals(
+        'aws_instance.web has a count or a for_each: give `to` the key of the instance',
+        notes[1]
+      )
+      assert.equals('import {', vim.api.nvim_buf_get_lines(0, 4, 5, false)[1])
+    end)
+  end)
+
+  it('runs a subcommand, and says when there is none', function()
+    tfstate.command({ fargs = { 'nope' } })
+    assert.same({ 'Unknown subcommand: nope' }, notes)
+    vim.api.nvim_set_current_buf(h.buffer({ lines = MAIN }))
+    tfstate.command({ fargs = { 'orphans' } })
+    assert.equals('This buffer holds no file', notes[2])
+    tfstate.command({ fargs = {} })
+    assert.equals('This buffer holds no file', notes[3])
+  end)
+
   it('maps a Terraform buffer', function()
     local bufnr = h.buffer({ lines = MAIN })
     tfstate.attach(bufnr)

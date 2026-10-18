@@ -151,7 +151,123 @@ describe('tools.helm', function()
     )
     vim.api.nvim_set_current_buf(h.buffer({ lines = { '{{ .Values.x }}' } }))
     helm.value()
+    helm.show_usages()
+    helm.unused(0)
+    helm.attach(0)
     restore()
-    assert.same({ 'Not in a Helm chart' }, notes)
+    assert.same({
+      'Not in a Helm chart',
+      'Not in a Helm chart',
+      'Not in a Helm chart',
+    }, notes)
+    assert.same({}, vim.api.nvim_buf_get_keymap(0, 'n'))
+  end)
+
+  describe('with notifications kept', function()
+    local notes, restore
+
+    before_each(function()
+      notes = {}
+      restore = h.stub(
+        vim,
+        'notify',
+        function(msg, level) table.insert(notes, { msg, level }) end
+      )
+    end)
+    after_each(function() restore() end)
+
+    it('says when no .Values is under the cursor', function()
+      vim.cmd.edit(dir .. '/templates/deploy.yaml')
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+      helm.value()
+      assert.same(
+        { { 'No .Values under the cursor', vim.log.levels.WARN } },
+        notes
+      )
+    end)
+
+    it('says when the chart has no values.yaml', function()
+      vim.fn.delete(dir .. '/values.yaml')
+      vim.cmd.edit(dir .. '/templates/deploy.yaml')
+      vim.api.nvim_win_set_cursor(0, { 1, 50 })
+      helm.value()
+      assert.same(
+        { { 'The chart has no values.yaml', vim.log.levels.WARN } },
+        notes
+      )
+    end)
+
+    it('goes to the deepest key the values file sets', function()
+      h.write(dir .. '/templates/extra.yaml', {
+        'digest: {{ .Values.image.digest }}',
+        'nope: {{ .Values.nope.x }}',
+      })
+      vim.cmd.edit(dir .. '/templates/extra.yaml')
+      vim.api.nvim_win_set_cursor(0, { 1, 15 })
+      helm.value()
+      assert.equals(dir .. '/values.yaml', vim.api.nvim_buf_get_name(0))
+      assert.equals(2, vim.api.nvim_win_get_cursor(0)[1])
+      assert.same(
+        { { 'values.yaml sets image, not image.digest', vim.log.levels.INFO } },
+        notes
+      )
+    end)
+
+    it('says when the values file does not set the path', function()
+      h.write(dir .. '/templates/extra.yaml', { 'nope: {{ .Values.nope.x }}' })
+      vim.cmd.edit(dir .. '/templates/extra.yaml')
+      vim.api.nvim_win_set_cursor(0, { 1, 12 })
+      helm.value()
+      assert.equals(
+        dir .. '/templates/extra.yaml',
+        vim.api.nvim_buf_get_name(0)
+      )
+      assert.same(
+        { { 'values.yaml does not set nope.x', vim.log.levels.WARN } },
+        notes
+      )
+    end)
+
+    it('says when the line holds no key, or no template uses it', function()
+      vim.cmd.edit(dir .. '/values.yaml')
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+      helm.show_usages()
+      vim.api.nvim_win_set_cursor(0, { 13, 0 })
+      helm.show_usages()
+      assert.same({
+        { 'No key on this line', vim.log.levels.WARN },
+        { 'No template uses unused', vim.log.levels.INFO },
+      }, notes)
+    end)
+  end)
+
+  it('maps going to the value on a template', function()
+    vim.cmd.edit(dir .. '/templates/deploy.yaml')
+    vim.bo.filetype = 'helm'
+    helm.attach(0)
+    local descs = vim.tbl_map(
+      function(map) return map.desc end,
+      vim.api.nvim_buf_get_keymap(0, 'n')
+    )
+    assert.same({ 'Go To Value (Helm)' }, descs)
+  end)
+
+  it('knows a subchart by its directory, its tarball or its alias', function()
+    vim.fn.mkdir(dir .. '/charts/postgres', 'p')
+    h.write(dir .. '/charts/mysql-1.2.3.tgz', { '' })
+    h.write(dir .. '/Chart.yaml', {
+      'apiVersion: v2',
+      'name: web',
+      'dependencies:',
+      '  - name: redis',
+      '    alias: cache',
+    })
+    assert.same({
+      global = true,
+      redis = true,
+      cache = true,
+      postgres = true,
+      mysql = true,
+    }, helm.subcharts(dir))
   end)
 end)

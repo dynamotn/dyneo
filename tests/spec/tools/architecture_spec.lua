@@ -260,6 +260,133 @@ describe('tools.architecture', function()
     cleanup()
   end)
 
+  it('skips the lines of a file that open no block', function()
+    local graph = arch.terraform({
+      ['/m/vars.tf'] = {
+        '# the inputs',
+        'variable "owner_id" {',
+        '  type = string',
+        '}',
+        'resource "aws_s3_bucket" "logs" {}',
+      },
+    })
+    assert.same(
+      { 'aws_s3_bucket.logs' },
+      vim.tbl_map(function(n) return n.id end, graph.nodes)
+    )
+  end)
+
+  it('reads the pod of a CronJob where it is', function()
+    local graph = arch.kube({
+      {
+        apiVersion = 'v1',
+        kind = 'Service',
+        metadata = { name = 'cron' },
+        spec = { selector = { app = 'cron' } },
+      },
+      {
+        apiVersion = 'v1',
+        kind = 'Pod',
+        metadata = { name = 'once', labels = { app = 'cron' } },
+        spec = {},
+      },
+      {
+        apiVersion = 'batch/v1',
+        kind = 'CronJob',
+        metadata = { name = 'cron' },
+        spec = {
+          jobTemplate = {
+            spec = {
+              template = {
+                metadata = { labels = { app = 'cron' } },
+                spec = { serviceAccountName = 'runner' },
+              },
+            },
+          },
+        },
+      },
+    })
+    assert.same({
+      'CronJob/cron -> ServiceAccount/runner',
+      'Service/cron -> CronJob/cron',
+      'Service/cron -> Pod/once',
+    }, edges(graph))
+  end)
+
+  it('needs yq for YAML', function()
+    local restore = h.stub(vim.fn, 'executable', function() return 0 end)
+    local docs, err
+    arch.yaml_docs({ '/x.yaml' }, function(d, e)
+      docs, err = d, e
+    end)
+    restore()
+    assert.is_nil(docs)
+    assert.equals('yq is needed to read YAML', err)
+  end)
+
+  it('reads the Terraform of the directory of the buffer', function()
+    local dir, cleanup = h.tmpdir()
+    h.write(dir .. '/main.tf', {
+      'module "vpc" {',
+      '  source = "./vpc"',
+      '}',
+      'resource "aws_instance" "web" {',
+      '  subnet = module.vpc.id',
+      '}',
+    })
+    h.write(dir .. '/README.md', { 'resource "x" "y" {}' })
+    vim.cmd.edit(dir .. '/main.tf')
+    vim.bo.filetype = 'terraform'
+    local graph, title
+    arch.read(function(g, t)
+      graph, title = g, t
+    end)
+    cleanup()
+    assert.equals('Terraform: ' .. vim.fn.fnamemodify(dir, ':~'), title)
+    assert.same({ 'aws_instance.web -> module.vpc' }, edges(graph))
+  end)
+
+  it('reads a compose file, and says when yq could not', function()
+    local dir, cleanup = h.tmpdir()
+    h.write(dir .. '/compose.yaml', { 'services:', '  web: {image: nginx}' })
+    vim.cmd.edit(dir .. '/compose.yaml')
+    vim.bo.filetype = 'yaml.docker-compose'
+    local answers = {
+      { { { services = { web = { image = 'nginx' } } } }, nil, {} },
+      { nil, 'yq is needed to read YAML', nil },
+      { {}, nil, { 'compose.yaml' } },
+    }
+    local restore = h.stub(arch, 'yaml_docs', function(files, on_done)
+      assert.same({ dir .. '/compose.yaml' }, files)
+      on_done(unpack(table.remove(answers, 1), 1, 3))
+    end)
+    local got = {}
+    for _ = 1, 3 do
+      arch.read(function(g, t) table.insert(got, { g, t }) end)
+    end
+    restore()
+    cleanup()
+    assert.equals(
+      'Compose: ' .. vim.fn.fnamemodify(dir .. '/compose.yaml', ':~'),
+      got[1][2]
+    )
+    assert.equals('web', got[1][1].nodes[1].id)
+    assert.same({ nil, 'yq is needed to read YAML' }, got[2])
+    assert.same({ nil, 'yq could not read compose.yaml' }, got[3])
+  end)
+
+  it('draws nothing of an empty graph', function()
+    local notes = {}
+    local restore = h.stub(
+      vim,
+      'notify',
+      function(msg) table.insert(notes, msg) end
+    )
+    arch.draw({ nodes = {}, edges = {} }, 'T')
+    restore()
+    assert.same({ 'Nothing declared to draw in T' }, notes)
+  end)
+
   it('says what it draws', function()
     local notes = {}
     local restore = h.stub(

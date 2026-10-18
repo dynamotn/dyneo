@@ -107,6 +107,51 @@ describe('tools.sbom', function()
     }, components)
   end)
 
+  it('lists what lazy.nvim and Mason installed, sorted by name', function()
+    local Config = require('lazy.core.config')
+    h.write(dir .. '/lazy-lock.json', {
+      vim.json.encode({
+        ['b.nvim'] = { branch = 'main', commit = 'bbb' },
+        ['a.nvim'] = { branch = 'main', commit = 'aaa' },
+      }),
+    })
+    h.write(dir .. '/mason/packages/a.nvim/mason-receipt.json', {
+      vim.json.encode({
+        name = 'a.nvim',
+        source = { id = 'pkg:npm/a.nvim@1.0.0' },
+      }),
+    })
+    local restores = {
+      h.stub(Config, 'options', { lockfile = dir .. '/lazy-lock.json' }),
+      h.stub(Config, 'plugins', {
+        ['a.nvim'] = { url = 'https://github.com/o/a.nvim' },
+        ['b.nvim'] = { url = 'https://github.com/o/b.nvim' },
+      }),
+      h.stub(
+        package.loaded,
+        'mason.settings',
+        { current = { install_root_dir = dir .. '/mason' } }
+      ),
+    }
+    local ok, components = pcall(sbom.components)
+    for _, restore in ipairs(restores) do
+      restore()
+    end
+    assert(ok, components)
+    assert.same(
+      { 'a.nvim lazy.nvim', 'a.nvim mason', 'b.nvim lazy.nvim' },
+      vim.tbl_map(function(c) return c.name .. ' ' .. c.source end, components)
+    )
+    assert.equals('pkg:github/o/a.nvim@aaa', components[1].purl)
+  end)
+
+  it('reads a lockfile from disk when no lines are given', function()
+    h.write(dir .. '/go.mod', { 'require x.org/y v1.0.0' })
+    assert.equals(1, #sbom.lockfile(dir .. '/go.mod'))
+    assert.same({}, sbom.lockfile(dir .. '/missing/go.mod'))
+    assert.is_nil(sbom.lockfile(dir .. '/notes.txt'))
+  end)
+
   it('writes a CycloneDX document', function()
     local bom = sbom.bom({
       {
@@ -460,6 +505,83 @@ describe('tools.sbom', function()
       sbom.lock()
       assert.is_true(vim.wait(10000, function() return #notes >= 2 end, 20))
       assert.equals('OSV query failed: boom', notes[2])
+    end)
+
+    it('asks OSV about what is installed, and shows what it knows', function()
+      local restore = h.stub(
+        sbom,
+        'components',
+        function()
+          return {
+            {
+              name = 'x',
+              version = '1',
+              purl = 'pkg:npm/x@1',
+              source = 'mason',
+            },
+          }
+        end
+      )
+      h.write(dir .. '/response.1', {
+        vim.json.encode({ results = { { vulns = { { id = 'GHSA-x' } } } } }),
+      })
+      h.write(dir .. '/response.2', { vim.json.encode({ results = { {} } }) })
+      h.write(dir .. '/response.3', { 'garbage' })
+      sbom.command({ fargs = { 'osv' } })
+      assert.is_true(
+        vim.wait(10000, function() return vim.bo.filetype == 'markdown' end, 20)
+      )
+      assert.equals('Asking OSV about 1 plugins and packages…', notes[1])
+      assert.equals(
+        '# Known vulnerabilities: 1',
+        vim.api.nvim_buf_get_lines(0, 0, 1, false)[1]
+      )
+      sbom.osv()
+      assert.is_true(vim.wait(10000, function() return #notes >= 3 end, 20))
+      assert.equals(
+        'No known vulnerabilities in the 1 plugins and packages asked',
+        notes[3]
+      )
+      sbom.osv()
+      assert.is_true(vim.wait(10000, function() return #notes >= 5 end, 20))
+      restore()
+      assert.equals('OSV answered with something that is not JSON', notes[5])
+    end)
+
+    it('says what it needs before asking OSV', function()
+      local restore = h.stub(sbom, 'components', function() return {} end)
+      sbom.osv()
+      restore()
+      restore = h.stub(
+        sbom,
+        'components',
+        function()
+          return {
+            {
+              name = 'x',
+              version = '1',
+              purl = 'pkg:npm/x@1',
+              source = 'mason',
+            },
+          }
+        end
+      )
+      h.write(dir .. '/go.mod', { 'require x.org/y v1.0.0' })
+      local restore_exe = h.stub(vim.fn, 'executable', function() return 0 end)
+      sbom.osv()
+      sbom.ask_lockfiles({ dir .. '/go.mod' })
+      restore_exe()
+      restore()
+      sbom.ask_lockfiles(nil, 'boom')
+      h.write(dir .. '/empty/go.mod', { 'module x' })
+      sbom.ask_lockfiles({ dir .. '/empty/go.mod' })
+      assert.same({
+        'Nothing to ask OSV about',
+        'curl is not installed',
+        'curl is not installed',
+        'Could not list the lockfiles: boom',
+        'No package in 1 lockfiles',
+      }, notes)
     end)
 
     it('says when there is no lockfile', function()

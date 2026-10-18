@@ -787,6 +787,206 @@ describe('tools.runbook', function()
       end)
     end)
 
+    it('reads the quoting of shells, Python and JS in their corners', function()
+      local function bound(code, lang)
+        return (runbook.bind(code, lang, { x = 'v' }))
+      end
+      -- `$(…)` inside double quotes holds parentheses of its own
+      assert.equals(
+        'echo "$(f (a) "${RUNBOOK_X}")"',
+        bound('echo "$(f (a) ${input:x})"', 'bash')
+      )
+      -- A Python string ends with its line
+      assert.equals(
+        "x = 'abc\n__import__('os').environ['RUNBOOK_X']",
+        bound("x = 'abc\n${input:x}", 'python')
+      )
+      -- A JS block comment is skipped, its input left as it is
+      assert.equals(
+        "/* ${input:x} */ f(process.env['RUNBOOK_X'])",
+        bound('/* ${input:x} */ f(${input:x})', 'js')
+      )
+      -- Triple quotes, and a prefix that is the end of a name
+      assert.equals(
+        [[x = f"""a{__import__('os').environ['RUNBOOK_X']}"""]],
+        bound('x = """a${input:x}"""', 'python')
+      )
+      assert.equals(
+        [[xrf"{__import__('os').environ['RUNBOOK_X']}"]],
+        bound('xr"${input:x}"', 'python')
+      )
+      -- A backslash escapes the next character; `<<` with no word is no
+      -- heredoc
+      assert.equals(
+        'echo \\$ "${RUNBOOK_X}"\ncat << $w\n"${RUNBOOK_X}"',
+        bound('echo \\$ ${input:x}\ncat << $w\n${input:x}', 'bash')
+      )
+    end)
+
+    it('runs nothing in a buffer that cannot take the output', function()
+      local bufnr = buffer({ '```sh', 'echo hi', '```' })
+      vim.b[bufnr].dy_runbook_allowed = nil
+      vim.bo[bufnr].modifiable = false
+      local notes = {}
+      local restore = h.stub(
+        vim,
+        'notify',
+        function(msg) table.insert(notes, msg) end
+      )
+      assert.is_false(runbook.allowed(bufnr))
+      restore()
+      assert.same({ 'The buffer cannot take the output' }, notes)
+      vim.bo[bufnr].modifiable = true
+      local restore_confirm = h.stub(vim.fn, 'confirm', function() return 1 end)
+      assert.is_true(runbook.allowed(bufnr))
+      restore_confirm()
+      assert.is_true(vim.b[bufnr].dy_runbook_allowed)
+      assert.is_nil(
+        runbook.output_after({ '```sh', 'x', '```', '```output', 'open' }, 3)
+      )
+    end)
+
+    it('says why a block cannot run', function()
+      local bufnr = buffer({
+        '```rust',
+        'fn main() {}',
+        '```',
+        '```sh',
+        'echo hi',
+        '```',
+      })
+      local notes = {}
+      local restore = h.stub(
+        vim,
+        'notify',
+        function(msg) table.insert(notes, msg) end
+      )
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      local results = {}
+      local function done(ok) table.insert(results, ok) end
+      runbook.run_block(bufnr, runbook.block_at(lines, 2), done)
+      local restore_exe = h.stub(vim.fn, 'executable', function() return 0 end)
+      runbook.run_block(bufnr, runbook.block_at(lines, 5), done)
+      restore_exe()
+      -- A runner whose binary is gone between the check and the start
+      runbook.RUNNERS.gone = { dir .. '/nope', '-c' }
+      vim.api.nvim_buf_set_lines(bufnr, 0, 1, false, { '```gone' })
+      lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      restore_exe = h.stub(vim.fn, 'executable', function() return 1 end)
+      runbook.run_block(bufnr, runbook.block_at(lines, 2), done)
+      restore_exe()
+      vim.wait(200)
+      restore()
+      assert.same({ false, false, false }, results)
+      assert.same({
+        'No runner for a `rust` block',
+        'sh is not installed',
+        dir .. '/nope cannot run',
+      }, notes)
+      assert.equals(6, vim.api.nvim_buf_line_count(bufnr))
+    end)
+
+    it('runs nothing its inputs cannot be bound into', function()
+      local bufnr = buffer({ '```python', "x = b'a' b'${input:a}'", '```' })
+      local restores = {
+        h.stub(vim.ui, 'input', function(_, on_confirm) on_confirm('v') end),
+      }
+      local notes = {}
+      table.insert(
+        restores,
+        h.stub(vim, 'notify', function(msg) table.insert(notes, msg) end)
+      )
+      local finished
+      runbook.run_block(
+        bufnr,
+        runbook.block_at(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), 2),
+        function(ok) finished = ok end
+      )
+      for _, restore in ipairs(restores) do
+        restore()
+      end
+      assert.is_false(finished)
+      assert.is_truthy(notes[1]:find('^Not run: a bytes literal'))
+    end)
+
+    it('stops what runs when told to, or when the editor leaves', function()
+      local bufnr = buffer({ '```sh', 'exec sleep 30', '```' })
+      local block =
+        runbook.block_at(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), 2)
+      local finished
+      runbook.run_block(bufnr, block, function(ok) finished = ok end)
+      -- A process group already gone: the process itself is signalled
+      local restore = h.stub(vim.uv, 'kill', function() return nil, 'ESRCH' end)
+      runbook.command({ fargs = { 'stop' } })
+      restore()
+      settle(function() return finished ~= nil end)
+      assert.is_false(finished)
+
+      finished = nil
+      runbook.run_block(bufnr, block, function(ok) finished = ok end)
+      vim.api.nvim_exec_autocmds('VimLeavePre', { group = 'dy_runbook' })
+      settle(function() return finished ~= nil end)
+      assert.is_false(finished)
+    end)
+
+    it('says when the record cannot be written', function()
+      local notes = {}
+      local restore = h.stub(
+        vim,
+        'notify',
+        function(msg) table.insert(notes, msg) end
+      )
+      vim.api.nvim_set_current_buf(h.buffer({ lines = { '# notes' } }))
+      runbook.record()
+      local bufnr = buffer({ '```sh', 'echo hi', '```' })
+      -- A directory where the record would go
+      vim.fn.mkdir(dir .. '/record', 'p')
+      local restore_path = h.stub(
+        runbook,
+        'log_path',
+        function() return dir .. '/record' end
+      )
+      runbook.record()
+      restore_path()
+      vim.b[bufnr].dy_runbook_log = dir .. '/record'
+      local finished
+      runbook.run_block(
+        bufnr,
+        runbook.block_at(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), 2),
+        function(ok) finished = ok end
+      )
+      settle(function() return finished ~= nil end)
+      restore()
+      assert.same({
+        'Only the runs of a Markdown file are recorded',
+        'Could not start the record ' .. dir .. '/record',
+        'Could not add to the record ' .. dir .. '/record',
+      }, notes)
+    end)
+
+    it('says when there is nothing where it is told to run', function()
+      local notes = {}
+      local restore = h.stub(
+        vim,
+        'notify',
+        function(msg) table.insert(notes, msg) end
+      )
+      buffer({ 'text', '```sh', 'echo hi', '```', 'after' })
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+      runbook.run()
+      vim.api.nvim_win_set_cursor(0, { 5, 0 })
+      runbook.run_from()
+      runbook.run_all(2)
+      runbook.command({ fargs = { 'nope' } })
+      restore()
+      assert.same({
+        'The cursor is in no code block',
+        'No block from the cursor down',
+        'No block to run',
+        'Unknown subcommand: nope',
+      }, notes)
+    end)
+
     it('runs from the block under the cursor down', function()
       local bufnr = buffer({
         '```sh',

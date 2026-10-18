@@ -144,6 +144,23 @@ describe('tools.mason-dytoy', function()
         )
       end
     )
+
+    it('finds the mise directory through the environment', function()
+      local saved = { vim.env.MISE_DATA_DIR, vim.env.XDG_DATA_HOME }
+      executable(dir .. '/mise/shims/tool')
+      vim.env.MISE_DATA_DIR = dir .. '/mise'
+      assert.are.equal(
+        dir .. '/mise/shims/tool',
+        dytoy().resolve('tool', { path = '' })
+      )
+      vim.env.MISE_DATA_DIR = nil
+      vim.env.XDG_DATA_HOME = dir
+      assert.are.equal(
+        dir .. '/mise/shims/tool',
+        dytoy().resolve('tool', { path = '' })
+      )
+      vim.env.MISE_DATA_DIR, vim.env.XDG_DATA_HOME = saved[1], saved[2]
+    end)
   end)
 
   describe('askpass', function()
@@ -322,6 +339,133 @@ describe('tools.mason-dytoy', function()
       'refuses to pick a version',
       function() assert.is_true(dytoy().get_versions():is_failure()) end
     )
+
+    describe('install', function()
+      local dir, cleanup, module, output, env
+
+      --- An install context for a package with one command, `tool`
+      ---@param spawn fun(opts: table): any
+      local function context(spawn)
+        return {
+          package = { spec = { bin = { tool = 'bin/tool' } } },
+          cwd = {
+            get = function() return dir .. '/pkg' end,
+          },
+          stdio_sink = {
+            stdout = function(_, text) table.insert(output, text) end,
+          },
+          spawn = { dytoy = spawn },
+        }
+      end
+
+      --- Install `tool` through `ctx`, as mason would, and wait
+      local function install(ctx)
+        return require('mason-core.async').run_blocking(
+          function() return module.install(ctx, { tool = 'tool' }) end
+        )
+      end
+
+      --- A dytoy on `PATH`, or none
+      local function with_dytoy(installed)
+        return h.stub(vim.fn, 'executable', function(name)
+          if name == 'dytoy' then return installed and 1 or 0 end
+          return 1
+        end)
+      end
+
+      before_each(function()
+        dir, cleanup = h.tmpdir()
+        output = {}
+        module = dytoy()
+        env = { vim.env.PATH, vim.env.MISE_DATA_DIR }
+        vim.env.PATH = dir .. '/system'
+        vim.env.MISE_DATA_DIR = dir .. '/mise'
+      end)
+      after_each(function()
+        vim.env.PATH, vim.env.MISE_DATA_DIR = env[1], env[2]
+        cleanup()
+      end)
+
+      it('links a command already there, without dytoy', function()
+        executable(dir .. '/system/tool')
+        local result = install(context(function() error('spawned') end))
+        assert.is_true(result:is_success())
+        assert.are.equal(
+          dir .. '/system/tool',
+          vim.uv.fs_readlink(dir .. '/pkg/bin/tool')
+        )
+        assert.are.same({
+          'tool is already installed, linking it.\n',
+          'Linking tool -> ' .. dir .. '/system/tool\n',
+        }, output)
+      end)
+
+      it('needs dytoy for a command that is missing', function()
+        local restore = with_dytoy(false)
+        local result = install(context(function() error('spawned') end))
+        restore()
+        assert.is_true(result:is_failure())
+        assert.are.equal(
+          'dytoy is not installed, and tool is missing.',
+          result:err_or_nil()
+        )
+      end)
+
+      it('runs dytoy with a sudo that asks here, then links', function()
+        executable(dir .. '/system/sudo')
+        local restore = with_dytoy(true)
+        local given
+        local result = install(context(function(opts)
+          given = opts
+          executable(dir .. '/system/tool')
+          return require('mason-core.result').success()
+        end))
+        restore()
+        assert.is_true(result:is_success())
+        assert.are.same({ '--no-tui', '--tool', 'tool' }, { unpack(given) })
+        assert.are.equal('1', given.env.NO_COLOR)
+        -- The helpers come first on PATH, with mason's own bin left out
+        local helpers = vim.fs.dirname(given.env.SUDO_ASKPASS)
+        assert.is_truthy(vim.startswith(given.env.PATH, helpers .. ':'))
+        assert.is_falsy(
+          given.env.PATH:find(
+            require('mason-core.installer.InstallLocation').global():bin(),
+            1,
+            true
+          )
+        )
+        -- Gone once the install is over, the token with them
+        assert.is_nil(vim.uv.fs_stat(helpers))
+        assert.are.same({}, module.pending)
+        assert.are.equal('Installing tool with dytoy…\n', output[1])
+        assert.are.equal(
+          dir .. '/system/tool',
+          vim.uv.fs_readlink(dir .. '/pkg/bin/tool')
+        )
+      end)
+
+      it('fails when dytoy could not run, or installed nothing', function()
+        local restore = with_dytoy(true)
+        local raised = install(context(function() error('boom', 0) end))
+        local nothing = install(
+          context(function() return require('mason-core.result').success() end)
+        )
+        restore()
+        assert.are.equal('boom', raised:err_or_nil())
+        assert.are.equal(
+          'dytoy installed nothing that runs "tool".',
+          nothing:err_or_nil()
+        )
+      end)
+
+      it('fails when the link cannot be made', function()
+        executable(dir .. '/system/tool')
+        vim.fn.mkdir(dir .. '/pkg/bin/tool', 'p')
+        local result = install(context(function() error('spawned') end))
+        assert.is_true(result:is_failure())
+        assert.is_truthy(tostring(result:err_or_nil()):find('EEXIST', 1, true))
+      end)
+    end)
 
     it('is the compiler for pkg:dytoy once registered', function()
       local module = dytoy()

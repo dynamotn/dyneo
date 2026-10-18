@@ -319,6 +319,82 @@ describe('tools.logview', function()
       assert.is_true(#lines() > 10)
     end)
 
+    it('keeps the last records only past the line cap', function()
+      logview.command({ fargs = { file } })
+      local bufnr = vim.api.nvim_get_current_buf()
+      local restore = h.stub(logview, 'MAX_LINES', 2)
+      logview.reload(bufnr)
+      restore()
+      assert.same(
+        { 'DEBUG tick [r1]', 'WARN  slow [r1]' },
+        vim.list_slice(lines(), 2)
+      )
+    end)
+
+    it('asks for the level, and for the jq expression', function()
+      logview.command({ fargs = { file } })
+      local bufnr = vim.api.nvim_get_current_buf()
+      local offered
+      local restore_select = h.stub(vim.ui, 'select', function(items, _, on)
+        offered = items
+        on(nil)
+      end)
+      logview.min_level(bufnr)
+      assert.same(logview.LEVELS, offered)
+      assert.equals(5, #lines())
+      restore_select()
+      restore_select = h.stub(
+        vim.ui,
+        'select',
+        function(_, _, on) on('error') end
+      )
+      logview.min_level(bufnr)
+      restore_select()
+      assert.same({ 'ERROR failed [r2]' }, vim.list_slice(lines(), 2))
+
+      local asked = {}
+      local restore_exe = h.stub(
+        vim.fn,
+        'executable',
+        function(name) return name == 'jq' and 0 or 1 end
+      )
+      local restore_input = h.stub(vim.ui, 'input', function(opts, on)
+        table.insert(asked, opts.prompt)
+        on(#asked == 1 and '' or '.level == "warn"')
+      end)
+      logview.jq(bufnr)
+      assert.same({}, notes)
+      logview.jq(bufnr)
+      restore_input()
+      restore_exe()
+      assert.equals(2, #asked)
+      assert.same({ 'jq is not installed' }, notes)
+    end)
+
+    it('runs jq on nothing when no record is JSON', function()
+      h.write(file, { 'plain line', 'another' })
+      logview.command({ fargs = { file } })
+      local bufnr = vim.api.nvim_get_current_buf()
+      local restore_exe = h.stub(vim.fn, 'executable', function() return 1 end)
+      logview.jq(bufnr, '.x')
+      restore_exe()
+      assert.same({ 'No JSON record to run jq on' }, notes)
+    end)
+
+    it('says when the command of a source is not installed', function()
+      local restore_exe = h.stub(vim.fn, 'executable', function() return 0 end)
+      logview.command({ fargs = { 'journal' } })
+      restore_exe()
+      assert.same({ 'journalctl is not installed' }, notes)
+    end)
+
+    it('says when only the end of a file was read', function()
+      local restore = h.stub(logview, 'MAX_BYTES', 20)
+      logview.command({ fargs = { file } })
+      restore()
+      assert.same({ 'Read the last 0 MiB only' }, notes)
+    end)
+
     it('says what it needs', function()
       logview.command({ fargs = {} })
       logview.command({ fargs = { 'kube' } })
