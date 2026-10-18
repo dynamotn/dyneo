@@ -383,12 +383,173 @@ describe('tools.kube', function()
       )
     end)
 
+    it('applies nothing without a current context', function()
+      fake('kubectl', '', 0)
+      vim.cmd.edit(dir .. '/app/deploy.yaml')
+      local restore = h.stub(vim.fn, 'confirm', function() return 1 end)
+      kube.apply()
+      settle(1)
+      restore()
+      assert.same({ 'No current kubectl context' }, notes)
+      assert.equals(1, #logged())
+    end)
+
     it('applies no chart with kubectl', function()
       kubectl()
       vim.cmd.edit(dir .. '/chart/templates/svc.yaml')
       kube.apply()
       assert.is_truthy(notes[1]:find('helm upgrade', 1, true))
       assert.equals(0, vim.fn.filereadable(log))
+    end)
+
+    it('says what is missing before it asks the cluster', function()
+      vim.env.PATH = dir .. '/bin'
+      vim.cmd.edit(dir .. '/app/deploy.yaml')
+      kube.diff()
+      settle(1)
+      vim.api.nvim_set_current_buf(h.buffer({ lines = { 'kind: Pod' } }))
+      kube.diff()
+      kube.command({ fargs = { 'nope' } })
+      kube.command({ fargs = {} })
+      vim.api.nvim_set_current_buf(h.buffer({ lines = { 'metadata: {}' } }))
+      kube.explain()
+      vim.api.nvim_set_current_buf(
+        h.buffer({ lines = { 'apiVersion: v1', 'kind: Pod' } })
+      )
+      local restore = h.stub(vim.fn, 'executable', function() return 0 end)
+      kube.explain()
+      restore()
+      assert.same({
+        'kubectl is not installed',
+        'This buffer holds no file',
+        'Unknown subcommand: nope',
+        'This buffer holds no file',
+        'No `kind` in this document',
+        'kubectl is not installed',
+      }, notes)
+    end)
+
+    it('says when helm or kubectl diff failed', function()
+      h.write(
+        dir .. '/bin/helm',
+        { '#!/bin/sh', 'echo "chart broken" >&2', 'exit 1' }
+      )
+      vim.fn.setfperm(dir .. '/bin/helm', 'rwxr-xr-x')
+      vim.cmd.edit(dir .. '/chart/values-prod.yaml')
+      kube.dry_run()
+      settle(1)
+      h.write(
+        dir .. '/bin/kubectl',
+        { '#!/bin/sh', 'echo "unreachable" >&2', 'exit 2' }
+      )
+      vim.fn.setfperm(dir .. '/bin/kubectl', 'rwxr-xr-x')
+      vim.cmd.edit(dir .. '/app/deploy.yaml')
+      kube.diff()
+      settle(2)
+      assert.same({
+        'helm template failed:\nchart broken',
+        'kubectl diff failed:\nunreachable',
+      }, notes)
+    end)
+
+    it('renders a kustomization, and nothing of a plain manifest', function()
+      fake('kubectl', 'kind: Service', 0)
+      vim.cmd.edit(dir .. '/app/deploy.yaml')
+      kube.render()
+      assert.same({ 'A plain manifest renders to itself' }, notes)
+      vim.cmd.edit(dir .. '/app/kustomization.yaml')
+      kube.render()
+      assert.is_true(
+        vim.wait(
+          10000,
+          function()
+            return vim.api.nvim_buf_get_name(0):find('kube://render/', 1, true)
+              ~= nil
+          end,
+          20
+        )
+      )
+      assert.same(
+        { 'kind: Service' },
+        vim.api.nvim_buf_get_lines(0, 0, -1, false)
+      )
+      assert.equals('yaml', vim.bo.filetype)
+      assert.equals('kubectl kustomize ' .. dir .. '/app', logged()[1])
+
+      h.write(
+        dir .. '/bin/kubectl',
+        { '#!/bin/sh', 'echo "no kustomization" >&2', 'exit 1' }
+      )
+      vim.fn.setfperm(dir .. '/bin/kubectl', 'rwxr-xr-x')
+      vim.cmd.edit(dir .. '/app/kustomization.yaml')
+      kube.render()
+      settle(2)
+      assert.equals('kubectl failed:\nno kustomization', notes[2])
+    end)
+
+    it('switches to the context or the namespace picked', function()
+      h.write(dir .. '/bin/kubectl', {
+        '#!/bin/sh',
+        'echo "kubectl $*" >> "' .. log .. '"',
+        'case "$*" in',
+        [[  *get-contexts*) printf 'dev\nprod\n' ;;]],
+        [[  *'get namespaces'*) printf 'namespace/a\nnamespace/b\n' ;;]],
+        '  *use-context*) echo "no such context" >&2; exit 1 ;;',
+        '  *) echo ok ;;',
+        'esac',
+      })
+      vim.fn.setfperm(dir .. '/bin/kubectl', 'rwxr-xr-x')
+      local offered = {}
+      local restore = h.stub(vim.ui, 'select', function(items, opts, choose)
+        table.insert(offered, { opts.prompt, items })
+        choose(items[2])
+      end)
+      kube.context()
+      settle(1)
+      kube.namespace()
+      settle(2)
+      restore()
+      assert.same({
+        { 'Context', { 'dev', 'prod' } },
+        { 'Namespace', { 'a', 'b' } },
+      }, offered)
+      assert.same({ 'no such context', 'Namespace is now b' }, notes)
+      assert.equals(
+        'kubectl config set-context --current --namespace=b',
+        logged()[#logged()]
+      )
+
+      -- Nothing picked, nothing switched; a list that failed is said
+      restore = h.stub(vim.ui, 'select', function(_, _, choose) choose(nil) end)
+      kube.context()
+      vim.wait(500)
+      restore()
+      assert.equals(2, #notes)
+      h.write(
+        dir .. '/bin/kubectl',
+        { '#!/bin/sh', 'echo "denied" >&2', 'exit 1' }
+      )
+      vim.fn.setfperm(dir .. '/bin/kubectl', 'rwxr-xr-x')
+      kube.context()
+      settle(3)
+      assert.equals('denied', notes[3])
+    end)
+
+    it('groups its mappings under which-key when it is there', function()
+      local added
+      local restore = h.stub(
+        package.loaded,
+        'which-key',
+        { add = function(spec) added = spec end }
+      )
+      vim.cmd.edit(dir .. '/app/deploy.yaml')
+      local bufnr = vim.api.nvim_get_current_buf()
+      kube.attach(bufnr)
+      restore()
+      assert.same(
+        { { '<localleader>k', group = 'kubernetes', buffer = bufnr } },
+        added
+      )
     end)
 
     it('acts on no buffer with changes not written', function()
