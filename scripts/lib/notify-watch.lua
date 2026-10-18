@@ -9,6 +9,11 @@
 --
 -- Plugins swap `vim.notify` out as they load, so the wrapper is put back on
 -- top after each file sourced and each `User` event (`LazyDone`, `VeryLazy`).
+--
+-- An error is kept, not passed on: headless, the notifier echoes it on
+-- stderr as `Error ...`, which `check-startup.sh` reads as the configuration
+-- failing, while the check excuses one about a tool whose install it skipped
+-- itself. The check prints the ones that stand, under the same `Error:`.
 
 _G._dy_check_errors = _G._dy_check_errors or {}
 
@@ -18,6 +23,7 @@ local function wrap()
   _G._dy_check_notify = function(msg, level, opts)
     if (level or vim.log.levels.INFO) >= vim.log.levels.ERROR then
       table.insert(_G._dy_check_errors, tostring(msg))
+      return
     end
     return current(msg, level, opts)
   end
