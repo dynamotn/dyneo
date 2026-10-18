@@ -70,6 +70,45 @@ describe('plugins.lang.python', function()
       assert.same({ bufnr }, synced)
       assert.equal(0, asked)
     end)
+
+    it('takes the current buffer when asked about none', function()
+      local bufnr = h.buffer({ name = 'w.py' })
+      vim.api.nvim_set_current_buf(bufnr)
+      require('venv-selector.uv2').run_uv_flow_if_needed(nil)
+      require('venv-selector.uv2').run_uv_flow_if_needed(0)
+      assert.same({ bufnr, bufnr }, synced)
+      -- A buffer gone by the time it runs
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+      assert.is_nil(require('venv-selector.uv2').run_uv_flow_if_needed(bufnr))
+      assert.are.equal(2, #synced)
+    end)
+  end)
+
+  it('starts IPython when the environment has it', function()
+    table.insert(
+      restores,
+      h.stub(package.loaded, 'iron.fts.common', {
+        bracketed_paste_python = function(_, extras) return extras.command end,
+      })
+    )
+    table.insert(
+      restores,
+      h.stub(package.loaded, 'iron.view', {
+        split = { vertical = { botright = function() end } },
+      })
+    )
+    table.insert(
+      restores,
+      h.stub(
+        vim.fn,
+        'executable',
+        function(name) return name == 'ipython' and 1 or 0 end
+      )
+    )
+    local python =
+      spec('Vigemus/iron.nvim').opts().config.repl_definition.python
+    assert.same({ 'ipython', '--no-autoindent' }, python.command())
+    assert.same({ 'ipython', '--no-autoindent' }, python.format({ 'x' }, {}))
   end)
 
   it('pastes in the format of the REPL that was started', function()
