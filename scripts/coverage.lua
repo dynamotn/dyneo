@@ -60,14 +60,25 @@ require('luacov.reporter.lcov').report()
 -- one that runs; LuaJIT gives such a line no bytecode of its own, so the
 -- hook never reports it and it reads as missed however often the call ran.
 -- The lines that can be reported are those with bytecode, read off the
--- compiled file and its nested functions, as cluacov does in C.
+-- compiled file and its nested functions, as cluacov does in C. A line
+-- holding nothing but the jump of a test on the line before it -- the
+-- second operand of an `and` or `or` split over lines -- is not one of
+-- them: the test takes the jump itself, and the jump never runs on its own.
 local jit_util = require('jit.util')
+local bcnames = require('jit.vmdef').bcnames
+---@param fn function|userdata A function or a prototype of one
+---@param pc integer
+---@return string
+local function opcode(fn, pc)
+  local op = bit.band(jit_util.funcbc(fn, pc), 0xff)
+  return (bcnames:sub(op * 6 + 1, op * 6 + 6):gsub(' ', ''))
+end
 ---@param fn function|userdata A function or a prototype of one
 ---@param lines table<integer, true>
 local function bytecode_lines(fn, lines)
   for pc = 1, jit_util.funcinfo(fn).bytecodes do
     local line = jit_util.funcinfo(fn, pc).currentline
-    if line then lines[line] = true end
+    if line and opcode(fn, pc) ~= 'JMP' then lines[line] = true end
   end
   -- The nested functions are among the constants, from the end
   local i = 1
