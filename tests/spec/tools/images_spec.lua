@@ -265,7 +265,14 @@ describe('tools.images', function()
   end)
 
   it('says when it has nothing to look digests up with', function()
+    -- The runner may have its own skopeo under /usr/bin
+    local executable = vim.fn.executable
+    local restore = h.stub(vim.fn, 'executable', function(name)
+      if name == 'crane' or name == 'skopeo' then return 0 end
+      return executable(name)
+    end)
     images.pin(h.buffer({ lines = { 'FROM golang:1.23' } }))
+    restore()
     assert.same({ 'Neither crane nor skopeo is installed' }, notes)
   end)
 
