@@ -350,6 +350,105 @@ describe('tools.data', function()
     assert.is_nil(vim.uv.fs_stat(dir .. '/args'))
   end)
 
+  it('sums up the file of the current buffer, or its stats', function()
+    duckdb({ 'echo summary' })
+    h.write(dir .. '/x.csv', { 'a,b', '1,2' })
+    vim.cmd.edit(dir .. '/x.csv')
+    vim.cmd.DyData()
+    local bufnr = vim.api.nvim_get_current_buf()
+    assert.is_true(
+      vim.wait(5000, function() return lines(bufnr)[1] == 'summary' end, 20)
+    )
+    assert.equal(
+      'dydata://' .. dir .. '/x.csv',
+      vim.api.nvim_buf_get_name(bufnr)
+    )
+
+    vim.cmd.DyData('stats ' .. dir .. '/x.csv')
+    local stats = vim.api.nvim_get_current_buf()
+    assert.is_true(
+      vim.wait(5000, function() return lines(stats)[1] == 'summary' end, 20)
+    )
+    assert.equal(
+      'dydata://stats/' .. dir .. '/x.csv',
+      vim.api.nvim_buf_get_name(stats)
+    )
+    assert.matches(
+      'SUMMARIZE',
+      table.concat(vim.fn.readfile(dir .. '/script'), '\n')
+    )
+  end)
+
+  it('says so when the buffer has no file to sum up', function()
+    duckdb()
+    vim.api.nvim_set_current_buf(h.buffer({}))
+    vim.cmd.DyData()
+    assert.equal('No file given', notes[1])
+    assert.is_nil(vim.uv.fs_stat(dir .. '/args'))
+  end)
+
+  it('shows why a Parquet file named like a pattern is not read', function()
+    duckdb()
+    h.write(dir .. '/part[1].parquet', { 'PAR1' })
+    local bufnr = h.buffer({ name = dir .. '/part[1].parquet' })
+    data.read(bufnr)
+    assert.same(
+      { 'Not read: DuckDB would read its name as a pattern' },
+      lines(bufnr)
+    )
+    assert.equal('nofile', vim.bo[bufnr].buftype)
+    assert.is_nil(vim.uv.fs_stat(dir .. '/args'))
+  end)
+
+  it('shows the result buffer again once its window was closed', function()
+    duckdb({ 'echo one' })
+    vim.cmd.cd(dir)
+    data.sql('SELECT 1;')
+    local result = data.result_buf
+    assert.is_true(
+      vim.wait(5000, function() return lines(result)[1] == 'one' end, 20)
+    )
+    vim.api.nvim_win_close(vim.fn.win_findbuf(result)[1], true)
+    assert.same({}, vim.fn.win_findbuf(result))
+    local origin = vim.api.nvim_get_current_win()
+    duckdb({ 'echo two' })
+    data.sql('SELECT 2;')
+    assert.equal(result, data.result_buf)
+    assert.equal(1, #vim.fn.win_findbuf(result))
+    assert.equal(origin, vim.api.nvim_get_current_win())
+    assert.is_true(
+      vim.wait(5000, function() return lines(result)[1] == 'two' end, 20)
+    )
+  end)
+
+  it('runs nothing of an empty selection', function()
+    duckdb()
+    vim.api.nvim_set_current_buf(h.buffer({ lines = { '', '  ' } }))
+    data.sql(nil, 1, 2)
+    assert.equal('No SQL to run', notes[1])
+    assert.equal(0, asked)
+    assert.is_nil(vim.uv.fs_stat(dir .. '/args'))
+  end)
+
+  it('stops every run on leaving', function()
+    duckdb({ 'sleep 1', 'touch "' .. dir .. '/finished"' })
+    vim.cmd.cd(dir)
+    data.sql('SELECT 1;')
+    local result = data.result_buf
+    assert.is_true(
+      vim.wait(
+        5000,
+        function() return vim.uv.fs_stat(dir .. '/args') ~= nil end,
+        20
+      )
+    )
+    assert.is_not_nil(data.jobs[result])
+    vim.api.nvim_exec_autocmds('VimLeavePre', { group = 'dy_data_jobs' })
+    assert.is_nil(data.jobs[result])
+    vim.wait(1500)
+    assert.is_nil(vim.uv.fs_stat(dir .. '/finished'))
+  end)
+
   it('hands a pattern to DuckDB rather than listing its files', function()
     duckdb({ 'echo matched' })
     h.write(dir .. '/a.csv', { 'x', '1' })

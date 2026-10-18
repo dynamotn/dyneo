@@ -273,3 +273,255 @@ describe('config.languages', function()
     end)
   end
 end)
+
+-- The functions the specs carry: a server's `enabled`, a formatter's
+-- arguments or condition, and the autopairs rules, each given the buffer or
+-- the line it would see
+describe('config.languages callbacks', function()
+  local h = require('helpers')
+  local dir, cleanup
+
+  before_each(function()
+    dir, cleanup = h.tmpdir()
+  end)
+  after_each(function()
+    vim.cmd('silent! %bwipeout!')
+    cleanup()
+  end)
+
+  --- The first entry of `list` named `name`
+  ---@param list table[]
+  ---@param name string
+  ---@return table
+  local function entry(list, name)
+    for _, item in ipairs(list) do
+      if type(item) == 'table' and item[1] == name then return item end
+    end
+    error('no entry ' .. name)
+  end
+
+  --- A buffer named `path` with `lines`, set up as `filetype`
+  local function buffer(path, lines, filetype)
+    return h.buffer({ name = path, lines = lines, filetype = filetype })
+  end
+
+  it('hands djlint the profile of the buffer', function()
+    local djlint = entry(languages.htmldjango.formatters, 'djlint')
+    local django = buffer(dir .. '/a.html', {}, 'htmldjango')
+    assert.same(
+      { '--profile', 'django' },
+      djlint.opts.prepend_args(nil, { buf = django })
+    )
+    local jinja = buffer(dir .. '/b.j2', {}, 'jinja')
+    assert.same(
+      { '--profile', 'jinja' },
+      djlint.opts.prepend_args(nil, { buf = jinja })
+    )
+  end)
+
+  describe('servers of every buffer', function()
+    local servers = languages['*'].lsp_servers
+
+    it('start sonarlint where a project asks for it and java runs', function()
+      local sonarlint = entry(servers, 'sonarlint')
+      local restore = h.stub(
+        vim.fn,
+        'executable',
+        function(name) return name == 'java' and 1 or 0 end
+      )
+      local outside = buffer(dir .. '/a.lua', {})
+      assert.is_false(sonarlint.enabled(outside))
+      h.write(dir .. '/proj/sonar-project.properties', { '' })
+      local inside = buffer(dir .. '/proj/a.lua', {})
+      assert.is_true(sonarlint.enabled(inside))
+      restore()
+      restore = h.stub(vim.fn, 'executable', function() return 0 end)
+      assert.is_false(sonarlint.enabled(inside))
+      restore()
+    end)
+
+    it('start typos and ast-grep only with their config', function()
+      local typos = entry(servers, 'typos_lsp')
+      local ast_grep = entry(servers, 'ast_grep')
+      local plain = buffer(dir .. '/a.lua', {})
+      assert.is_false(typos.enabled(plain))
+      assert.is_false(ast_grep.enabled(plain))
+      h.write(dir .. '/proj/_typos.toml', { '' })
+      h.write(dir .. '/proj/sgconfig.yml', { '' })
+      local configured = buffer(dir .. '/proj/a.lua', {})
+      assert.is_true(typos.enabled(configured))
+      assert.is_true(ast_grep.enabled(configured))
+    end)
+  end)
+
+  it('runs jq and jsonlint on strict JSON only', function()
+    local jq = entry(languages.json.formatters, 'jq')
+    local jsonlint = entry(languages.json.linters, 'jsonlint')
+    local strict = buffer(dir .. '/a.json', {}, 'json')
+    local loose = buffer(dir .. '/b.jsonc', {}, 'jsonc')
+    assert.is_true(jq.opts.condition(nil, { buf = strict }))
+    assert.is_false(jq.opts.condition(nil, { buf = loose }))
+    vim.api.nvim_set_current_buf(strict)
+    assert.is_true(jsonlint.opts.condition())
+    vim.api.nvim_set_current_buf(loose)
+    assert.is_false(jsonlint.opts.condition())
+  end)
+
+  it('gives sqlfluff a dialect only without a project config', function()
+    local sqlfluff = entry(languages.sql.formatters, 'sqlfluff')
+    local cases = { mysql = 'mysql', plsql = 'oracle', sql = 'ansi' }
+    for filetype, dialect in pairs(cases) do
+      local bufnr = buffer(dir .. '/q.' .. filetype, {}, filetype)
+      assert.same(
+        { 'format', '--dialect=' .. dialect, '-' },
+        sqlfluff.opts.args(nil, { buf = bufnr, dirname = dir }),
+        filetype
+      )
+    end
+    h.write(dir .. '/proj/.sqlfluff', { '[sqlfluff]', 'dialect = postgres' })
+    local bufnr = buffer(dir .. '/proj/q.sql', {}, 'mysql')
+    assert.same(
+      { 'format', '-' },
+      sqlfluff.opts.args(nil, { buf = bufnr, dirname = dir .. '/proj' })
+    )
+  end)
+
+  it('runs the Markdown formatters only where they have work', function()
+    local toc = entry(languages.markdown.formatters, 'markdown-toc')
+    local lint = entry(languages.markdown.formatters, 'markdownlint-cli2')
+    local plain = buffer(dir .. '/a.md', { '# Title', 'text' })
+    assert.is_nil(toc.opts.condition(nil, { buf = plain }))
+    assert.is_false(lint.opts.condition(nil, { buf = plain }))
+    local with_toc = buffer(dir .. '/b.md', { '# Title', '<!-- toc -->' })
+    assert.is_true(toc.opts.condition(nil, { buf = with_toc }))
+    local ns = vim.api.nvim_create_namespace('dy_test_markdownlint')
+    vim.diagnostic.set(ns, plain, {
+      { lnum = 1, col = 0, message = 'MD001', source = 'markdownlint' },
+    })
+    assert.is_true(lint.opts.condition(nil, { buf = plain }))
+    vim.diagnostic.reset(ns, plain)
+  end)
+
+  describe('autopairs rules', function()
+    --- A `rule` that records every builder call made on it, and a `cond`
+    --- whose every condition is a marker, so the rules can be looked up by
+    --- their start and their callbacks run
+    local function recorder()
+      local rules = {}
+      local function rule(start, finish, filetypes)
+        local r = { start = start, finish = finish, filetypes = filetypes }
+        local calls = {}
+        r.calls = calls
+        return setmetatable(r, {
+          __index = function(_, method)
+            return function(self, ...)
+              calls[method] = calls[method] or {}
+              table.insert(calls[method], { ... })
+              return self
+            end
+          end,
+        }),
+          table.insert(rules, r)
+      end
+      local cond = setmetatable({}, {
+        __index = function(_, name)
+          return function(...) return { cond = name, ... } end
+        end,
+      })
+      return rule, cond, rules
+    end
+
+    --- The rules of `spec`, by their start, and all of them in order
+    ---@param spec DyLangSpec
+    ---@return table<string, table>
+    ---@return table[]
+    local function rules_of(spec)
+      local rule, cond, rules = recorder()
+      spec.autopairs(spec.filetypes, rule, cond, nil)
+      local by_start = {}
+      for _, r in ipairs(rules) do
+        by_start[r.start] = r
+      end
+      return by_start, rules
+    end
+
+    it('space out an arrow function body typed after )', function()
+      local arrow = rules_of(languages.javascript)['=>']
+      local replace = arrow.calls.replace_endpair[1][1]
+      assert.equals('<BS><BS> => {  }', replace({ line = '() =', col = 4 }))
+      assert.equals(' {  }', replace({ line = 'x =', col = 3 }))
+      assert.same({ { 2 } }, arrow.calls.set_end_pair_length)
+    end)
+
+    describe('of every buffer', function()
+      local rules
+      before_each(function() rules = rules_of(languages['*']) end)
+
+      it('pad a bracket pair with spaces, and delete both', function()
+        local space = rules[' ']
+        local replace = space.calls.replace_endpair[1][1]
+        assert.equals(' ', replace({ line = '()', col = 2 }))
+        assert.equals(' ', replace({ line = 'f{}', col = 3 }))
+        assert.equals('', replace({ line = 'ab', col = 2 }))
+        local del = space.calls.with_del[1][1]
+        vim.api.nvim_set_current_buf(h.buffer({ lines = { '(  )' } }))
+        vim.api.nvim_win_set_cursor(0, { 1, 2 })
+        assert.is_true(del({ line = '(  )' }))
+        assert.is_false(del({ line = 'abcd' }))
+        assert.equals('done', space.calls.with_pair[1][1].cond)
+      end)
+
+      it('move over a closing bracket typed before its space', function()
+        local _, all = rules_of(languages['*'])
+        for _, close in ipairs({ ')', '}', ']' }) do
+          -- Rules sharing the empty start are told apart by their end
+          local found
+          for _, candidate in ipairs(all) do
+            if candidate.finish == ' ' .. close then found = candidate end
+          end
+          assert.is_not_nil(found, close)
+          assert.is_true(found.calls.with_move[1][1]({ char = close }))
+          assert.is_false(found.calls.with_move[1][1]({ char = 'x' }))
+          assert.same({ { close } }, found.calls.use_key)
+        end
+      end)
+
+      it('add a space after a comma followed by text', function()
+        local replace = rules[','].calls.replace_endpair[1][1]
+        assert.equals(' ', replace({ line = ',a', col = 2 }))
+        assert.equals('', replace({ line = ', ', col = 2 }))
+      end)
+
+      it('space out an equals sign', function()
+        local equal = rules['=']
+        assert.equals('not_inside_quote', equal.calls.with_pair[1][1].cond)
+        local pair = equal.calls.with_pair[2][1]
+        assert.is_true(pair({ line = 'a=', col = 2 }))
+        assert.is_false(pair({ line = '(=', col = 2 }))
+        local replace = equal.calls.replace_endpair[1][1]
+        assert.equals('<BS> = ', replace({ line = 'a=', col = 2 }))
+        assert.equals(' ', replace({ line = 'a ==', col = 4 }))
+        assert.equals('<BS><BS>= ', replace({ line = 'a= =', col = 4 }))
+        assert.equals('', replace({ line = '( =', col = 3 }))
+        assert.is_true(vim.list_contains(equal.filetypes, '-sh'))
+      end)
+    end)
+
+    it('close LaTeX environments, fractions and ConTeXt starts', function()
+      local rules = rules_of(languages.latex)
+      local begin = rules['\\begin{'].calls.replace_endpair[1][1]
+      assert.equals('\\end{', begin({ line = '\\begin{', col = 8 }))
+      local closed = begin({ line = '\\begin{itemize}', col = 8 })
+      assert.is_truthy(closed:match('^\\end{.*}$'))
+      assert.is_true(rules['\\frac{'].calls.with_move[1][1]({ char = '}' }))
+      assert.is_false(rules['\\frac{'].calls.with_move[1][1]({ char = 'x' }))
+      local start = rules['\\start(%w*) $'].calls.replace_endpair[1][1]
+      assert.equals(
+        ' \\stopitemize',
+        start({ line = '\\startitemize ', col = 14 })
+      )
+      assert.equals('', start({ line = '\\start ', col = 7 }))
+      assert.equals('<space>', rules['\\start(%w*) $'].calls.use_key[1][1])
+    end)
+  end)
+end)

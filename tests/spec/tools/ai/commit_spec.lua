@@ -142,6 +142,47 @@ describe('tools.ai.commit', function()
     assert.is_false(vim.uv.fs_stat(dir .. '/sent') ~= nil)
   end)
 
+  it('says when the prompt is missing', function()
+    message_buffer()
+    local prompts = require('tools.ai.prompts')
+    table.insert(
+      restores,
+      h.stub(prompts, 'template', function() return nil end)
+    )
+    commit.write()
+    assert.is_truthy(notes[1]:find('No prompt ' .. commit.PROMPT, 1, true))
+    assert.same({}, audit)
+  end)
+
+  it('refuses a message that is in no work tree', function()
+    vim.fn.mkdir(dir .. '/loose', 'p')
+    local bufnr = h.buffer({ name = dir .. '/loose/COMMIT_EDITMSG' })
+    vim.bo[bufnr].filetype = 'gitcommit'
+    vim.api.nvim_set_current_buf(bufnr)
+    commit.write()
+    wait_for(function() return #notes > 0 end, 'said why')
+    assert.is_truthy(notes[1]:find('Not in a git work tree', 1, true))
+    assert.same(
+      { 'refused', dir .. '/loose/COMMIT_EDITMSG', 'commit' },
+      audit[1]
+    )
+  end)
+
+  it('says when the diff was cut', function()
+    h.write(repo .. '/a.txt', { 'one', 'two' })
+    git('add', 'a.txt')
+    require('tools.ai.git').MAX_DIFF = 16
+    local bufnr = message_buffer()
+    commit.write()
+    wait_for(
+      function() return vim.api.nvim_buf_get_lines(bufnr, 0, 1, false)[1] ~= '' end,
+      'wrote the message'
+    )
+    assert.is_truthy(notes[1]:find('The diff was cut at 0 KiB', 1, true))
+    local sent = table.concat(vim.fn.readfile(dir .. '/sent'), '\n')
+    assert.is_truthy(sent:find('(diff cut at 0 KiB)', 1, true))
+  end)
+
   it('only runs in a commit message', function()
     vim.api.nvim_set_current_buf(h.buffer({ lines = { 'x' } }))
     commit.write()

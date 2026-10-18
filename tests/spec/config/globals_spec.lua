@@ -73,6 +73,13 @@ describe('config.globals', function()
     end)
   end)
 
+  it('needs a released Neovim on stable and a nightly on latest', function()
+    DyNeo.plugin_channel = 'stable'
+    assert.are.equal('0.12.0', DyNeo.neovim_floor())
+    DyNeo.plugin_channel = 'latest'
+    assert.are.equal('0.13.0', DyNeo.neovim_floor())
+  end)
+
   it('enables every language of config.languages', function()
     local expected = vim.tbl_keys(require('config.languages'))
     table.sort(expected)
@@ -128,6 +135,32 @@ describe('config.globals', function()
   end)
 
   describe('vim.print', function()
+    it('goes through dd once a UI is attached and Snacks loaded', function()
+      local seen = {}
+      local restores = {
+        h.stub(vim.api, 'nvim_list_uis', function() return { {} } end),
+        h.stub(_G, 'dd', function(...) seen = { ... } end),
+        h.stub(package.loaded, 'snacks', {}),
+      }
+      vim.api.nvim_exec_autocmds('UIEnter', { group = 'dy_print_ui' })
+      vim.wait(100, function() return false end)
+      local a, b = vim.print('x', 2)
+      for i = #restores, 1, -1 do
+        restores[i]()
+      end
+      assert.are.same({ 'x', 2 }, seen)
+      assert.are.equal('x', a)
+      assert.are.equal(2, b)
+      -- The UI gone, the built-in is back
+      vim.api.nvim_exec_autocmds('UILeave', { group = 'dy_print_ui' })
+      vim.wait(100, function() return false end)
+      seen = {}
+      local restore = h.stub(_G, 'dd', function(...) seen = { ... } end)
+      vim.print('y')
+      restore()
+      assert.are.same({}, seen)
+    end)
+
     it(
       'stays the built-in without a UI and hands its arguments back',
       function()

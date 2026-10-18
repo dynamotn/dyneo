@@ -312,6 +312,18 @@ describe('util.yaml_schema', function()
       assert.are.equal(1500, deferred[1].timeout)
     end)
 
+    it('redraws the statusline through lualine when it is loaded', function()
+      local refreshed = {}
+      package.loaded['lualine'] = {
+        refresh = function(opts) table.insert(refreshed, opts) end,
+      }
+      local bufnr = open(dir .. '/a.yaml', {})
+      fake_client({ buffers = { [bufnr] = true } })
+      yaml_schema.set(bufnr, { uri = 'kubernetes', name = 'Kubernetes' }, true)
+      package.loaded['lualine'] = nil
+      assert.are.same({ { place = { 'statusline' } } }, refreshed)
+    end)
+
     it('records a choice made by detection as automatic', function()
       local bufnr = open(dir .. '/a.yaml', {})
       fake_client({ buffers = { [bufnr] = true } })
@@ -887,6 +899,33 @@ describe('util.yaml_schema', function()
       local bufnr = open(project .. '/a.yaml', {})
       yaml_schema.select(bufnr)
       assert.are.equal(vim.log.levels.WARN, notified[1].level)
+    end)
+
+    it('says when the search of fd was cut short', function()
+      local executable = vim.fn.executable
+      stub(vim.fn, 'executable', function(name)
+        if name == 'fd' then return 1 end
+        return executable(name)
+      end)
+      local system = require('util.system')
+      stub(system, 'run', function(cmd, opts, on_done)
+        assert.are.equal('fd', cmd[1])
+        assert.are.equal(3000, opts.timeout)
+        vim.schedule(
+          function()
+            on_done({ code = 124, timed_out = true, cut = false, stdout = '' })
+          end
+        )
+      end)
+      local bufnr = open(project .. '/a.yaml', {})
+      attached(bufnr, {})
+      local items = pick(nil).items
+      assert.is_truthy(
+        vim
+          .iter(notified)
+          :find(function(n) return n.msg:find('cut short', 1, true) ~= nil end)
+      )
+      assert.is_nil(by_uri(items, project .. '/schemas/one.json'))
     end)
 
     for _, finder in ipairs({ 'fd', 'the file system' }) do

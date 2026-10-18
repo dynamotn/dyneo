@@ -106,6 +106,128 @@ describe('config.keymaps', function()
     end)
   end)
 
+  it('sets the filetype picked for the buffer', function()
+    vim.api.nvim_set_current_buf(h.buffer())
+    local chosen
+    local restore = h.stub(vim.ui, 'select', function(items, opts, on_choice)
+      assert.is_true(vim.list_contains(items, 'lua'))
+      assert.are.equal('Filetype', opts.prompt)
+      on_choice(chosen)
+    end)
+    map('n', ' bf').callback()
+    assert.are.equal('', vim.bo.filetype)
+    chosen = 'lua'
+    map('n', ' bf').callback()
+    restore()
+    assert.are.equal('lua', vim.bo.filetype)
+  end)
+
+  it('clears the search and stops the snippet on escape', function()
+    local stopped = 0
+    local restore = h.stub(
+      require('util.cmp').actions,
+      'snippet_stop',
+      function() stopped = stopped + 1 end
+    )
+    vim.o.hlsearch = true
+    vim.v.hlsearch = 1
+    assert.are.equal('<esc>', map('n', '<Esc>').callback())
+    restore()
+    assert.are.equal(0, vim.v.hlsearch)
+    assert.are.equal(1, stopped)
+  end)
+
+  it('changes the word under the cursor with <C-c>, where it can', function()
+    vim.api.nvim_set_current_buf(h.buffer({ lines = { 'word' } }))
+    assert.are.equal('ciw', map('n', '<C-c>').callback())
+    vim.bo.modifiable = false
+    assert.are.equal('<C-c>', map('n', '<C-c>').callback())
+    vim.bo.modifiable = true
+  end)
+
+  it('jumps to the next diagnostic and shows it', function()
+    local bufnr = h.buffer({ lines = { 'one', 'two', 'three' } })
+    vim.api.nvim_set_current_buf(bufnr)
+    local ns = vim.api.nvim_create_namespace('dy_test_diagnostic_goto')
+    vim.diagnostic.set(ns, bufnr, {
+      {
+        lnum = 2,
+        col = 0,
+        message = 'broken',
+        severity = vim.diagnostic.severity.ERROR,
+      },
+    })
+    local floats = {}
+    local restore = h.stub(
+      vim.diagnostic,
+      'open_float',
+      function(opts) table.insert(floats, opts) end
+    )
+    vim.api.nvim_win_set_cursor(0, { 1, 0 })
+    map('n', ']e').callback()
+    vim.wait(500, function() return #floats > 0 end)
+    -- Nothing to jump to, nothing shown
+    map('n', ']w').callback()
+    vim.wait(100, function() return false end)
+    restore()
+    vim.diagnostic.reset(ns, bufnr)
+    assert.are.equal(3, vim.fn.line('.'))
+    assert.are.equal(1, #floats)
+    assert.are.equal(bufnr, floats[1].bufnr)
+    assert.are.equal('cursor', floats[1].scope)
+  end)
+
+  it('says when the cursor line has no diagnostics to copy', function()
+    vim.api.nvim_set_current_buf(h.buffer({ lines = { 'clean' } }))
+    local messages = {}
+    local restore = h.stub(
+      vim,
+      'notify',
+      function(msg, level) table.insert(messages, { msg, level }) end
+    )
+    map('n', ' xc').callback()
+    restore()
+    assert.are.same(
+      { { 'No diagnostics on this line', vim.log.levels.WARN } },
+      messages
+    )
+  end)
+
+  it('copies the URL of the file on the forge', function()
+    local copied = {}
+    local restores = {
+      h.stub(vim.fn, 'setreg', function(reg, value) copied[reg] = value end),
+    }
+    rawset(Snacks, 'gitbrowse', function(opts)
+      assert.is_false(opts.notify)
+      opts.open('https://forge.example/o/r/blob/main/a.lua')
+    end)
+    map('n', ' gY').callback()
+    rawset(Snacks, 'gitbrowse', nil)
+    for _, restore in ipairs(restores) do
+      restore()
+    end
+    assert.are.equal('https://forge.example/o/r/blob/main/a.lua', copied['+'])
+  end)
+
+  it('reads the file of the buffer as a log', function()
+    local ran, messages = {}, {}
+    local restores = {
+      h.stub(vim, 'cmd', function(cmd) table.insert(ran, cmd) end),
+      h.stub(vim, 'notify', function(msg) table.insert(messages, msg) end),
+    }
+    vim.api.nvim_set_current_buf(h.buffer())
+    map('n', ' il').callback()
+    vim.api.nvim_set_current_buf(h.buffer({ name = '/var/log/app.log' }))
+    local file = vim.api.nvim_buf_get_name(0)
+    map('n', ' il').callback()
+    for _, restore in ipairs(restores) do
+      restore()
+    end
+    assert.are.same({ 'The buffer has no file' }, messages)
+    assert.are.same({ { cmd = 'DyLog', args = { file } } }, ran)
+  end)
+
   it('maps the path copiers', function()
     for _, suffix in ipairs({
       'y',
@@ -216,6 +338,13 @@ describe('config.keymaps', function()
     it('keeps the yank when every counted line is blank', function()
       type_keys('2dd', { '', '  ', 'text' })
       assert.are.equal('kept', vim.fn.getreg('"'))
+    end)
+
+    it('reads a selection made upwards the same', function()
+      type_keys('GVkd', { 'text', '', '  ' })
+      assert.are.equal('kept', vim.fn.getreg('"'))
+      type_keys('GVkd', { '', 'text', 'more' })
+      assert.are.equal('text\nmore\n', vim.fn.getreg('"'))
     end)
 
     it('honours a register given explicitly', function()

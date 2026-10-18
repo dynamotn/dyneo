@@ -93,6 +93,24 @@ describe('util.mini', function()
       assert.is_string(highlighter.pattern())
     end)
 
+    it('paints the colour part only in the compact style', function()
+      vim.bo.filetype = 'html'
+      local compact =
+        mini.tailwind_highlighter({ ft = { 'html' }, style = 'compact' })
+      local pattern = compact.pattern()
+      assert.is_string(pattern)
+      local from, to, start, stop = ('bg-red-500'):find(pattern)
+      assert.equals(1, from)
+      assert.equals(10, to)
+      assert.equals(4, start)
+      assert.equals(11, stop)
+      local _, _, full_start = ('bg-red-500'):find(highlighter.pattern())
+      assert.equals(1, full_start)
+      assert.is_nil(
+        mini.tailwind_highlighter({ ft = { 'html' }, style = 'off' }).pattern()
+      )
+    end)
+
     it('asks the buffer it is given, not the current one', function()
       local html = vim.api.nvim_create_buf(false, true)
       vim.bo[html].filetype = 'html'

@@ -433,6 +433,35 @@ describe('tools.tfplan', function()
       },
     }
 
+    it('reaches what depends on a data source or a module gone', function()
+      local reached = tfplan.affected({
+        {
+          action = 'destroy',
+          address = 'data.aws_ami.base',
+          mode = 'data',
+          type = 'aws_ami',
+          name = 'base',
+        },
+        {
+          action = 'destroy',
+          address = 'module.vpc.aws_vpc.this',
+          module = 'vpc',
+          mode = 'managed',
+          type = 'aws_vpc',
+          name = 'this',
+        },
+      }, {
+        ['data.aws_ami.base'] = { 'aws_instance.web' },
+        ['module.vpc'] = { 'aws_instance.web' },
+      })
+      assert.same({
+        ['aws_instance.web'] = {
+          'data.aws_ami.base (destroy)',
+          'module.vpc (destroy)',
+        },
+      }, reached)
+    end)
+
     it('reads the block a reference points at', function()
       assert.equals(
         'aws_instance.web',
@@ -682,6 +711,52 @@ describe('tools.tfplan', function()
       )
       -- One plan, not one more started from inside it
       assert.is_false(vim.wait(300, function() return #notes > 2 end, 20))
+    end)
+
+    it('says when neither tofu nor terraform is installed', function()
+      local restore = h.stub(vim.fn, 'executable', function() return 0 end)
+      tfplan.run()
+      restore()
+      assert.same({ 'Neither tofu nor terraform is installed' }, notes)
+    end)
+
+    it('says when show -json printed something else', function()
+      h.write(dir .. '/plan.json', { 'not json' })
+      vim.cmd.edit(dir .. '/main.tf')
+      tfplan.plan()
+      assert.is_true(vim.wait(10000, function() return #notes >= 2 end, 20))
+      assert.equals('show -json printed something that is not JSON', notes[2])
+    end)
+
+    it('says why infracost failed, or what it printed instead', function()
+      h.write(
+        bin .. '/infracost',
+        { '#!/bin/sh', 'echo "no API key" >&2', 'exit 1' }
+      )
+      vim.cmd.edit(dir .. '/main.tf')
+      tfplan.cost()
+      assert.is_true(vim.wait(10000, function() return #notes >= 3 end, 20))
+      assert.equals('infracost failed:\nno API key', notes[3])
+
+      h.write(bin .. '/infracost', { '#!/bin/sh', 'echo "not json"' })
+      tfplan.cost()
+      assert.is_true(vim.wait(10000, function() return #notes >= 6 end, 20))
+      assert.equals('infracost printed something that is not JSON', notes[6])
+    end)
+
+    it('says when the plan could not be handed to infracost', function()
+      -- The private copy is written through `fs_open`; one that cannot be
+      -- opened is the plan file's directory gone
+      local fs_open = vim.uv.fs_open
+      local restore = h.stub(vim.uv, 'fs_open', function(path, ...)
+        if path:match('%.json$') then return nil end
+        return fs_open(path, ...)
+      end)
+      vim.cmd.edit(dir .. '/main.tf')
+      tfplan.cost()
+      assert.is_true(vim.wait(10000, function() return #notes >= 3 end, 20))
+      restore()
+      assert.equals('Could not hand the plan to infracost', notes[3])
     end)
 
     it('says when infracost is missing, without planning', function()

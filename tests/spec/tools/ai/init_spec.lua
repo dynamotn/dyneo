@@ -162,6 +162,171 @@ describe('tools.ai', function()
     end
   end)
 
+  it('warns when the code was cut to fit the prompt', function()
+    code_buffer()
+    require('tools.ai.prompts').MAX_BYTES = 2
+    assert.is_true(ai.run('explain'))
+    assert.equals(1, #asked)
+    assert.is_truthy(notes[1]:find('cut at 0 KiB', 1, true))
+  end)
+
+  it('hands every other subcommand to its module', function()
+    local calls = {}
+    local function record_call(name)
+      return function(arg) table.insert(calls, { name, arg }) end
+    end
+    for _, stub in ipairs({
+      { 'tools.ai.review', 'staged' },
+      { 'tools.ai.pr', 'describe' },
+      { 'tools.ai.ci', 'explain' },
+    }) do
+      table.insert(
+        restores,
+        h.stub(package.loaded, stub[1], { [stub[2]] = record_call(stub[1]) })
+      )
+    end
+    ai.command({ fargs = { 'staged' }, range = 0 })
+    ai.command({ fargs = { 'pr', 'feat/x' }, range = 0 })
+    ai.command({ fargs = { 'ci' }, range = 0 })
+    assert.same({
+      { 'tools.ai.review' },
+      { 'tools.ai.pr', 'feat/x' },
+      { 'tools.ai.ci' },
+    }, calls)
+  end)
+
+  describe('model', function()
+    local avante, api, calls
+
+    before_each(function()
+      calls = {}
+      api = { select_acp_model = function() table.insert(calls, 'select') end }
+      avante = {
+        sidebar_open = false,
+        is_sidebar_open = function() return avante.sidebar_open end,
+        open_sidebar = function() table.insert(calls, 'open') end,
+        get = function() return avante.sidebar end,
+      }
+      table.insert(restores, h.stub(package.loaded, 'avante.api', api))
+      table.insert(restores, h.stub(package.loaded, 'avante', avante))
+      table.insert(
+        restores,
+        h.stub(package.loaded, 'avante.config', {
+          provider = 'claude-code',
+          acp_providers = { ['claude-code'] = {} },
+        })
+      )
+      -- Waiting is what is under test, not the clock: a try follows at once
+      table.insert(restores, h.stub(vim, 'defer_fn', function(fn) fn() end))
+    end)
+
+    it("leaves one of Avante's own providers to :AvanteModels", function()
+      package.loaded['avante.config'].provider = 'ollama'
+      vim.api.nvim_create_user_command(
+        'AvanteModels',
+        function() table.insert(calls, 'models') end,
+        {}
+      )
+      ai.command({ fargs = { 'model' }, range = 0 })
+      vim.api.nvim_del_user_command('AvanteModels')
+      assert.same({ 'models' }, calls)
+    end)
+
+    it('opens the sidebar and picks once the agent lists models', function()
+      local client = { config_options = { 'x' } }
+      avante.sidebar = {
+        acp_client = client,
+        chat_history = { acp_session_id = 's1' },
+      }
+      ai.avante_model()
+      assert.same({ 'open', 'select' }, calls)
+    end)
+
+    it('says when the connected agent offers no model', function()
+      avante.sidebar_open = true
+      avante.sidebar = {
+        acp_client = { is_ready = function() return true end },
+        chat_history = { acp_session_id = 's1' },
+      }
+      ai.avante_model()
+      assert.same({}, calls)
+      assert.is_truthy(notes[1]:find('no model to pick', 1, true))
+    end)
+
+    it('keeps trying while the agent connects, then gives up', function()
+      avante.sidebar_open = true
+      local tries = 0
+      avante.get = function()
+        tries = tries + 1
+        -- Connected on the third look, with a model to pick
+        if tries == 3 then
+          return {
+            acp_client = { config_options = {} },
+            chat_history = { acp_session_id = 's1' },
+          }
+        end
+        return { acp_client = { is_ready = function() return false end } }
+      end
+      ai.avante_model()
+      assert.same({ 'select' }, calls)
+      assert.equals(3, tries)
+
+      tries, calls = 0, {}
+      avante.get = function()
+        tries = tries + 1
+        return nil
+      end
+      ai.avante_model()
+      assert.same({}, calls)
+      assert.equals(151, tries)
+      assert.is_truthy(notes[#notes]:find('did not connect', 1, true))
+    end)
+  end)
+
+  describe('picker', function()
+    local spec, closed
+
+    before_each(function()
+      spec, closed = nil, 0
+      table.insert(
+        restores,
+        h.stub(_G, 'Snacks', {
+          picker = { pick = function(s) spec = s end },
+        })
+      )
+      local Plugin = require('util.plugin')
+      table.insert(restores, h.stub(Plugin, 'has', function() return true end))
+    end)
+
+    it(
+      'lists every action, aligned by group, and runs the chosen one',
+      function()
+        code_buffer()
+        ai.command({ fargs = {}, range = 0 })
+        assert.equals('AI', spec.title)
+        assert.equals(2 + #ai.ACTIONS, #spec.items)
+        local line = spec.format(spec.items[1])
+        assert.equals('Prompt  ', line[1][1])
+        assert.equals('ask', line[3][1])
+        local picker = { close = function() closed = closed + 1 end }
+        spec.confirm(picker, spec.items[2])
+        assert.equals(1, closed)
+        vim.wait(1000, function() return #asked > 0 end, 10)
+        assert.equals(1, #asked)
+        assert.is_truthy(asked[1].question:find('Explain', 1, true))
+        -- Dismissed with nothing chosen
+        spec.confirm(picker, nil)
+        assert.equals(2, closed)
+      end
+    )
+
+    it('shows the prompts alone on `prompts`', function()
+      ai.command({ fargs = { 'prompts' }, range = 0 })
+      assert.equals('AI Prompts', spec.title)
+      assert.equals(2, #spec.items)
+    end)
+  end)
+
   describe('in a project keeping AI local', function()
     before_each(
       function() h.write(dir .. '/.nvim/ai.json', { '{ "local_only": true }' }) end
@@ -239,6 +404,17 @@ describe('tools.ai', function()
       DyNeo.ai.commit_command = { dir .. '/bin/none' }
       run('diff')
       assert.same({}, audit)
+    end)
+
+    it('says when the command answered nothing', function()
+      h.write(
+        DyNeo.ai.commit_command[1],
+        { '#!/bin/sh', 'cat > /dev/null', 'echo', 'echo " "' }
+      )
+      run('diff')
+      assert.is_nil(answer)
+      assert.same({ { 'sent', 'commit message' } }, audit)
+      assert.is_truthy(notes[#notes]:find('empty answer', 1, true))
     end)
   end)
 

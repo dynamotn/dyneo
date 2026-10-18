@@ -40,6 +40,18 @@ describe('plugins.lang.blade', function()
     end
   end)
 
+  it('labels the completion sources of both plugins', function()
+    spec('ricardoramirezr/blade-nav.nvim').init()
+    assert.are.equal('「BLADE」', DyNeo.completion_sources['blade-nav'])
+    assert.are.equal('「LARAVEL」', DyNeo.completion_sources.laravel)
+    local sources = spec('blink.cmp').opts.sources
+    assert.same({ 'laravel' }, sources.compat)
+    assert.are.equal(
+      'blade-nav.integrations.blink',
+      sources.providers['blade-nav'].module
+    )
+  end)
+
   it('loads for the PHP files of a Laravel project', function()
     h.write(dir .. '/app/artisan')
     h.buffer({ name = dir .. '/lib/x.php', filetype = 'php' })

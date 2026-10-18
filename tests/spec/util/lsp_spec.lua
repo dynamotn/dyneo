@@ -93,6 +93,22 @@ describe('util.lsp', function()
     end)
   end)
 
+  it('formats through the LSP itself without conform', function()
+    local seen
+    table.insert(restores, h.stub(package.loaded, 'conform', nil))
+    table.insert(
+      restores,
+      h.stub(package.preload, 'conform', function() error('not installed') end)
+    )
+    table.insert(
+      restores,
+      h.stub(vim.lsp.buf, 'format', function(opts) seen = opts end)
+    )
+    lsp.format({ bufnr = 4 })
+    assert.are.equal(4, seen.bufnr)
+    assert.are.equal(500, seen.timeout_ms)
+  end)
+
   it('applies a code action of the kind asked for', function()
     local seen
     table.insert(

@@ -92,3 +92,37 @@ describe('colorscheme', function()
     assert.same({ link = 'SnacksInputNormal' }, groups.AvantePromptInput)
   end)
 end)
+
+describe('colorscheme: bufferline', function()
+  local opts, restore, colors_name
+
+  before_each(function()
+    h.globals()
+    colors_name = vim.g.colors_name
+    restore = h.stub(package.loaded, 'catppuccin.special.bufferline', {
+      get_theme = function() return { theme = 'catppuccin' } end,
+    })
+    opts = dofile(h.root .. '/lua/plugins/ui/colorscheme.lua')[1].specs[1].opts
+  end)
+  after_each(function()
+    restore()
+    vim.g.colors_name = colors_name
+  end)
+
+  it('takes its colours from catppuccin when that is the scheme', function()
+    vim.g.colors_name = 'catppuccin-macchiato'
+    local bufferline = {}
+    opts(nil, bufferline)
+    assert.same({ theme = 'catppuccin' }, bufferline.highlights)
+  end)
+
+  it('leaves the colours of another scheme alone', function()
+    vim.g.colors_name = nil
+    local bufferline = {}
+    opts(nil, bufferline)
+    assert.is_nil(bufferline.highlights)
+    vim.g.colors_name = 'default'
+    opts(nil, bufferline)
+    assert.is_nil(bufferline.highlights)
+  end)
+end)

@@ -49,6 +49,20 @@ describe('plugin/sensitive', function()
     )
   end)
 
+  it('counts a file by its name outside the temporary directory', function()
+    -- `$TMPDIR` moved away, the scratch directory is an ordinary one
+    local tmpdir, swapfile = vim.env.TMPDIR, vim.o.swapfile
+    vim.env.TMPDIR, vim.o.swapfile = dir .. '/elsewhere', true
+    vim.cmd.edit(dir .. '/prod.env')
+    assert.is_false(vim.bo.undofile)
+    assert.is_false(vim.bo.swapfile)
+    vim.cmd('bwipeout!')
+    vim.cmd.edit(dir .. '/notes.txt')
+    assert.is_true(vim.bo.swapfile)
+    vim.cmd('bwipeout!')
+    vim.env.TMPDIR, vim.o.swapfile = tmpdir, swapfile
+  end)
+
   it('restores backup options after a write that failed', function()
     -- The temporary directory counts as leaving a copy behind
     local file = dir .. '/missing/secret.txt'

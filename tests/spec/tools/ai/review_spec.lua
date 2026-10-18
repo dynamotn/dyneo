@@ -66,6 +66,34 @@ describe('tools.ai.review', function()
     assert.equals('review of 1 staged files', delivered[1].detail)
   end)
 
+  it('says when the diff was cut', function()
+    git('add', 'a.txt')
+    require('tools.ai.git').MAX_DIFF = 16
+    review.staged()
+    assert.is_true(vim.wait(5000, function() return #delivered > 0 end, 20))
+    assert.is_truthy(notes[1]:find('The diff was cut at 0 KiB', 1, true))
+    assert.is_truthy(delivered[1].text:find('(diff cut at 0 KiB)', 1, true))
+  end)
+
+  it('says when the prompt is missing', function()
+    local prompts = require('tools.ai.prompts')
+    table.insert(
+      restores,
+      h.stub(prompts, 'template', function() return nil end)
+    )
+    review.staged()
+    assert.is_truthy(notes[1]:find('No prompt ' .. review.PROMPT, 1, true))
+    assert.same({}, delivered)
+  end)
+
+  it('says when the buffer is in no work tree', function()
+    vim.api.nvim_set_current_buf(h.buffer({ name = dir .. '/loose.txt' }))
+    review.staged()
+    assert.is_true(vim.wait(5000, function() return #notes > 0 end, 20))
+    assert.is_truthy(notes[1]:find('Not in a git work tree', 1, true))
+    assert.same({}, delivered)
+  end)
+
   it('says when nothing is staged', function()
     review.staged()
     assert.is_true(vim.wait(5000, function() return #notes > 0 end, 20))

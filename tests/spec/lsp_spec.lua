@@ -307,6 +307,50 @@ describe('lsp', function()
           }, { { 1, 4, message } })
         )
       end)
+
+      it('keeps one on a comment that continues no annotation', function()
+        local message = 'This sentence does not start with a capital letter'
+        -- The lines above end at code, or at the top of the buffer
+        assert.are.same(
+          { { 2, 4 } },
+          survivors({
+            'local x = 1',
+            '--- more words',
+            '--- thing it holds',
+          }, { { 2, 4, message } })
+        )
+        assert.are.same(
+          { { 1, 4 } },
+          survivors({
+            '--- more words',
+            '--- thing it holds',
+          }, { { 1, 4, message } })
+        )
+      end)
+
+      it(
+        'keeps an indented comment that no sh-docs tag opens',
+        function()
+          assert.are.same(
+            { { 0, 6 } },
+            survivors({ '#   foo --barr' }, { { 0, 6 } })
+          )
+        end
+      )
+
+      it('starts its cache over once full, and still answers', function()
+        local lines, positions = {}, {}
+        for i = 1, 4100 do
+          lines[i] = 'wrod number ' .. i
+          positions[i] = { i - 1, 0 }
+        end
+        assert.are.same(positions, survivors(lines, positions))
+        local line = 'x = 1  # noqa: E501 tralala'
+        assert.are.same(
+          { { 0, 0 } },
+          survivors({ line }, { { 0, 0 }, { 0, line:find('noqa') - 1 } })
+        )
+      end)
     end)
   end)
 

@@ -82,4 +82,185 @@ describe('util.format', function()
     vim.b.autoformat = true
     assert.is_true(format.enabled())
   end)
+
+  it('warns when forced with no formatter to run', function()
+    local notified = {}
+    restores[#restores + 1] = h.stub(
+      vim,
+      'notify',
+      function(msg, level) table.insert(notified, { msg = msg, level = level }) end
+    )
+    format.format({ buf = 0, force = true })
+    assert.are.equal(1, #notified)
+    assert.are.equal('No formatter available', notified[1].msg)
+    assert.are.equal(vim.log.levels.WARN, notified[1].level)
+  end)
+
+  describe('formatexpr', function()
+    local plugins
+    before_each(function()
+      plugins = {}
+      restores[#restores + 1] = h.stub(
+        package.loaded,
+        'lazy.core.config',
+        { spec = { plugins = plugins }, plugins = {} }
+      )
+    end)
+
+    it('goes through conform when it is part of the configuration', function()
+      plugins['conform.nvim'] = { dir = '/lazy/conform.nvim' }
+      restores[#restores + 1] = h.stub(
+        package.loaded,
+        'conform',
+        { formatexpr = function() return 7 end }
+      )
+      assert.are.equal(7, format.formatexpr())
+    end)
+
+    it('falls back to the language server', function()
+      restores[#restores + 1] = h.stub(
+        vim.lsp,
+        'formatexpr',
+        function(opts) return opts.timeout_ms end
+      )
+      assert.are.equal(3000, format.formatexpr())
+    end)
+  end)
+
+  describe('info', function()
+    local notified
+    before_each(function()
+      notified = {}
+      restores[#restores + 1] = h.stub(
+        vim,
+        'notify',
+        function(msg, level, opts)
+          table.insert(notified, { msg = msg, level = level, opts = opts })
+        end
+      )
+    end)
+
+    it('lists the formatters, marking the active ones', function()
+      format.register(formatter('conform', 100, { 'stylua' }, true))
+      format.register(formatter('lsp', 1, { 'lua_ls' }, true))
+      format.register(formatter('none', 50, {}))
+      format.info(0)
+      assert.are.equal(1, #notified)
+      local n = notified[1]
+      assert.are.equal(vim.log.levels.INFO, n.level)
+      assert.are.equal('DyNeo Format (enabled)', n.opts.title)
+      local lines = vim.split(n.msg, '\n')
+      assert.is_true(vim.list_contains(lines, '- [x] global **enabled**'))
+      assert.is_true(vim.list_contains(lines, '- [x] buffer **inherit**'))
+      assert.is_true(vim.list_contains(lines, '# conform ***(active)***'))
+      assert.is_true(vim.list_contains(lines, '- [x] **stylua**'))
+      -- The server would format too, but conform takes the buffer first
+      assert.is_true(vim.list_contains(lines, '# lsp'))
+      assert.is_true(vim.list_contains(lines, '- [ ] **lua_ls**'))
+      -- A formatter with no source for the buffer is left out
+      assert.is_false(vim.list_contains(lines, '# none'))
+    end)
+
+    it('warns when the buffer is left unformatted', function()
+      vim.g.autoformat = false
+      vim.b.autoformat = false
+      format.info()
+      local n = notified[1]
+      assert.are.equal(vim.log.levels.WARN, n.level)
+      assert.are.equal('DyNeo Format (disabled)', n.opts.title)
+      local lines = vim.split(n.msg, '\n')
+      assert.is_true(vim.list_contains(lines, '- [ ] global **disabled**'))
+      assert.is_true(vim.list_contains(lines, '- [ ] buffer **disabled**'))
+      assert.is_true(
+        vim.list_contains(
+          lines,
+          '***No formatters available for this buffer.***'
+        )
+      )
+    end)
+
+    it('shows a buffer enabled on its own', function()
+      vim.g.autoformat = false
+      vim.b.autoformat = true
+      format.info()
+      assert.is_true(
+        vim.list_contains(
+          vim.split(notified[1].msg, '\n'),
+          '- [x] buffer **enabled**'
+        )
+      )
+    end)
+  end)
+
+  describe('enable and toggle', function()
+    before_each(function()
+      restores[#restores + 1] = h.stub(vim, 'notify', function() end)
+    end)
+
+    it('enables globally by default, clearing the buffer setting', function()
+      vim.g.autoformat = false
+      vim.b.autoformat = false
+      format.enable()
+      assert.is_true(vim.g.autoformat)
+      assert.is_nil(vim.b.autoformat)
+    end)
+
+    it('sets only the buffer when asked', function()
+      vim.g.autoformat = true
+      format.enable(false, true)
+      assert.is_true(vim.g.autoformat)
+      assert.is_false(vim.b.autoformat)
+    end)
+
+    it('toggles the current setting', function()
+      format.toggle()
+      assert.is_false(vim.g.autoformat)
+      format.toggle(true)
+      assert.is_true(vim.b.autoformat)
+      assert.is_false(vim.g.autoformat)
+    end)
+
+    it('formats through the module itself', function()
+      local ran = 0
+      local f = formatter('one', 1, { 'x' })
+      f.format = function() ran = ran + 1 end
+      format.register(f)
+      format({ buf = 0 })
+      assert.are.equal(1, ran)
+    end)
+  end)
+
+  describe('snacks toggle', function()
+    local specs
+    before_each(function()
+      specs = {}
+      restores[#restores + 1] = h.stub(_G, 'Snacks', {
+        toggle = function(spec)
+          table.insert(specs, spec)
+          return spec
+        end,
+      })
+      restores[#restores + 1] = h.stub(vim, 'notify', function() end)
+    end)
+
+    it('reads and sets the global setting', function()
+      local toggle = format.snacks_toggle()
+      assert.are.equal('Auto Format (Global)', toggle.name)
+      assert.is_true(toggle.get())
+      toggle.set(false)
+      assert.is_false(vim.g.autoformat)
+      assert.is_false(toggle.get())
+    end)
+
+    it('reads and sets the buffer setting', function()
+      local toggle = format.snacks_toggle(true)
+      assert.are.equal('Auto Format (Buffer)', toggle.name)
+      vim.g.autoformat = false
+      assert.is_false(toggle.get())
+      toggle.set(true)
+      assert.is_true(vim.b.autoformat)
+      assert.is_true(toggle.get())
+      assert.is_false(vim.g.autoformat)
+    end)
+  end)
 end)

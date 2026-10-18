@@ -258,6 +258,35 @@ describe('tools.hex', function()
       assert.are.equal('AB', read(path))
     end)
 
+    it('refuses a buffer with no file, and a name that is none', function()
+      vim.api.nvim_set_current_buf(h.buffer({}))
+      hex.open()
+      assert.matches('has no file', notes[1])
+      vim.cmd.edit(dir .. '/missing.bin')
+      hex.open()
+      assert.matches('is not a file on disk', notes[2])
+      assert.are_not.equal('xxd', vim.bo.filetype)
+    end)
+
+    it('says when the write came out short', function()
+      local path = file('s.bin', 'AB')
+      vim.cmd.edit(path)
+      hex.open()
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, { '43' })
+      local open = io.open
+      local restore_open = h.stub(io, 'open', function(name, mode)
+        if mode ~= 'wb' then return open(name, mode) end
+        return {
+          write = function() return nil, 'disk full' end,
+          close = function() return true end,
+        }
+      end)
+      vim.cmd.write()
+      restore_open()
+      assert.matches('may be cut short: disk full', notes[#notes])
+      assert.are.equal('AB', read(path))
+    end)
+
     it('refuses a buffer with unwritten edits', function()
       vim.cmd.edit(file('d.bin', 'x'))
       vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'changed' })

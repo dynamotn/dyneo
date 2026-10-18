@@ -34,6 +34,29 @@ describe('util.root', function()
     assert.equals(realpath(dir .. '/sub'), sub)
   end)
 
+  it('matches a marker by its suffix with a leading star', function()
+    h.write(dir .. '/project/app.csproj', { '' })
+    h.write(dir .. '/project/src/file.cs', { '' })
+    vim.cmd.edit(dir .. '/project/src/file.cs')
+    assert.same(
+      { vim.uv.fs_realpath(dir .. '/project') },
+      root.detectors.pattern(0, '*.csproj')
+    )
+  end)
+
+  it('resolves a spec to its detector, a pattern, or itself', function()
+    assert.equals(root.detectors.cwd, root.resolve('cwd'))
+    local own = function() return dir end
+    assert.equals(own, root.resolve(own))
+    h.write(dir .. '/project/.marker', { '' })
+    h.write(dir .. '/project/file.lua', { '' })
+    vim.cmd.edit(dir .. '/project/file.lua')
+    assert.same(
+      { vim.uv.fs_realpath(dir .. '/project') },
+      root.resolve({ '.marker' })(0)
+    )
+  end)
+
   it('finds the nearest directory holding a marker', function()
     h.write(dir .. '/project/.git/HEAD', { 'ref: refs/heads/main' })
     h.write(dir .. '/project/src/deep/file.lua', { '' })

@@ -342,6 +342,121 @@ describe('tools.ci_inline', function()
       )
     end)
 
+    it('stops reading jobs past the last page it may ask for', function()
+      git('remote', 'add', 'gh', 'https://github.com/o/r.git')
+      cli('gh', {
+        'case "$*" in',
+        [[  *workflows/ci.yml/runs*) echo '{"workflow_runs":[{"id":7,"status":"completed","conclusion":"failure"}]}';;]],
+        [[  *runs/7/jobs*) echo '{"jobs":[{"name":"test","status":"completed","conclusion":"failure"}]}';;]],
+        'esac',
+      })
+      ci.PER_PAGE, ci.MAX_PAGES = 1, 2
+      h.write(repo .. '/.github/workflows/ci.yml', GITHUB)
+      vim.cmd.edit(repo .. '/.github/workflows/ci.yml')
+      local bufnr = vim.api.nvim_get_current_buf()
+      vim.bo.filetype = 'yaml.gh-action'
+      ci.status(bufnr)
+      assert.is_true(vim.wait(5000, function() return #notes > 0 end, 20))
+      assert.equals('More than 2 jobs: not all of them could be read', notes[1])
+      assert.same({}, marks(bufnr))
+    end)
+
+    it(
+      'says when the workflow has no run, and when a run has no URL',
+      function()
+        git('remote', 'add', 'gh', 'https://github.com/o/r.git')
+        cli('gh', {
+          'case "$*" in',
+          [[  *workflows/ci.yml/runs*) echo '{"workflow_runs":[]}';;]],
+          [[  *workflows/other.yml/runs*) echo '{"workflow_runs":[{"id":8,"status":"completed","conclusion":"success"}]}';;]],
+          [[  *runs/8/jobs*) echo '{"jobs":[]}';;]],
+          'esac',
+        })
+        h.write(repo .. '/.github/workflows/ci.yml', GITHUB)
+        vim.cmd.edit(repo .. '/.github/workflows/ci.yml')
+        vim.bo.filetype = 'yaml.gh-action'
+        ci.status(0)
+        assert.is_true(vim.wait(5000, function() return #notes > 0 end, 20))
+        assert.equals('No run of this workflow on feat/x', notes[1])
+
+        h.write(repo .. '/.github/workflows/other.yml', GITHUB)
+        vim.cmd.edit(repo .. '/.github/workflows/other.yml')
+        vim.bo.filetype = 'yaml.gh-action'
+        ci.status(0)
+        assert.is_true(vim.wait(5000, function() return #notes > 1 end, 20))
+        assert.equals('✓ Run 8 on feat/x', notes[2])
+      end
+    )
+
+    it('says what a pipeline file needs before asking the forge', function()
+      assert.is_nil(ci.kind(h.buffer({ filetype = 'yaml' })))
+      ci.status(h.buffer({ filetype = 'yaml', lines = GITLAB }))
+      ci.status(h.buffer({ filetype = 'yaml.gitlab', lines = GITLAB }))
+      assert.same({
+        'Not a GitLab CI or GitHub Actions file',
+        'This buffer holds no file',
+      }, notes)
+    end)
+
+    it('says when the repository is not on a branch', function()
+      git('remote', 'add', 'origin', 'https://gitlab.com/g/p')
+      h.write(repo .. '/.gitlab-ci.yml', GITLAB)
+      git('add', '.')
+      git(
+        '-c',
+        'user.name=t',
+        '-c',
+        'user.email=t@t',
+        'commit',
+        '-qm',
+        'x',
+        '--no-verify'
+      )
+      git('checkout', '-q', '--detach')
+      vim.cmd.edit(repo .. '/.gitlab-ci.yml')
+      vim.bo.filetype = 'yaml.gitlab'
+      ci.status(0)
+      assert.is_true(vim.wait(5000, function() return #notes > 0 end, 20))
+      assert.equals('Not on a branch', notes[1])
+    end)
+
+    it('lints only a GitLab file, with glab installed', function()
+      h.write(repo .. '/.github/workflows/ci.yml', GITHUB)
+      vim.cmd.edit(repo .. '/.github/workflows/ci.yml')
+      vim.bo.filetype = 'yaml.gh-action'
+      ci.lint()
+      assert.is_truthy(notes[1]:find('^GitLab checks %.gitlab%-ci%.yml'))
+
+      h.write(repo .. '/.gitlab-ci.yml', GITLAB)
+      vim.cmd.edit(repo .. '/.gitlab-ci.yml')
+      vim.bo.filetype = 'yaml.gitlab'
+      local restore = h.stub(vim.fn, 'executable', function() return 0 end)
+      ci.lint(0)
+      restore()
+      assert.equals('glab is not installed', notes[2])
+    end)
+
+    it('shows what glab said when it names no line', function()
+      git('remote', 'add', 'origin', 'https://gitlab.com/g/p')
+      cli('glab', { 'echo "could not reach GitLab" >&2', 'exit 1' })
+      h.write(repo .. '/.gitlab-ci.yml', GITLAB)
+      vim.cmd.edit(repo .. '/.gitlab-ci.yml')
+      local bufnr = vim.api.nvim_get_current_buf()
+      vim.bo.filetype = 'yaml.gitlab'
+      ci.lint(bufnr)
+      assert.is_true(vim.wait(5000, function() return #notes > 0 end, 20))
+      local diagnostics = vim.diagnostic.get(bufnr)
+      assert.equals(1, #diagnostics)
+      assert.equals(0, diagnostics[1].lnum)
+      assert.equals('could not reach GitLab', diagnostics[1].message)
+      assert.equals('GitLab found 1 problems', notes[1])
+    end)
+
+    it('refuses an unknown subcommand', function()
+      ci.command({ fargs = { 'nope' } })
+      assert.same({ 'Unknown subcommand: nope' }, notes)
+    end)
+
     it('maps lint only on a GitLab file', function()
       local gitlab = h.buffer({ filetype = 'yaml.gitlab' })
       local github = h.buffer({ filetype = 'yaml.gh-action' })

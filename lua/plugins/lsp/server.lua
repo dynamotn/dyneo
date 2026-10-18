@@ -340,7 +340,9 @@ return {
       ---@param language DyLangSpec
       local function configure(server, enabled, name, language)
         if server == '*' then return end
-        local server_opts = opts.servers[server] or {}
+        -- `false` turns a server off; a server nobody mentions is on
+        local server_opts = opts.servers[server]
+        if server_opts == nil then server_opts = {} end
         server_opts = server_opts == true and {}
           or (not server_opts) and { enabled = false }
           or server_opts--[[@as vim.lsp.Config]]

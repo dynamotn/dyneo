@@ -464,6 +464,50 @@ describe('tools.lazy-quarantine', function()
       assert.are.same({}, rows)
     end)
 
+    it('says what is held back, how long, and when nothing is', function()
+      local notes = {}
+      local restore = h.stub(
+        vim,
+        'notify',
+        function(msg) table.insert(notes, msg) end
+      )
+      vim.cmd('DyQuarantine')
+      vim.cmd('DyQuarantine nope')
+      local days, commits, cleanup = repository({ 30 * DAY, 8 * DAY, 2 * DAY })
+      local hours, late, clean_hours =
+        repository({ 30 * DAY, 8 * DAY, math.floor(6.5 * DAY) })
+      Config.plugins = {
+        ['days.nvim'] = {
+          name = 'days.nvim',
+          dir = days,
+          _ = { installed = true },
+        },
+        ['hours.nvim'] = {
+          name = 'hours.nvim',
+          dir = hours,
+          _ = { installed = true },
+        },
+      }
+      vim.cmd('DyQuarantine')
+      cleanup()
+      clean_hours()
+      restore()
+      assert.are.same({
+        'Nothing is being held back',
+        'Unknown subcommand: nope',
+        ('Held back for 7 days:\n- days.nvim: on %s, %s waits 5 days\n- hours.nvim: on %s, %s waits 12 hours'):format(
+          commits[2]:sub(1, 7),
+          commits[3]:sub(1, 7),
+          late[2]:sub(1, 7),
+          late[3]:sub(1, 7)
+        ),
+      }, notes)
+      assert.are.same(
+        {},
+        vim.fn.getcompletion('DyQuarantine review x ', 'cmdline')
+      )
+    end)
+
     it('skips a plugin that is not installed, or is local', function()
       local dir, _, cleanup = repository({ 30 * DAY, DAY })
       Config.plugins = {
@@ -538,6 +582,36 @@ describe('tools.lazy-quarantine', function()
       cleanup()
       assert.is_false(rows[1].held)
       assert.are.equal(0, rows[1].clears)
+    end)
+
+    it('reads the releases a tagged target may fall back to', function()
+      local dir, commits, cleanup = repository({ 30 * DAY, 9 * DAY, DAY })
+      for index, tag in ipairs({ 'v1.0.0', 'v2.0.0', 'v3.0.0' }) do
+        git(dir, { 'tag', tag, commits[index] })
+      end
+      Git.get_target = function()
+        return { branch = 'main', tag = 'v3.0.0', commit = commits[3] }
+      end
+      h.unload('tools.lazy-quarantine')
+      local quarantine = require('tools.lazy-quarantine')
+      assert.is_false(quarantine.installed())
+      quarantine.setup()
+      assert.is_true(quarantine.installed())
+      -- A plugin naming no version takes the range lazy.nvim defaults to
+      local restore_options = h.stub(
+        Config,
+        'options',
+        vim.tbl_deep_extend(
+          'force',
+          Config.options or {},
+          { defaults = { version = '*' } }
+        )
+      )
+      local picked = Git.get_target({ dir = dir, name = 'spec.nvim' })
+      restore_options()
+      cleanup()
+      assert.are.equal('v2.0.0', picked.tag)
+      assert.are.equal(commits[2], picked.commit)
     end)
 
     it('leaves out a plugin already on its target', function()
@@ -623,6 +697,43 @@ describe('tools.lazy-quarantine', function()
     assert.are.equal(commits[2], before.commit)
     assert.are.equal(commits[2], today.commit)
     assert.are.equal(commits[3], later.commit)
+  end)
+
+  it('moves a release first seen today to the one seen before', function()
+    local dir, commits, cleanup = repository({ 30 * DAY, 20 * DAY, 15 * DAY })
+    h.unload('tools.lazy-quarantine')
+    local quarantine = require('tools.lazy-quarantine')
+    local plugin = { dir = dir, name = 'spec.nvim' }
+    local function releases()
+      return {
+        { tag = 'v3.0.0', commit = commits[3] },
+        { tag = 'v2.0.0', commit = commits[2] },
+      }
+    end
+    quarantine.target(
+      plugin,
+      { branch = 'main', tag = 'v2.0.0', commit = commits[2] },
+      releases,
+      now - 10 * DAY
+    )
+    local moved = quarantine.target(
+      plugin,
+      { branch = 'main', tag = 'v3.0.0', commit = commits[3] },
+      releases,
+      now
+    )
+    -- The release seen before is no longer among those the spec allows:
+    -- the checkout stays
+    local stayed = quarantine.target(
+      plugin,
+      { branch = 'main', tag = 'v3.0.0', commit = commits[3] },
+      function() return { { tag = 'v3.0.0', commit = commits[3] } } end,
+      now
+    )
+    cleanup()
+    assert.are.equal('v2.0.0', moved.tag)
+    assert.are.equal(commits[2], moved.commit)
+    assert.are.equal(commits[3], stayed.commit)
   end)
 
   it('stays on the checkout when git cannot answer', function()

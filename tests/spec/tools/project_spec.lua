@@ -134,6 +134,86 @@ describe('tools.project', function()
     assert.equals(2, got[3][1].lnum)
   end)
 
+  it('orders files with as many errors by warnings, then by name', function()
+    local ns = vim.api.nvim_create_namespace('project_spec')
+    local E, W = vim.diagnostic.severity.ERROR, vim.diagnostic.severity.WARN
+    local function file(name, warnings)
+      local bufnr = h.buffer({ name = dir .. '/' .. name, lines = { 'a' } })
+      local list = { { lnum = 0, col = 0, message = 'e', severity = E } }
+      for _ = 1, warnings do
+        table.insert(list, { lnum = 0, col = 0, message = 'w', severity = W })
+      end
+      vim.diagnostic.set(ns, bufnr, list)
+    end
+    file('c.lua', 1)
+    file('b.lua', 1)
+    file('a.lua', 0)
+    local got
+    project.diagnostics(dir, function(_, _, items) got = items end)
+    assert.same(
+      { dir .. '/b.lua', dir .. '/c.lua', dir .. '/a.lua' },
+      vim.tbl_map(function(item) return item.file end, got)
+    )
+  end)
+
+  it('lists the tasks overseer knows, and says when it cannot', function()
+    local got
+    local function set(...) got = { ... } end
+    project.tasks(set)
+    assert.same({ 'skipped', 'no task run yet' }, got)
+
+    local restore = h.stub(package.loaded, 'overseer', {
+      list_tasks = function()
+        return { { status = 'RUNNING', name = 'build' }, {} }
+      end,
+    })
+    project.tasks(set)
+    assert.equals('2 tasks', got[2])
+    assert.same(
+      { { text = 'RUNNING   build' }, { text = '?         ?' } },
+      got[3]
+    )
+    restore()
+
+    restore = h.stub(package.loaded, 'overseer', {
+      list_tasks = function() error('not loaded') end,
+    })
+    project.tasks(set)
+    restore()
+    assert.same({ 'failed', 'overseer could not list its tasks' }, got)
+  end)
+
+  it('reads the last run of a GitHub branch, or says there is none', function()
+    cli('gh', {
+      'case "$*" in',
+      [[  *branch=main*) echo '{"workflow_runs":[{"id":5,"name":"CI","status":"completed","conclusion":"success","html_url":"https://g/r/5"}]}';;]],
+      [[  *) echo '{"workflow_runs":[]}';;]],
+      'esac',
+    })
+    local remote = { kind = 'github', host = 'github.com', slug = 'o/r' }
+    local got, none
+    project.pipeline(remote, 'main', function(...) got = { ... } end)
+    project.pipeline(remote, 'feat/x', function(...) none = { ... } end)
+    assert.is_true(vim.wait(5000, function() return got and none end, 10))
+    assert.same({ text = '✓ pass CI', url = 'https://g/r/5' }, got[3][1])
+    assert.same({ 'done', 'no pipeline on feat/x' }, none)
+  end)
+
+  it('lists the Jira issues assigned', function()
+    cli('jira', { 'exit 1' })
+    local jira = require('tools.jira')
+    local restore = h.stub(
+      jira,
+      'run',
+      function(_, on_done) on_done(true, { 'OPS-1\tBug\tTo Do\tFix it' }, '') end
+    )
+    local got
+    project.jira(function(...) got = { ... } end)
+    restore()
+    assert.equals('1 assigned', got[2])
+    assert.same({ { text = 'OPS-1 [To Do] Fix it', jira = 'OPS-1' } }, got[3])
+  end)
+
   it('lists open requests and the last pipeline of a GitLab project', function()
     cli('glab', {
       'case "$*" in',
