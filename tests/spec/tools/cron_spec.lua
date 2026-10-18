@@ -73,6 +73,15 @@ describe('tools.cron', function()
       )
       assert.equals('at boot', describe_expr('@reboot'))
     end)
+
+    it('reads a step over a range, and the hours on their own', function()
+      assert.equals(
+        'at minutes every 5 minutes from 5–20',
+        describe_expr('5-20/5 * * * *')
+      )
+      assert.equals('every minute, hours 9', describe_expr('* 9 * * *'))
+      assert.equals('at minute 0, every 2 hours', describe_expr('0 */2 * * *'))
+    end)
   end)
 
   describe('next_runs', function()
@@ -203,6 +212,15 @@ describe('tools.cron', function()
       end
     )
 
+    it('warns of a schedule no date ever matches', function()
+      local text, problems =
+        cron.explain({ row = 0, expr = '0 0 31 2 *', zone = 'UTC' }, 0)
+      assert.equals('at 00:00 on day 31 of the month in Feb', text)
+      assert.equals(1, #problems)
+      assert.is_truthy(problems[1].message:find('^Never runs'))
+      assert.equals(vim.diagnostic.severity.WARN, problems[1].severity)
+    end)
+
     it('lists the next runs', function()
       local text = cron.explain(
         { row = 0, expr = '0 3 * * *', zone = 'UTC' },
@@ -213,6 +231,63 @@ describe('tools.cron', function()
         text
       )
     end)
+  end)
+
+  it('reads the buffer again once it changed, until it is wiped', function()
+    local bufnr = h.buffer({ lines = { '0 3 * * * /bin/true' } })
+    vim.bo[bufnr].filetype = 'crontab'
+    cron.DEBOUNCE = 20
+    cron.attach(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { '0 4 * * * /bin/true' })
+    -- Twice, as typing does: one refresh after the pause, not two
+    vim.api.nvim_exec_autocmds('TextChanged', { buffer = bufnr })
+    vim.api.nvim_exec_autocmds('TextChanged', { buffer = bufnr })
+    local function shown()
+      local marks = vim.api.nvim_buf_get_extmarks(
+        bufnr,
+        cron.NAMESPACE,
+        0,
+        -1,
+        { details = true }
+      )
+      return marks[1] ~= nil
+        and marks[1][4].virt_text[1][1]:find('at 04:00', 1, true) ~= nil
+    end
+    assert.is_false(shown())
+    assert.is_true(vim.wait(2000, shown, 10))
+    vim.cmd('bwipeout! ' .. bufnr)
+    assert.same({}, vim.api.nvim_get_autocmds({ group = 'dy_cron_' .. bufnr }))
+  end)
+
+  it('explains the schedule given, or the one on the cursor line', function()
+    local notes = {}
+    local restore = h.stub(
+      vim,
+      'notify',
+      function(msg, level) table.insert(notes, { msg, level }) end
+    )
+    cron.command({ args = '0 3 * * *' })
+    local bufnr = h.buffer({ lines = { '# nothing', '61 * * * * /bin/false' } })
+    vim.bo[bufnr].filetype = 'crontab'
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_win_set_cursor(0, { 1, 0 })
+    cron.command({ args = '' })
+    vim.api.nvim_win_set_cursor(0, { 2, 0 })
+    cron.command({ args = '' })
+    restore()
+    assert.is_truthy(notes[1][1]:find('^`0 3 %* %* %*`\nat 03:00'))
+    assert.equals(vim.log.levels.INFO, notes[1][2])
+    assert.same(
+      { 'No cron schedule on this line', vim.log.levels.WARN },
+      notes[2]
+    )
+    assert.is_truthy(notes[3][1]:find('Not a cron schedule', 1, true))
+    assert.equals(vim.log.levels.ERROR, notes[3][2])
+    -- The buffer is watched from then on
+    assert.equals(1, #vim.api.nvim_get_autocmds({
+      group = 'dy_cron_' .. bufnr,
+      event = 'TextChanged',
+    }))
   end)
 
   it('puts the schedule at the end of its line, once per buffer', function()
