@@ -148,6 +148,27 @@ describe('util.plugin', function()
     assert.are.same({ 'early' }, seen)
   end)
 
+  it('replays once through a wrapper of the queue itself', function()
+    local orig = vim.notify
+    local seen = {}
+    vim.notify = function(msg) table.insert(seen, msg) end
+    plugin.lazy_notify()
+    vim.notify('early')
+    -- A watcher that delegates to whatever `vim.notify` is, as
+    -- `scripts/lib/notify-watch.lua` does after every file sourced
+    local queue, calls = vim.notify, 0
+    vim.notify = function(...)
+      -- The queue feeding itself: stop it, rather than run out of memory
+      calls = calls + 1
+      assert(calls < 10, 'the replay came back through the queue')
+      return queue(...)
+    end
+    vim.wait(1000, function() return #seen > 0 end, 10)
+    vim.notify('late')
+    vim.notify = orig
+    assert.are.same({ 'early', 'late' }, seen)
+  end)
+
   describe('safe_keymap_set', function()
     local set, restores
     before_each(function()
