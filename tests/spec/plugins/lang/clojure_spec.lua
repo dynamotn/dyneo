@@ -54,6 +54,12 @@ describe('plugins.lang.clojure', function()
     assert.is_true(started)
   end)
 
+  it('keeps one log handler when set up again', function()
+    spec('Olical/conjure').init()
+    spec('Olical/conjure').init()
+    assert.equals(1, #vim.api.nvim_get_autocmds({ group = 'dy_conjure_log' }))
+  end)
+
   it('walks the evaluations of the log without diagnostics', function()
     spec('Olical/conjure').init()
     local log = h.buffer({ name = 'conjure-log-1.cljc' })
