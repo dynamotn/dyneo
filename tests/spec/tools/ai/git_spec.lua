@@ -88,6 +88,59 @@ describe('tools.ai.git', function()
     assert.is_truthy(err:find('.env', 1, true), err)
   end)
 
+  it('asks git about a .git folder that names no work tree', function()
+    local bufnr =
+      h.buffer({ name = repo .. '/.git/rebase-merge/git-rebase-todo' })
+    local root, err = await(function(cb) git_tool.root(bufnr, cb) end)
+    assert.is_nil(root)
+    assert.is_truthy(err:find('Not in a git work tree', 1, true))
+  end)
+
+  it('passes on a git diff that fails', function()
+    local change, err = await(function(cb) git_tool.change(dir, nil, cb) end)
+    assert.is_nil(change)
+    assert.is_string(err)
+
+    -- The paths are listed, then the diff itself fails
+    local path = vim.env.PATH
+    local real = vim.fn.exepath('git')
+    h.write(dir .. '/bin/git', {
+      '#!/bin/sh',
+      'for arg in "$@"; do',
+      '  [ "$arg" = "--no-color" ] && { echo "boom" >&2; exit 1; }',
+      'done',
+      'exec "' .. real .. '" "$@"',
+    })
+    vim.fn.setfperm(dir .. '/bin/git', 'rwxr-xr-x')
+    vim.env.PATH = dir .. '/bin:' .. path
+    h.write(repo .. '/a.txt', { 'one', 'two' })
+    git('add', 'a.txt')
+    change, err = await(function(cb) git_tool.change(repo, nil, cb) end)
+    vim.env.PATH = path
+    assert.is_nil(change)
+    assert.is_truthy(err:find('boom', 1, true), err)
+  end)
+
+  it('takes the default branch of origin as the base', function()
+    local clone = dir .. '/clone'
+    local result = vim
+      .system({ 'git', 'clone', '-q', repo, clone }, { text = true })
+      :wait()
+    assert.equals(0, result.code, result.stderr)
+    assert.equals(
+      'origin/main',
+      await(function(cb) git_tool.base(clone, cb) end)
+    )
+  end)
+
+  it('falls back to a local main, and says when there is none', function()
+    assert.equals('main', await(function(cb) git_tool.base(repo, cb) end))
+    git('branch', '-m', 'main', 'trunk')
+    local base, err = await(function(cb) git_tool.base(repo, cb) end)
+    assert.is_nil(base)
+    assert.is_truthy(err:find('No main branch', 1, true))
+  end)
+
   it('takes a .gitlint or commitlint config as Conventional Commits', function()
     assert.is_false(git_tool.conventional(repo))
     h.write(repo .. '/.gitlint', { '[general]' })

@@ -66,6 +66,17 @@ describe('tools.ai.prompts', function()
     assert.equals(1, #prompts.list())
   end)
 
+  it("builds a command on the trusted project's template first", function()
+    h.write(dir .. '/builtin/git/commit.md', { 'Shipped' })
+    assert.equals('Shipped', prompts.template('git/commit.md').body)
+    project = dir .. '/project'
+    assert.equals('Shipped', prompts.template('git/commit.md').body)
+    h.write(dir .. '/project/prompts/git/commit.md', { 'Ours' })
+    local own = prompts.template('git/commit.md')
+    assert.equals('Ours', own.body)
+    assert.is_true(own.project)
+  end)
+
   describe('expand', function()
     local bufnr
 
