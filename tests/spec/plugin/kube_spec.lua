@@ -67,6 +67,19 @@ describe('plugin/kube', function()
     )
   end
 
+  it('completes the subcommands of the module, sorted', function()
+    dofile(h.root .. '/plugin/kube.lua')
+    local names = vim.tbl_keys(require('tools.kube').SUBCOMMANDS)
+    table.sort(names)
+    assert.same(names, vim.fn.getcompletion('DyKube ', 'cmdline'))
+    local lead = names[1]:sub(1, 1)
+    local expected = vim.tbl_filter(
+      function(name) return name:sub(1, 1) == lead end,
+      names
+    )
+    assert.same(expected, vim.fn.getcompletion('DyKube ' .. lead, 'cmdline'))
+  end)
+
   it('does not load the module for YAML of no cluster', function()
     dofile(h.root .. '/plugin/kube.lua')
     local bufnr =

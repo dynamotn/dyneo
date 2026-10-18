@@ -27,6 +27,33 @@ describe('plugin/sudo_write', function()
     cleanup()
   end)
 
+  it('says when the copy failed, leaving the buffer modified', function()
+    local dir, cleanup = h.tmpdir()
+    local target = dir .. '/root-owned.conf'
+    vim.fn.writefile({ 'old' }, target)
+    local messages = {}
+    local restores = {
+      h.stub(vim.fn, 'jobstart', function(_, opts)
+        opts.on_exit(0, 1)
+        return 1
+      end),
+      h.stub(vim, 'notify', function(msg) table.insert(messages, msg) end),
+    }
+    vim.cmd.edit(target)
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'new' })
+    local bufnr = vim.api.nvim_get_current_buf()
+    vim.cmd('DySudoWrite')
+    vim.cmd.stopinsert()
+    vim.wait(500, function() return #messages > 0 end)
+    for _, restore in ipairs(restores) do
+      restore()
+    end
+    assert.same({ 'DySudoWrite failed' }, messages)
+    assert.is_true(vim.bo[bufnr].modified)
+    assert.same({ 'old' }, vim.fn.readfile(target))
+    cleanup()
+  end)
+
   it('refuses a buffer with no file', function()
     local messages = {}
     local restore = h.stub(
