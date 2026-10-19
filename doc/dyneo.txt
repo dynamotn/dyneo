@@ -867,11 +867,37 @@ The remote may be on `dev.azure.com`, `ssh.dev.azure.com` or
 `<org>.visualstudio.com`, and is always asked at `dev.azure.com/<org>`.
 Azure DevOps Server is not supported.
 
+                                                            *dyneo-ci-jenkins*
+A `Jenkinsfile` (or `Jenkinsfile.*`, `*.jenkinsfile`) gets the last build of
+its job, each `stage('...')` marked with the stage of that name.  Nothing in
+the repository says which server or job builds it, so the clone's own git
+config does, and never a file of the tree: >sh
+    git config dyneo.jenkinsJob 'team/app/{branch}'
+    git config dyneo.jenkinsUrl https://ci.example.com
+<Each `/` is a folder; `{branch}` stands for the current branch, named as a
+multibranch pipeline names it.  The server falls back to `DyNeo.jenkins.url`.
+Requests go through `curl --netrc-optional`: an API token belongs in
+`~/.netrc`, which hands it only to its own host.  The stages come from the
+Pipeline Stage View plugin; without it the build alone is shown, and says
+so.
+
+                                                               *dyneo-ci-argo*
+An Argo `Workflow`, `WorkflowTemplate`, `ClusterWorkflowTemplate` or
+`CronWorkflow` (a YAML file whose first document says `apiVersion:
+argoproj.io/...`) gets its newest run in the current kubectl context, as
+|:DyKube| asks it: the namespace of the file, else that of the context.  A
+template or a cron workflow finds its runs by the label Argo gives them, a
+workflow by its name or its `generateName`.  Each template, DAG task and step
+is marked with the steps that ran it, a retry or a loop item on its step.
+The context is pinned for the log an AI is asked about, which comes from the
+step's pod while the cluster keeps it.
+
 In a `.gitlab-ci.yml`, `<localleader>l` (or |:DyCiLint|) has GitLab check the
-saved file with `glab ci lint`, and puts what it finds on the jobs it names.
-This sends the file to GitLab, so a file held back from AI is not sent.  A
-workflow is checked by `actionlint` and `zizmor` as it is edited
-(|dyneo-policy|).
+saved file with `glab ci lint`, and puts what it finds on the jobs it names;
+in a `Jenkinsfile`, the server checks it through
+`pipeline-model-converter/validate`, on the line it names.  This sends the
+file to the server, so a file held back from AI is not sent.  A workflow is
+checked by `actionlint` and `zizmor` as it is edited (|dyneo-policy|).
 
 A tag such as `actions/checkout@v4` runs whatever it points at the day the
 workflow runs.  In a workflow, `<localleader>P` (|:DyActionsPin|) pins every
@@ -1326,12 +1352,13 @@ Failed CI jobs                                                 *dyneo-ai-ci*
 In a pipeline file, `<localleader>e` (|:DyAi| `ci`) asks why a job of the
 last run on the branch failed, picking one when several did, with the end
 of its log and the file itself.  The log is fetched as |dyneo-ci| fetches
-the status, through `gh`, `glab` or `az`; colours, timestamps and GitLab's
-section markers are taken out, and only its last 48 KiB are sent, once the
-checks of |dyneo-ai-commit| have passed over them, since a log may print
-whatever the job had in its environment.  Azure DevOps hands a log only
-whole, so only its last 5000 lines are read.  The prompt is
-`prompts/ci/failure.md`.
+the status, through `gh`, `glab`, `az`, `curl` or `kubectl`; colours,
+timestamps and GitLab's section markers are taken out, and only its last
+48 KiB are sent, once the checks of |dyneo-ai-commit| have passed over them,
+since a log may print whatever the job had in its environment.  Azure DevOps
+hands a log only whole, so only its last 5000 lines are read; Jenkins gives
+the console of the whole build, of which only the end is kept; Argo the log
+of the step's pod.  The prompt is `prompts/ci/failure.md`.
 
 Keeping AI local                                            *dyneo-ai-local*
 
@@ -1773,12 +1800,14 @@ Operations ~
                         ending soon.  See |dyneo-inspect|.
 
                                                                  *:DyCiStatus*
-:DyCiStatus             Show the last pipeline of the branch on the jobs of
-                        this `.gitlab-ci.yml`, workflow or Azure pipeline.
+:DyCiStatus             Show the last pipeline on the jobs of this
+                        `.gitlab-ci.yml`, workflow, Azure pipeline,
+                        `Jenkinsfile` or Argo workflow.
 :DyCiStatus clear       Clear it.  See |dyneo-ci|.
 
                                                                    *:DyCiLint*
-:DyCiLint               Have GitLab check this saved `.gitlab-ci.yml`.
+:DyCiLint               Have GitLab check this saved `.gitlab-ci.yml`, or
+                        Jenkins this saved `Jenkinsfile`.
 
                                                                *:DyActionsPin*
 :DyActionsPin           Pin every action of this GitHub workflow to the full

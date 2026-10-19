@@ -109,6 +109,32 @@ function M.fetch_log(remote, pipeline, job, on_done)
   end)
 end
 
+--- Hand `on_done` the log of `job` of `pipeline`, from whichever system ran
+--- it: a Jenkins build's console, an Argo step's pod, a forge's job
+---@param ctx DyCiContext
+---@param pipeline DyCiPipeline
+---@param job DyCiJob
+---@param on_done fun(raw: string?, cut: boolean, err: string?, skipped: boolean)
+function M.fetch_log_for(ctx, pipeline, job, on_done)
+  if ctx.kind == 'jenkins' then
+    return require('tools.ci_jenkins').log(
+      ctx.target --[[@as DyJenkinsTarget]],
+      pipeline,
+      M.MAX_LOG,
+      on_done
+    )
+  end
+  if ctx.kind == 'argo' then
+    return require('tools.ci_argo').log(
+      ctx.target --[[@as DyArgoTarget]],
+      pipeline,
+      job,
+      on_done
+    )
+  end
+  M.fetch_log(ctx.remote --[[@as DyForgeRemote]], pipeline, job, on_done)
+end
+
 --- The end of a job's log, as text: colours, GitLab's section markers and
 --- GitHub's timestamps taken out, a line redrawn with `\r` kept as last drawn
 ---@param log string
@@ -161,7 +187,7 @@ local function ask(bufnr, ctx, pipeline, job, prompt)
     notify(reason, vim.log.levels.WARN)
   end
   if not job.id then return fail('The forge gave no id for ' .. job.name) end
-  M.fetch_log(ctx.remote, pipeline, job, function(raw, cut, err, skipped)
+  M.fetch_log_for(ctx, pipeline, job, function(raw, cut, err, skipped)
     if not raw then return fail(err or 'No log for ' .. job.name) end
     local log, left_out = M.tail(raw)
     left_out = left_out or skipped
@@ -213,7 +239,7 @@ function M.explain(bufnr)
   end
   local ci = require('tools.ci_inline')
   ci.context(bufnr, function(ctx)
-    ci.fetch(ctx.remote, ctx.branch, ctx.file, function(pipeline, err)
+    ci.fetch_for(ctx, function(pipeline, err)
       if not pipeline then
         return notify(err or 'No pipeline', vim.log.levels.WARN)
       end

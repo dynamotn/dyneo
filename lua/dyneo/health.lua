@@ -504,7 +504,7 @@ local function requirements()
     quarto = '`:QuartoPreview` of a Quarto document',
     sops = 'opening a SOPS file decrypted, and `:DyEncryptedRotate`',
     ['ansible-vault'] = 'opening an Ansible Vault decrypted',
-    kubectl = '`:DyKube` and `:DyLog kube`',
+    kubectl = '`:DyKube`, `:DyLog kube` and `:DyCiStatus` on an Argo workflow',
     helm = '`:DyKube` on a chart and `:DyHelmValue`',
     oasdiff = '`:DyOpenApiDiff` (`:MasonInstall oasdiff`)',
     asyncapi = '`:DyAsyncApiDiff` (`:MasonInstall asyncapi-cli`)',

@@ -95,6 +95,18 @@ DyNeo.ai = {
   local_command = nil,
 }
 
+---@class DyJenkins
+---@field url? string The server a repository's `Jenkinsfile` is built on,
+--- `https://ci.example.com`, when its clone names none
+
+---@type DyJenkins The Jenkins server of `:DyCiStatus` in a `Jenkinsfile`. A
+--- clone names its job, and may name its own server, in its git config:
+--- `git config dyneo.jenkinsJob 'team/app/{branch}'`, `git config
+--- dyneo.jenkinsUrl https://ci.example.com`. Neither ever comes from a file
+--- of the repository, and `curl` hands a server only the `~/.netrc` entry
+--- of its own host.
+DyNeo.jenkins = { url = nil }
+
 ---@class DyEnabledPlugins
 ---@field obsidian boolean
 ---@field leetcode boolean

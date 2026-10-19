@@ -246,4 +246,49 @@ describe('tools.ai.ci', function()
     assert.same({ project = 'p', buildId = 77, logId = 9 }, asked[2].route)
     assert.same({ startLine = 101 }, asked[2].query)
   end)
+
+  it('asks Jenkins for its console and Argo for the pod of a step', function()
+    local jenkins = require('tools.ci_jenkins')
+    local argo = require('tools.ci_argo')
+    local asked = {}
+    local undo_jenkins = h.stub(
+      jenkins,
+      'log',
+      function(target, pipeline, max, on_done)
+        table.insert(asked, { 'jenkins', target.base, pipeline.id, max })
+        on_done('console', false, nil, true)
+      end
+    )
+    local undo_argo = h.stub(
+      argo,
+      'log',
+      function(target, pipeline, job, on_done)
+        table.insert(asked, { 'argo', target.context, pipeline.id, job.id })
+        on_done('pod', false, nil, false)
+      end
+    )
+    local got = {}
+    ai_ci.fetch_log_for(
+      { kind = 'jenkins', target = { base = 'https://ci.x/job/a' } },
+      { id = 5, jobs = {} },
+      { id = 'build', name = '#5' },
+      function(...) table.insert(got, { ... }) end
+    )
+    ai_ci.fetch_log_for(
+      { kind = 'argo', target = { context = 'kind-dev' } },
+      { id = 'ci-new', jobs = {} },
+      { id = 'n2', name = 'unit' },
+      function(...) table.insert(got, { ... }) end
+    )
+    undo_argo()
+    undo_jenkins()
+    assert.same({
+      { 'jenkins', 'https://ci.x/job/a', 5, ai_ci.MAX_LOG },
+      { 'argo', 'kind-dev', 'ci-new', 'n2' },
+    }, asked)
+    assert.same(
+      { { 'console', false, nil, true }, { 'pod', false, nil, false } },
+      got
+    )
+  end)
 end)

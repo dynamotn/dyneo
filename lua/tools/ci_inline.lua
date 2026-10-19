@@ -4,11 +4,13 @@
 --- file, each job gets the status of its last run on the current branch at
 --- the end of the line that defines it: passed, failed, running, waiting or
 --- skipped. The forge is asked through its own CLI (`util.forge`), which
---- holds the token.
+--- holds the token. A `Jenkinsfile` gets its stages from the job its clone
+--- names (`tools.ci_jenkins`), an Argo workflow its steps from the current
+--- kubectl context (`tools.ci_argo`).
 ---
---- A GitLab file can also be checked by GitLab itself (`glab ci lint`),
---- which sends it to the server: never a file held back from AI, and only
---- once it is saved, since the file is what is sent.
+--- A GitLab file or a Jenkinsfile can also be checked by its server, which
+--- is sent the file: never a file held back from AI, and only once it is
+--- saved, since the file is what is sent.
 local M = {}
 
 local forge = require('util.forge')
@@ -31,6 +33,15 @@ local BUCKETS = {
   notstarted = 'pending',
   postponed = 'pending',
   abandoned = 'skipped',
+  -- Jenkins: tests failed in a build that ran to its end
+  unstable = 'attention',
+  paused_pending_input = 'pending',
+  aborted = 'skipped',
+  not_executed = 'skipped',
+  not_built = 'skipped',
+  -- Argo
+  error = 'fail',
+  omitted = 'skipped',
   failure = 'fail',
   failed = 'fail',
   timed_out = 'fail',
@@ -171,10 +182,14 @@ end
 --- Where each job of a pipeline file is defined, 1-based, by every name
 --- its runs can carry
 ---@param lines string[]
----@param kind DyForgeKind
+---@param kind DyCiKind
 ---@return table<string, integer>
 function M.job_lines(lines, kind)
   local jobs = {}
+  if kind == 'jenkins' then
+    return require('tools.ci_jenkins').job_lines(lines)
+  end
+  if kind == 'argo' then return require('tools.ci_argo').job_lines(lines) end
   if kind == 'gitlab' then
     for number, line in ipairs(lines) do
       local key = key_of(line)
@@ -231,8 +246,9 @@ function M.defined_as(name)
 end
 
 ---@class DyCiJob
----@field id? integer
+---@field id? integer|string What the job's log is asked for by
 ---@field name string
+---@field template? string Argo: the template the step runs
 ---@field status? string
 ---@field conclusion? string
 
@@ -244,7 +260,7 @@ end
 --- One mark per job line, the loudest of the runs defined there
 ---@param jobs DyCiJob[]
 ---@param lines table<string, integer> From `M.job_lines`
----@param kind? DyForgeKind
+---@param kind? DyCiKind
 ---@return DyCiMark[]
 function M.marks(jobs, lines, kind)
   local by_line = {}
@@ -253,6 +269,12 @@ function M.marks(jobs, lines, kind)
     -- Azure names a leg of a matrix after its job: `Build linux`
     if not line and kind == 'azure' then
       line = lines[job.name:match('^(.-)%s+%S+$') or '']
+    end
+    -- Argo names a retry or a loop item after its step, `build(0:linux)`,
+    -- and a step it reached through another template after that template
+    if not line and kind == 'argo' then
+      line = lines[(job.name:gsub('%b()$', ''))]
+        or (job.template and lines[job.template])
     end
     if line then
       local bucket = M.bucket(job.status, job.conclusion)
@@ -281,16 +303,10 @@ end
 
 local notify = require('util.notify').titled('CI')
 
---- Which forge a pipeline file is for, by its filetype
+--- Which CI system a pipeline file is for
 ---@param bufnr integer
----@return DyForgeKind?
-function M.kind(bufnr)
-  local ft = vim.bo[bufnr].filetype
-  if ft == 'yaml.gitlab' then return 'gitlab' end
-  if ft == 'yaml.gh-action' then return 'github' end
-  if ft == 'yaml.az-pl' then return 'azure' end
-  return nil
-end
+---@return DyCiKind?
+function M.kind(bufnr) return require('util.ci_kind').of(bufnr) end
 
 --- Put `marks` on `bufnr`
 ---@param bufnr integer
@@ -313,10 +329,11 @@ end
 function M.clear(bufnr) vim.api.nvim_buf_clear_namespace(bufnr or 0, ns, 0, -1) end
 
 ---@class DyCiPipeline
----@field id integer
+---@field id integer|string A build number, or an Argo run's name
 ---@field status string
 ---@field url? string
 ---@field jobs DyCiJob[]
+---@field note? string Why the jobs are not all there is to see
 
 --- Jobs a forge hands over per page, the most both of them allow
 M.PER_PAGE = 100
@@ -546,9 +563,10 @@ end
 ---@class DyCiContext
 ---@field dir string
 ---@field file string
----@field kind DyForgeKind
----@field remote DyForgeRemote
----@field branch string
+---@field kind DyCiKind
+---@field remote? DyForgeRemote The forge, for GitHub, GitLab and Azure
+---@field target? DyJenkinsTarget|DyArgoTarget What else is asked
+---@field branch? string The branch, but for Argo
 
 --- Hand `on_context` where the file of `bufnr` lives, and the forge and
 --- branch it is on; say why and hand nothing when one is missing
@@ -558,7 +576,7 @@ function M.context(bufnr, on_context)
   local kind = M.kind(bufnr)
   if not kind then
     return notify(
-      'Not a GitLab CI, GitHub Actions or Azure Pipelines file',
+      'Not a pipeline of GitLab, GitHub, Azure, Jenkins or Argo',
       vim.log.levels.WARN
     )
   end
@@ -567,6 +585,31 @@ function M.context(bufnr, on_context)
     return notify('This buffer holds no file', vim.log.levels.WARN)
   end
   local dir = vim.fs.dirname(file)
+  local function failed(err) notify(err, vim.log.levels.WARN) end
+  if kind == 'argo' then
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    return require('tools.ci_argo').target(dir, lines, function(target, err)
+      if not target then return failed(err) end
+      if not vim.api.nvim_buf_is_valid(bufnr) then return end
+      on_context({ dir = dir, file = file, kind = kind, target = target })
+    end)
+  end
+  if kind == 'jenkins' then
+    return forge.branch(dir, function(branch)
+      if not branch then return failed('Not on a branch') end
+      require('tools.ci_jenkins').target(dir, branch, function(target, err)
+        if not target then return failed(err) end
+        if not vim.api.nvim_buf_is_valid(bufnr) then return end
+        on_context({
+          dir = dir,
+          file = file,
+          kind = kind,
+          target = target,
+          branch = branch,
+        })
+      end)
+    end)
+  end
   forge.remote(dir, function(remote)
     if not remote or remote.kind ~= kind then
       return notify(
@@ -598,23 +641,52 @@ function M.status(bufnr)
   M.context(bufnr, function(ctx) M.show_status(bufnr, ctx) end)
 end
 
+--- The last pipeline of `ctx`, from whichever system runs it
+---@param ctx DyCiContext
+---@param on_done fun(pipeline: DyCiPipeline?, err: string?)
+function M.fetch_for(ctx, on_done)
+  if ctx.kind == 'jenkins' then
+    return require('tools.ci_jenkins').fetch(
+      ctx.target --[[@as DyJenkinsTarget]],
+      on_done
+    )
+  end
+  if ctx.kind == 'argo' then
+    return require('tools.ci_argo').fetch(
+      ctx.target --[[@as DyArgoTarget]],
+      on_done
+    )
+  end
+  M.fetch(ctx.remote, ctx.branch, ctx.file, on_done)
+end
+
+--- What a run is called, by the system that ran it
+local RUN_NAMES = {
+  gitlab = 'Pipeline',
+  jenkins = 'Build',
+  argo = 'Workflow',
+}
+
 --- Fetch and show the last pipeline of `ctx` on `bufnr`
 ---@param bufnr integer
 ---@param ctx DyCiContext
 function M.show_status(bufnr, ctx)
-  M.fetch(ctx.remote, ctx.branch, ctx.file, function(pipeline, err)
+  M.fetch_for(ctx, function(pipeline, err)
     if not vim.api.nvim_buf_is_valid(bufnr) then return end
     if not pipeline then return notify(err or 'failed', vim.log.levels.WARN) end
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     local marks = M.marks(pipeline.jobs, M.job_lines(lines, ctx.kind), ctx.kind)
     M.show(bufnr, marks)
     local bucket = M.bucket(pipeline.status)
+    local where = ctx.branch
+      or ('%s/%s'):format(ctx.target.context, ctx.target.namespace)
     notify(
-      ('%s %s %s on %s%s'):format(
+      ('%s %s %s on %s%s%s'):format(
         M.SYMBOLS[bucket],
-        ctx.kind == 'gitlab' and 'Pipeline' or 'Run',
+        RUN_NAMES[ctx.kind] or 'Run',
         pipeline.id,
-        ctx.branch,
+        where,
+        pipeline.note and ('\n' .. pipeline.note) or '',
         pipeline.url and ('\n' .. pipeline.url) or ''
       ),
       bucket == 'fail' and vim.log.levels.WARN or nil
@@ -654,21 +726,26 @@ local lint_ns = vim.api.nvim_create_namespace('dy_ci_lint')
 function M.lint(bufnr)
   bufnr = (bufnr == nil or bufnr == 0) and vim.api.nvim_get_current_buf()
     or bufnr
-  if M.kind(bufnr) ~= 'gitlab' then
+  local kind = M.kind(bufnr)
+  if kind ~= 'gitlab' and kind ~= 'jenkins' then
     return notify(
-      'GitLab checks .gitlab-ci.yml; a workflow is checked by actionlint',
+      'GitLab checks .gitlab-ci.yml and Jenkins a Jenkinsfile; a workflow is checked as it is edited',
       vim.log.levels.WARN
     )
   end
+  local server = kind == 'gitlab' and 'GitLab' or 'Jenkins'
   if require('util.sensitive').is_sensitive(bufnr) then
     return notify(
-      'Held back from leaving the machine: not sent to GitLab',
+      'Held back from leaving the machine: not sent to ' .. server,
       vim.log.levels.WARN
     )
   end
   if vim.bo[bufnr].modified then
-    return notify('Write the file first: GitLab is sent what is saved')
+    return notify(
+      ('Write the file first: %s is sent what is saved'):format(server)
+    )
   end
+  if kind == 'jenkins' then return M.lint_jenkins(bufnr) end
   if vim.fn.executable('glab') ~= 1 then
     return notify('glab is not installed', vim.log.levels.ERROR)
   end
@@ -712,6 +789,29 @@ function M.lint(bufnr)
   end)
 end
 
+--- Have the Jenkins server of a saved Jenkinsfile check it
+---@param bufnr integer
+function M.lint_jenkins(bufnr)
+  M.context(bufnr, function(ctx)
+    local text =
+      table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
+    require('tools.ci_jenkins').lint(
+      ctx.target.url,
+      text .. '\n',
+      function(diagnostics, err)
+        if not vim.api.nvim_buf_is_valid(bufnr) then return end
+        if err then return notify(err, vim.log.levels.WARN) end
+        vim.diagnostic.set(lint_ns, bufnr, diagnostics or {})
+        notify(
+          not diagnostics and 'Jenkins says the file is valid'
+            or ('Jenkins found %d problems'):format(#diagnostics),
+          diagnostics and vim.log.levels.WARN or nil
+        )
+      end
+    )
+  end)
+end
+
 --- The subcommands of `:Ci`-style commands
 ---@param args { fargs: string[] }
 function M.command(args)
@@ -744,13 +844,13 @@ function M.attach(bufnr)
     function() require('tools.ai.ci').explain(bufnr) end,
     { buffer = bufnr, desc = 'Explain Failed Job (AI)' }
   )
-  if M.kind(bufnr) == 'gitlab' then
-    vim.keymap.set(
-      'n',
-      '<localleader>l',
-      function() M.lint(bufnr) end,
-      { buffer = bufnr, desc = 'Lint With GitLab (CI)' }
-    )
+  local kind = M.kind(bufnr)
+  if kind == 'gitlab' or kind == 'jenkins' then
+    vim.keymap.set('n', '<localleader>l', function() M.lint(bufnr) end, {
+      buffer = bufnr,
+      desc = kind == 'gitlab' and 'Lint With GitLab (CI)'
+        or 'Lint With Jenkins (CI)',
+    })
   end
 end
 

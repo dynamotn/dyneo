@@ -307,6 +307,40 @@ describe('tools.ci_inline', function()
       assert.is_truthy(calls:find('buildId=77 project=My Project', 1, true))
     end)
 
+    it('shows the last Jenkins build of the branch on its stages', function()
+      git('config', 'dyneo.jenkinsJob', 'app/{branch}')
+      git('config', 'dyneo.jenkinsUrl', 'https://ci.example.com')
+      cli('curl', {
+        'case "$*" in',
+        [[  *job/app/job/feat%252Fx/lastBuild/api/json*) echo '{"number":5,"result":"FAILURE"}';;]],
+        [[  */5/wfapi/describe*) echo '{"stages":[{"id":"1","name":"Build","status":"SUCCESS"},{"id":"2","name":"Test","status":"FAILED"}]}';;]],
+        [[  *) exit 22;;]],
+        'esac',
+      })
+      h.write(repo .. '/Jenkinsfile', {
+        'pipeline {',
+        '  stages {',
+        "    stage('Build') { steps { sh 'make' } }",
+        "    stage('Test') { steps { sh 'make test' } }",
+        '  }',
+        '}',
+      })
+      vim.cmd.edit(repo .. '/Jenkinsfile')
+      local bufnr = vim.api.nvim_get_current_buf()
+      vim.bo.filetype = 'groovy'
+      ci.status(bufnr)
+      assert.is_true(vim.wait(5000, function() return #notes > 0 end, 20))
+      assert.same({ { 2, '  ✓ pass' }, { 3, '  ✗ fail' } }, marks(bufnr))
+      assert.is_truthy(notes[1]:find('Build 5 on feat/x', 1, true))
+      assert.is_truthy(
+        notes[1]:find(
+          'https://ci.example.com/job/app/job/feat%252Fx/5/',
+          1,
+          true
+        )
+      )
+    end)
+
     it('says when no Azure pipeline runs the file', function()
       git('remote', 'add', 'origin', 'git@ssh.dev.azure.com:v3/c/p/web')
       cli('az', { [[echo '{"count":0,"value":[]}']] })
@@ -492,7 +526,7 @@ describe('tools.ci_inline', function()
       ci.status(h.buffer({ filetype = 'yaml', lines = GITLAB }))
       ci.status(h.buffer({ filetype = 'yaml.gitlab', lines = GITLAB }))
       assert.same({
-        'Not a GitLab CI, GitHub Actions or Azure Pipelines file',
+        'Not a pipeline of GitLab, GitHub, Azure, Jenkins or Argo',
         'This buffer holds no file',
       }, notes)
     end)
