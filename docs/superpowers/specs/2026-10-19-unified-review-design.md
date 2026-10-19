@@ -125,6 +125,26 @@ limits apply and nothing is fetched twice.
   refuses, it is kept and the user is told the path.
 - The diff shown is merge-base(base, head) to head: what the PR changes.
 
+### Trusting the PR's code (decided by the user)
+
+The worktree is the PR author's code, and language servers can run it
+(build scripts, proc macros, linter plugins, `go list`), as can a `.nvim`
+folder, mise or direnv file the PR adds. So LSP is allowed, but asked for
+once per PR:
+
+- Until trusted, the session shows the diff only: no language server attaches
+  to buffers under the review worktree, and its `.nvim` folder never joins the
+  runtimepath.
+- The first file opened asks once, through `util.trust`, naming the PR, its
+  author, and whether it comes from a fork. The verdict is pinned before the
+  prompt (it keeps handling events) and keyed on the PR (forge, slug, id) and
+  its head SHA, not on the worktree path, so the repository's own trust is
+  never inherited and a new push asks again.
+- Yes starts the servers for every buffer of that worktree; no keeps the
+  session diff-only, and `:DyReview trust` asks again.
+- The worktree has no dependencies installed, so some servers answer only in
+  part; that is accepted and said once when they start.
+
 ### Diff display
 
 codediff.nvim, already in the config, opened through `:CodeDiff` with the two
@@ -251,7 +271,7 @@ GitHub, GitLab and Azure write paths are written once, together.
 
 ### Commands and keys
 
-`:DyReview` with subcommands `pick` (default), `branch`, `ai`, `submit`,
+`:DyReview` with subcommands `pick` (default), `branch`, `ai`, `submit`, `trust`,
 `since`, `drafts`, `close`. Global group `<leader>pv` ("review"):
 
 | Key | Does |
