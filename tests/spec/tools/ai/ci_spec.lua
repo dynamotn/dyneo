@@ -215,4 +215,35 @@ describe('tools.ai.ci', function()
       ai_ci.log_endpoint({ kind = 'github', slug = 'o/r' }, job)
     )
   end)
+
+  it('reads only the end of a long Azure log, and says so', function()
+    local forge = require('util.forge')
+    local asked = {}
+    local undo_api = h.stub(forge, 'api', function(_, call, on_done)
+      table.insert(asked, call)
+      on_done({
+        value = {
+          { id = 8, lineCount = 1 },
+          { id = 9, lineCount = ai_ci.AZURE_LINES + 100 },
+        },
+      })
+    end)
+    local undo_text = h.stub(forge, 'api_text', function(_, call, _, on_done)
+      table.insert(asked, call)
+      on_done('the end', false)
+    end)
+    local got
+    ai_ci.fetch_log(
+      { kind = 'azure', project = 'p' },
+      { id = 77, status = 'failed', jobs = {} },
+      { id = 9, name = 'x' },
+      function(...) got = { ... } end
+    )
+    undo_text()
+    undo_api()
+    assert.same({ 'the end', false, nil, true }, got)
+    assert.same({ project = 'p', buildId = 77 }, asked[1].route)
+    assert.same({ project = 'p', buildId = 77, logId = 9 }, asked[2].route)
+    assert.same({ startLine = 101 }, asked[2].query)
+  end)
 end)

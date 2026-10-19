@@ -848,15 +848,24 @@ days.
 
 7.4 CI pipelines                                                    *dyneo-ci*
 
-In a `.gitlab-ci.yml` or a GitHub Actions workflow, `<localleader>s` (or
-|:DyCiStatus|) asks the forge for the last pipeline of the current branch and
-puts the status of each job at the end of the line defining it: `✓` passed,
-`✗` failed, `●` running, `○` waiting, `⊘` skipped.  The jobs of a matrix are
-counted on their one line, the worst of them shown.  `<localleader>x` clears
-them.  The forge is the first of the remotes `upstream`, `gh`, `github` and
-`origin` on GitHub or GitLab, asked through `gh` or `glab`, which keep the
-token.  `<localleader>e` asks an AI why a failed job failed, see
-|dyneo-ai-ci|.
+In a `.gitlab-ci.yml`, a GitHub Actions workflow or an `azure-pipelines.yml`,
+`<localleader>s` (or |:DyCiStatus|) asks the forge for the last pipeline of
+the current branch and puts the status of each job at the end of the line
+defining it: `✓` passed, `✗` failed, `●` running, `○` waiting, `⊘` skipped.
+The jobs of a matrix are counted on their one line, the worst of them shown.
+`<localleader>x` clears them.  The forge is the first of the remotes
+`upstream`, `gh`, `github` and `origin` on GitHub, GitLab or Azure DevOps,
+asked through `gh`, `glab` or `az devops invoke`, which keep the token.
+`<localleader>e` asks an AI why a failed job failed, see |dyneo-ai-ci|.
+
+On Azure DevOps the pipeline is the one of the remote's project whose YAML
+file is this file in this repository; a job is found by its `job:` or
+`deployment:` name or its `displayName`, and a file of `steps:` alone has
+one job.  `az` needs its `azure-devops` extension and a login, `az login`
+or `az devops login`; it is never left to install the extension itself.
+The remote may be on `dev.azure.com`, `ssh.dev.azure.com` or
+`<org>.visualstudio.com`, and is always asked at `dev.azure.com/<org>`.
+Azure DevOps Server is not supported.
 
 In a `.gitlab-ci.yml`, `<localleader>l` (or |:DyCiLint|) has GitLab check the
 saved file with `glab ci lint`, and puts what it finds on the jobs it names.
@@ -1317,10 +1326,12 @@ Failed CI jobs                                                 *dyneo-ai-ci*
 In a pipeline file, `<localleader>e` (|:DyAi| `ci`) asks why a job of the
 last run on the branch failed, picking one when several did, with the end
 of its log and the file itself.  The log is fetched as |dyneo-ci| fetches
-the status, through `gh` or `glab`; colours, timestamps and GitLab's section
-markers are taken out, and only its last 48 KiB are sent, once the checks
-of |dyneo-ai-commit| have passed over them, since a log may print whatever
-the job had in its environment.  The prompt is `prompts/ci/failure.md`.
+the status, through `gh`, `glab` or `az`; colours, timestamps and GitLab's
+section markers are taken out, and only its last 48 KiB are sent, once the
+checks of |dyneo-ai-commit| have passed over them, since a log may print
+whatever the job had in its environment.  Azure DevOps hands a log only
+whole, so only its last 5000 lines are read.  The prompt is
+`prompts/ci/failure.md`.
 
 Keeping AI local                                            *dyneo-ai-local*
 
@@ -1763,7 +1774,7 @@ Operations ~
 
                                                                  *:DyCiStatus*
 :DyCiStatus             Show the last pipeline of the branch on the jobs of
-                        this `.gitlab-ci.yml` or workflow.
+                        this `.gitlab-ci.yml`, workflow or Azure pipeline.
 :DyCiStatus clear       Clear it.  See |dyneo-ci|.
 
                                                                    *:DyCiLint*

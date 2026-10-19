@@ -39,6 +39,27 @@ local GITHUB = {
   '  notjob: 1',
 }
 
+local AZURE = {
+  'trigger: [main]',
+  'stages:',
+  '  - stage: Build',
+  '    displayName: Build stage',
+  '    jobs:',
+  '      - job: compile',
+  '        displayName: "Compile it" # quoted',
+  '        strategy:',
+  '          matrix:',
+  '            linux: {}',
+  '        steps:',
+  '          - script: make',
+  '            displayName: not a job',
+  '  - stage: Ship',
+  '    jobs:',
+  '      - deployment: release',
+  '        environment: prod',
+  '      # - job: commented',
+}
+
 describe('tools.ci_inline', function()
   local ci, dir, cleanup, notes, restore_notify
 
@@ -117,6 +138,34 @@ describe('tools.ci_inline', function()
       { name = 'build 2/2', status = 'failed' },
     }, ci.job_lines(GITLAB, 'gitlab'))
     assert.same({ { line = 6, bucket = 'fail', count = 2 } }, marks)
+  end)
+
+  it('finds the jobs of an Azure pipeline, by name and display name', function()
+    assert.same(
+      { compile = 6, ['Compile it'] = 6, release = 16 },
+      ci.job_lines(AZURE, 'azure')
+    )
+    -- A file of steps alone runs one job, called `Job`
+    assert.same(
+      { Job = 2 },
+      ci.job_lines({ 'pool: x', 'steps:', '  - script: x' }, 'azure')
+    )
+    local marks = ci.marks({
+      {
+        name = 'Compile it linux',
+        status = 'completed',
+        conclusion = 'failed',
+      },
+      { name = 'release', status = 'inProgress' },
+      { name = 'Job', status = 'completed', conclusion = 'succeeded' },
+    }, ci.job_lines(AZURE, 'azure'), 'azure')
+    assert.same({
+      { line = 6, bucket = 'fail', count = 1 },
+      { line = 16, bucket = 'running', count = 1 },
+    }, marks)
+    assert.equals('pass', ci.bucket('completed', 'succeededWithIssues'))
+    assert.equals('attention', ci.bucket('partiallySucceeded'))
+    assert.equals('pending', ci.bucket('notStarted'))
   end)
 
   it('reads the problems glab ci lint names', function()
@@ -217,6 +266,56 @@ describe('tools.ci_inline', function()
       )
       ci.command({ fargs = { 'clear' } })
       assert.same({}, marks(bufnr))
+    end)
+
+    it('shows the last run of an Azure pipeline on its jobs', function()
+      git(
+        'remote',
+        'add',
+        'origin',
+        'https://contoso@dev.azure.com/contoso/My%20Project/_git/web'
+      )
+      cli('az', {
+        'case "$*" in',
+        -- Only the spelling Azure kept the file under finds the pipeline
+        [[  *yamlFilename=/azure-pipelines.yml*) echo '{"count":1,"value":[{"id":5,"name":"web-ci","repository":{"name":"web"},"process":{"yamlFilename":"/azure-pipelines.yml"}},{"id":6,"repository":{"name":"other"},"process":{"yamlFilename":"/azure-pipelines.yml"}}]}';;]],
+        [[  *"--resource definitions"*) echo '{"count":0,"value":[]}';;]],
+        [[  *"--resource builds"*) echo '{"count":1,"value":[{"id":77,"status":"completed","result":"failed","_links":{"web":{"href":"https://dev.azure.com/contoso/77"}}}]}';;]],
+        [[  *"--resource timeline"*) echo '{"records":[{"type":"Stage","name":"Build"},{"type":"Job","name":"Compile it linux","state":"completed","result":"failed","log":{"id":9}},{"type":"Job","name":"release","state":"inProgress"}]}';;]],
+        'esac',
+      })
+      h.write(repo .. '/azure-pipelines.yml', AZURE)
+      vim.cmd.edit(repo .. '/azure-pipelines.yml')
+      local bufnr = vim.api.nvim_get_current_buf()
+      vim.bo.filetype = 'yaml.az-pl'
+      ci.status(bufnr)
+      assert.is_true(vim.wait(5000, function() return #notes > 0 end, 20))
+      assert.same(
+        { { 5, '  ✗ fail' }, { 15, '  ● running' } },
+        marks(bufnr)
+      )
+      assert.is_truthy(notes[1]:find('Run 77 on feat/x', 1, true))
+
+      local calls = table.concat(vim.fn.readfile(dir .. '/calls'), '\n')
+      assert.is_truthy(
+        calls:find('--organization https://dev.azure.com/contoso', 1, true)
+      )
+      assert.is_truthy(calls:find('project=My Project', 1, true))
+      assert.is_truthy(
+        calls:find('branchName=refs/heads/feat/x definitions=5', 1, true)
+      )
+      assert.is_truthy(calls:find('buildId=77 project=My Project', 1, true))
+    end)
+
+    it('says when no Azure pipeline runs the file', function()
+      git('remote', 'add', 'origin', 'git@ssh.dev.azure.com:v3/c/p/web')
+      cli('az', { [[echo '{"count":0,"value":[]}']] })
+      h.write(repo .. '/azure-pipelines.yml', AZURE)
+      vim.cmd.edit(repo .. '/azure-pipelines.yml')
+      vim.bo.filetype = 'yaml.az-pl'
+      ci.status(0)
+      assert.is_true(vim.wait(5000, function() return #notes > 0 end, 20))
+      assert.same({ 'No pipeline of p runs azure-pipelines.yml' }, notes)
     end)
 
     it('shows the last run of a GitHub workflow on its jobs', function()
@@ -393,7 +492,7 @@ describe('tools.ci_inline', function()
       ci.status(h.buffer({ filetype = 'yaml', lines = GITLAB }))
       ci.status(h.buffer({ filetype = 'yaml.gitlab', lines = GITLAB }))
       assert.same({
-        'Not a GitLab CI or GitHub Actions file',
+        'Not a GitLab CI, GitHub Actions or Azure Pipelines file',
         'This buffer holds no file',
       }, notes)
     end)

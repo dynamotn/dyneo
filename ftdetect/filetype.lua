@@ -79,6 +79,7 @@ vim.filetype.add({
   filename = {
     ['terragrunt.hcl'] = 'terragrunt',
     ['azure-pipelines.yml'] = 'yaml.az-pl',
+    ['azure-pipelines.yaml'] = 'yaml.az-pl',
     ['docker-compose.yml'] = 'yaml.docker-compose',
     ['docker-compose.yaml'] = 'yaml.docker-compose',
     ['compose.yml'] = 'yaml.docker-compose',

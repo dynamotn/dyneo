@@ -1,9 +1,10 @@
 --- The last pipeline of the branch, shown on the jobs of the file defining it
 ---
---- In a `.gitlab-ci.yml` or a GitHub Actions workflow, each job gets the
---- status of its last run on the current branch at the end of the line that
---- defines it: passed, failed, running, waiting or skipped. The forge is
---- asked through its own CLI (`util.forge`), which holds the token.
+--- In a `.gitlab-ci.yml`, a GitHub Actions workflow or an Azure Pipelines
+--- file, each job gets the status of its last run on the current branch at
+--- the end of the line that defines it: passed, failed, running, waiting or
+--- skipped. The forge is asked through its own CLI (`util.forge`), which
+--- holds the token.
 ---
 --- A GitLab file can also be checked by GitLab itself (`glab ci lint`),
 --- which sends it to the server: never a file held back from AI, and only
@@ -16,11 +17,20 @@ local ns = vim.api.nvim_create_namespace('dy_ci')
 
 ---@alias DyCiBucket 'pass'|'fail'|'running'|'pending'|'skipped'|'attention'
 
---- What every status and conclusion of both forges comes down to
+--- What every status and conclusion of the forges comes down to, lower case
 local BUCKETS = {
   success = 'pass',
   passed = 'pass',
   completed = 'pass',
+  succeeded = 'pass',
+  -- Azure: a step marked `continueOnError` failed, or one warned
+  succeededwithissues = 'pass',
+  partiallysucceeded = 'attention',
+  inprogress = 'running',
+  cancelling = 'running',
+  notstarted = 'pending',
+  postponed = 'pending',
+  abandoned = 'skipped',
   failure = 'fail',
   failed = 'fail',
   timed_out = 'fail',
@@ -116,6 +126,48 @@ local function key_of(line)
   return key, ''
 end
 
+--- A YAML scalar without its comment and quotes
+---@param value string
+---@return string
+local function scalar(value)
+  value = vim.trim((value:gsub('%s+#.*$', '')))
+  return (value:gsub('^(["\'])(.*)%1$', '%2'))
+end
+
+--- Where each job of an Azure Pipelines file is defined, by its name and
+--- its `displayName`: the items `- job:` and `- deployment:`, wherever they
+--- sit. A file of `steps:` alone runs one job, called `Job`.
+---@param lines string[]
+---@return table<string, integer>
+function M.azure_job_lines(lines)
+  local jobs, current, column, steps = {}, nil, nil, nil
+  for number, line in ipairs(lines) do
+    if line:match('^%s*#') or not line:match('%S') then goto continue end
+    local dash, key, value = line:match('^(%s*%-%s+)(%a+)%s*:(.*)$')
+    if dash and (key == 'job' or key == 'deployment') then
+      current, column = scalar(value), #dash
+      if current == '' then
+        current = nil
+      else
+        jobs[current] = number
+      end
+    else
+      local indent = #line:match('^(%s*)')
+      if current and indent < column then current = nil end
+      local display = current
+        and indent == column
+        and line:match('^%s*displayName%s*:(.*)$')
+      if display and scalar(display) ~= '' then
+        jobs[scalar(display)] = jobs[current]
+      end
+      if line:match('^steps%s*:') then steps = number end
+    end
+    ::continue::
+  end
+  if steps and next(jobs) == nil then jobs.Job = steps end
+  return jobs
+end
+
 --- Where each job of a pipeline file is defined, 1-based, by every name
 --- its runs can carry
 ---@param lines string[]
@@ -132,6 +184,7 @@ function M.job_lines(lines, kind)
     end
     return jobs
   end
+  if kind == 'azure' then return M.azure_job_lines(lines) end
 
   -- GitHub: the keys right under `jobs:`, and the `name:` each may have
   local in_jobs, child, current, property = false, nil, nil, nil
@@ -191,11 +244,16 @@ end
 --- One mark per job line, the loudest of the runs defined there
 ---@param jobs DyCiJob[]
 ---@param lines table<string, integer> From `M.job_lines`
+---@param kind? DyForgeKind
 ---@return DyCiMark[]
-function M.marks(jobs, lines)
+function M.marks(jobs, lines, kind)
   local by_line = {}
   for _, job in ipairs(jobs) do
     local line = lines[job.name] or lines[M.defined_as(job.name)]
+    -- Azure names a leg of a matrix after its job: `Build linux`
+    if not line and kind == 'azure' then
+      line = lines[job.name:match('^(.-)%s+%S+$') or '']
+    end
     if line then
       local bucket = M.bucket(job.status, job.conclusion)
       local mark = by_line[line]
@@ -230,6 +288,7 @@ function M.kind(bufnr)
   local ft = vim.bo[bufnr].filetype
   if ft == 'yaml.gitlab' then return 'gitlab' end
   if ft == 'yaml.gh-action' then return 'github' end
+  if ft == 'yaml.az-pl' then return 'azure' end
   return nil
 end
 
@@ -292,12 +351,129 @@ local function all_jobs(remote, path, rows_of, on_done)
   page(1)
 end
 
+--- The rows of an Azure DevOps list, `{ count, value }`
+---@param data any
+---@return table[]
+local function azure_rows(data)
+  return type(data) == 'table' and type(data.value) == 'table' and data.value
+    or {}
+end
+
+--- The pipeline of `remote`'s project that runs `path` from `remote`'s
+--- repository. Azure keeps a file's name with or without a leading slash,
+--- and filters by it as kept: both spellings are asked.
+---@param remote DyForgeRemote
+---@param path string The file, relative to the root of its repository
+---@param on_done fun(definition: table?, err: string?)
+function M.azure_definition(remote, path, on_done)
+  local function runs_here(row)
+    local repo = vim.tbl_get(row, 'repository', 'name')
+    local yaml = vim.tbl_get(row, 'process', 'yamlFilename')
+    return type(repo) == 'string'
+      and repo:lower() == remote.repo:lower()
+      and type(yaml) == 'string'
+      and (yaml:gsub('^/', '')) == path
+  end
+  local spellings = { path, '/' .. path }
+  local function ask(index)
+    if not spellings[index] then
+      return on_done(
+        nil,
+        ('No pipeline of %s runs %s'):format(remote.project, path)
+      )
+    end
+    forge.api(remote, {
+      area = 'build',
+      resource = 'definitions',
+      route = { project = remote.project },
+      query = { yamlFilename = spellings[index], includeAllProperties = 'true' },
+    }, function(data, err)
+      if not data then return on_done(nil, err) end
+      for _, row in ipairs(azure_rows(data)) do
+        if type(row) == 'table' and runs_here(row) then return on_done(row) end
+      end
+      ask(index + 1)
+    end)
+  end
+  ask(1)
+end
+
+--- The last run on `branch` of the Azure pipeline defined by `file`, with
+--- the jobs of its timeline
+---@param remote DyForgeRemote
+---@param branch string
+---@param file string
+---@param on_done fun(pipeline: DyCiPipeline?, err: string?)
+local function fetch_azure(remote, branch, file, on_done)
+  local root = vim.fs.root(file, '.git')
+  local path = root and vim.fs.relpath(root, file)
+  if not path then return on_done(nil, 'Not in a git repository') end
+  M.azure_definition(remote, path, function(definition, err)
+    if not definition then return on_done(nil, err) end
+    forge.api(remote, {
+      area = 'build',
+      resource = 'builds',
+      route = { project = remote.project },
+      query = {
+        definitions = definition.id,
+        branchName = 'refs/heads/' .. branch,
+        queryOrder = 'queueTimeDescending',
+        ['$top'] = 1,
+      },
+    }, function(data, e)
+      if not data then return on_done(nil, e) end
+      local last = azure_rows(data)[1]
+      if type(last) ~= 'table' or not last.id then
+        return on_done(
+          nil,
+          ('No run of %s on %s'):format(definition.name or path, branch)
+        )
+      end
+      local pipeline = {
+        id = last.id,
+        status = last.result or last.status,
+        url = vim.tbl_get(last, '_links', 'web', 'href'),
+        jobs = {},
+      }
+      -- A run still queued has no timeline yet
+      if last.status == 'notStarted' then return on_done(pipeline) end
+      forge.api(remote, {
+        area = 'build',
+        resource = 'timeline',
+        route = { project = remote.project, buildId = last.id },
+      }, function(timeline, e2)
+        if not timeline then return on_done(nil, e2) end
+        local records = type(timeline) == 'table' and timeline.records
+        for _, record in ipairs(type(records) == 'table' and records or {}) do
+          if
+            type(record) == 'table'
+            and record.type == 'Job'
+            and type(record.name) == 'string'
+          then
+            table.insert(pipeline.jobs, {
+              -- The log is what a job is asked for by
+              id = vim.tbl_get(record, 'log', 'id'),
+              name = record.name,
+              status = record.state,
+              conclusion = record.result,
+            })
+          end
+        end
+        on_done(pipeline)
+      end)
+    end)
+  end)
+end
+
 --- The last pipeline of `branch` for the file `file`, with its jobs
 ---@param remote DyForgeRemote
 ---@param branch string
 ---@param file string
 ---@param on_done fun(pipeline: DyCiPipeline?, err: string?)
 function M.fetch(remote, branch, file, on_done)
+  if remote.kind == 'azure' then
+    return fetch_azure(remote, branch, file, on_done)
+  end
   if remote.kind == 'gitlab' then
     local project = 'projects/' .. forge.encode(remote.slug)
     local runs = ('%s/pipelines?ref=%s&per_page=1'):format(
@@ -381,7 +557,10 @@ end
 function M.context(bufnr, on_context)
   local kind = M.kind(bufnr)
   if not kind then
-    return notify('Not a GitLab CI or GitHub Actions file', vim.log.levels.WARN)
+    return notify(
+      'Not a GitLab CI, GitHub Actions or Azure Pipelines file',
+      vim.log.levels.WARN
+    )
   end
   local file = vim.api.nvim_buf_get_name(bufnr)
   if file == '' then
@@ -427,7 +606,7 @@ function M.show_status(bufnr, ctx)
     if not vim.api.nvim_buf_is_valid(bufnr) then return end
     if not pipeline then return notify(err or 'failed', vim.log.levels.WARN) end
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-    local marks = M.marks(pipeline.jobs, M.job_lines(lines, ctx.kind))
+    local marks = M.marks(pipeline.jobs, M.job_lines(lines, ctx.kind), ctx.kind)
     M.show(bufnr, marks)
     local bucket = M.bucket(pipeline.status)
     notify(

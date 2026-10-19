@@ -21,6 +21,10 @@ M.TAIL = 48 * 1024
 --- Bytes of the pipeline file that are sent
 M.MAX_FILE = 32 * 1024
 
+--- Lines from the end of an Azure DevOps log that are read: its API answers
+--- in JSON, which cannot be cut short and still be read
+M.AZURE_LINES = 5000
+
 local notify = require('util.notify').titled('AI CI')
 
 --- The jobs of `pipeline` that failed
@@ -37,8 +41,22 @@ end
 --- The API endpoint of the log of `job`
 ---@param remote DyForgeRemote
 ---@param job DyCiJob
----@return string
-function M.log_endpoint(remote, job)
+---@param pipeline? DyCiPipeline The run of the job, which Azure asks for
+---@param start? integer Azure: the first line read
+---@return string|DyForgeAzureCall
+function M.log_endpoint(remote, job, pipeline, start)
+  if remote.kind == 'azure' then
+    return {
+      area = 'build',
+      resource = 'logs',
+      route = {
+        project = remote.project,
+        buildId = pipeline and pipeline.id,
+        logId = job.id,
+      },
+      query = start and start > 1 and { startLine = start } or nil,
+    }
+  end
   if remote.kind == 'gitlab' then
     return ('projects/%s/jobs/%d/trace'):format(
       require('util.forge').encode(remote.slug),
@@ -46,6 +64,49 @@ function M.log_endpoint(remote, job)
     )
   end
   return ('repos/%s/actions/jobs/%d/logs'):format(remote.slug, job.id)
+end
+
+--- Hand `on_done` the log of `job`, or its end; `skipped` says lines before
+--- what was read were left out
+---@param remote DyForgeRemote
+---@param pipeline DyCiPipeline
+---@param job DyCiJob
+---@param on_done fun(raw: string?, cut: boolean, err: string?, skipped: boolean)
+function M.fetch_log(remote, pipeline, job, on_done)
+  local forge = require('util.forge')
+  if remote.kind ~= 'azure' then
+    return forge.api_text(
+      remote,
+      M.log_endpoint(remote, job),
+      M.MAX_LOG,
+      function(raw, cut, err) on_done(raw, cut, err, false) end
+    )
+  end
+  -- How long the log is, to read only its end
+  forge.api(remote, {
+    area = 'build',
+    resource = 'logs',
+    route = { project = remote.project, buildId = pipeline.id },
+  }, function(data, err)
+    if not data then return on_done(nil, false, err, false) end
+    local count
+    local rows = type(data) == 'table' and data.value
+    for _, row in ipairs(type(rows) == 'table' and rows or {}) do
+      if type(row) == 'table' and row.id == job.id then
+        count = row.lineCount
+      end
+    end
+    local start = type(count) == 'number'
+        and count > M.AZURE_LINES
+        and count - M.AZURE_LINES + 1
+      or 1
+    forge.api_text(
+      remote,
+      M.log_endpoint(remote, job, pipeline, start),
+      M.MAX_LOG,
+      function(raw, cut, e) on_done(raw, cut, e, start > 1) end
+    )
+  end)
 end
 
 --- The end of a job's log, as text: colours, GitLab's section markers and
@@ -95,49 +156,42 @@ end
 ---@param job DyCiJob
 ---@param prompt DyAiPrompt
 local function ask(bufnr, ctx, pipeline, job, prompt)
-  local forge = require('util.forge')
   local function fail(reason)
     require('util.ai_audit').record('dyai', 'refused', ctx.file, 'ci log')
     notify(reason, vim.log.levels.WARN)
   end
   if not job.id then return fail('The forge gave no id for ' .. job.name) end
-  forge.api_text(
-    ctx.remote,
-    M.log_endpoint(ctx.remote, job),
-    M.MAX_LOG,
-    function(raw, cut, err)
-      if not raw then return fail(err or 'No log for ' .. job.name) end
-      local log, left_out = M.tail(raw)
-      if cut then
-        notify(
-          ('The log passed %d MiB: its end is missing'):format(
-            M.MAX_LOG / 1024 / 1024
-          ),
-          vim.log.levels.WARN
-        )
-      end
-      require('tools.ai.check').text(ctx.dir, {}, log, function(why)
-        if why then return fail('The log of ' .. job.name .. ': ' .. why) end
-        if not vim.api.nvim_buf_is_valid(bufnr) then return end
-        local file =
-          table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
-        if #file > M.MAX_FILE then
-          file = file:sub(1, M.MAX_FILE) .. '\n(cut)'
-        end
-        require('tools.ai').send(
-          M.build(prompt, {
-            job = job.name,
-            file = vim.fn.fnamemodify(ctx.file, ':~:.'),
-            run = pipeline.url,
-            workflow = file,
-            log = (left_out and '(earlier lines left out)\n' or '') .. log,
-          }),
-          bufnr,
-          'ci job ' .. job.name
-        )
-      end)
+  M.fetch_log(ctx.remote, pipeline, job, function(raw, cut, err, skipped)
+    if not raw then return fail(err or 'No log for ' .. job.name) end
+    local log, left_out = M.tail(raw)
+    left_out = left_out or skipped
+    if cut then
+      notify(
+        ('The log passed %d MiB: its end is missing'):format(
+          M.MAX_LOG / 1024 / 1024
+        ),
+        vim.log.levels.WARN
+      )
     end
-  )
+    require('tools.ai.check').text(ctx.dir, {}, log, function(why)
+      if why then return fail('The log of ' .. job.name .. ': ' .. why) end
+      if not vim.api.nvim_buf_is_valid(bufnr) then return end
+      local file =
+        table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
+      if #file > M.MAX_FILE then file = file:sub(1, M.MAX_FILE) .. '\n(cut)' end
+      require('tools.ai').send(
+        M.build(prompt, {
+          job = job.name,
+          file = vim.fn.fnamemodify(ctx.file, ':~:.'),
+          run = pipeline.url,
+          workflow = file,
+          log = (left_out and '(earlier lines left out)\n' or '') .. log,
+        }),
+        bufnr,
+        'ci job ' .. job.name
+      )
+    end)
+  end)
 end
 
 --- Explain why a job of the last pipeline of the branch failed, from the

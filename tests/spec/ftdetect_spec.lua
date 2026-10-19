@@ -35,6 +35,7 @@ describe('ftdetect', function()
     -- file name
     { '/p/terragrunt.hcl', 'terragrunt' },
     { '/p/azure-pipelines.yml', 'yaml.az-pl' },
+    { '/p/azure-pipelines.yaml', 'yaml.az-pl' },
     { '/p/docker-compose.yml', 'yaml.docker-compose' },
     { '/p/compose.yaml', 'yaml.docker-compose' },
     { '/p/PKGBUILD', 'sh.PKGBUILD' },

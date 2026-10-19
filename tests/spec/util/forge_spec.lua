@@ -33,6 +33,82 @@ describe('util.forge', function()
     assert.equals('gitlab', forge.kind_of('gitlab.com'))
     assert.equals('gitlab', forge.kind_of('gitlab.internal'))
     assert.is_nil(forge.kind_of('codeberg.org'))
+    assert.equals('azure', forge.kind_of('dev.azure.com'))
+    assert.equals('azure', forge.kind_of('ssh.dev.azure.com'))
+    assert.equals('azure', forge.kind_of('contoso.visualstudio.com'))
+    -- An organization called after another forge is still on Azure
+    assert.equals('azure', forge.kind_of('mygitlab.visualstudio.com'))
+    assert.is_nil(forge.kind_of('dev.azure.com.attacker.example'))
+  end)
+
+  it(
+    'reads the organization, project and repository of Azure DevOps',
+    function()
+      local expected = {
+        kind = 'azure',
+        host = 'dev.azure.com',
+        slug = 'contoso/My Project/web',
+        org = 'contoso',
+        project = 'My Project',
+        repo = 'web',
+      }
+      for _, url in ipairs({
+        'https://contoso@dev.azure.com/contoso/My%20Project/_git/web',
+        'git@ssh.dev.azure.com:v3/contoso/My%20Project/web',
+        'https://contoso.visualstudio.com/My%20Project/_git/web',
+        'https://contoso.visualstudio.com/DefaultCollection/My%20Project/_git/web',
+        'contoso@vs-ssh.visualstudio.com:v3/contoso/My%20Project/web',
+      }) do
+        local remote = forge.pick_remote({ origin = url })
+        assert.is_table(remote, url)
+        remote.name = nil
+        assert.same(expected, remote, url)
+      end
+      -- Not a repository, or an organization that would bend the API's URL
+      assert.is_nil(
+        forge.pick_remote({ origin = 'https://dev.azure.com/contoso/p' })
+      )
+      assert.is_nil(forge.azure_parts('dev.azure.com', 'a.b#/p/_git/r'))
+      assert.is_nil(forge.azure_parts('dev.azure.com', 'o/p%0A/_git/r'))
+    end
+  )
+
+  it('asks Azure DevOps through az devops invoke, at its own host', function()
+    local remote = forge.pick_remote({
+      origin = 'https://contoso.visualstudio.com/My%20Project/_git/web',
+    })
+    local command, name = forge.command(remote, {
+      area = 'build',
+      resource = 'builds',
+      route = { project = 'My Project' },
+      query = { branchName = 'refs/heads/main', ['$top'] = 1 },
+    })
+    assert.equals('az devops invoke', name)
+    assert.same({
+      'az',
+      'devops',
+      'invoke',
+      '--organization',
+      'https://dev.azure.com/contoso',
+      '--detect',
+      'false',
+      '--area',
+      'build',
+      '--resource',
+      'builds',
+      '--api-version',
+      forge.AZURE_API_VERSION,
+      '--http-method',
+      'GET',
+      '--output',
+      'json',
+      '--only-show-errors',
+      '--route-parameters',
+      'project=My Project',
+      '--query-parameters',
+      '$top=1',
+      'branchName=refs/heads/main',
+    }, command)
   end)
 
   it('takes the first remote on a known forge, in order', function()
@@ -263,6 +339,66 @@ describe('util.forge', function()
         text, cut, err = call_text(1024)
         assert.is_nil(text)
         assert.equals('glab is not installed', err)
+      end)
+    end)
+
+    describe('on Azure DevOps', function()
+      local remote = {
+        kind = 'azure',
+        host = 'dev.azure.com',
+        slug = 'o/p/r',
+        name = 'origin',
+        org = 'o',
+        project = 'p',
+        repo = 'r',
+      }
+      local logs = {
+        area = 'build',
+        resource = 'logs',
+        route = { project = 'p', buildId = 1, logId = 2 },
+      }
+
+      it('never lets az offer to install its extension', function()
+        cli('az', {
+          'echo "$AZURE_EXTENSION_USE_DYNAMIC_INSTALL" > "'
+            .. dir
+            .. '/az.seen"',
+          [[echo '{"count":1,"value":[{"id":3}]}']],
+        })
+        local data = call(remote, logs)
+        assert.same({ count = 1, value = { { id = 3 } } }, data)
+        assert.same({ 'no' }, vim.fn.readfile(dir .. '/az.seen'))
+      end)
+
+      it('reads a log from its lines', function()
+        cli('az', { [[echo '{"count":2,"value":["one","two"]}']] })
+        local done, text, cut, err = false, nil, nil, nil
+        forge.api_text(remote, logs, 1024, function(t, c, e)
+          done, text, cut, err = true, t, c, e
+        end)
+        assert.is_true(vim.wait(5000, function() return done end, 10))
+        assert.equals('one\ntwo', text)
+        assert.is_false(cut)
+        assert.is_nil(err)
+
+        -- A log cut short is no JSON to read: said, not half read
+        done = false
+        forge.api_text(remote, logs, 8, function(t, c, e)
+          done, text, cut, err = true, t, c, e
+        end)
+        assert.is_true(vim.wait(5000, function() return done end, 10))
+        assert.is_nil(text)
+        assert.equals(
+          'az devops invoke answered with more than can be read',
+          err
+        )
+      end)
+
+      it('says when az is not installed', function()
+        vim.env.PATH = dir .. '/bin'
+        local data, err = call(remote, logs)
+        assert.is_nil(data)
+        assert.equals('az is not installed', err)
       end)
     end)
 

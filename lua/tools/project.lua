@@ -266,11 +266,104 @@ function M.tasks(set)
   set('done', ('%d tasks'):format(#items), items)
 end
 
+--- What a dashboard without a forge says
+local NO_FORGE = 'no GitHub, GitLab or Azure DevOps remote'
+
+--- Runs of an Azure DevOps project looked through for the last one of the
+--- repository: a project holds many, and its runs are asked for together
+M.AZURE_RUNS = 20
+
+--- The rows of an Azure DevOps list, `{ count, value }`
+---@param data any
+---@return table[]
+local function azure_rows(data)
+  return type(data) == 'table' and type(data.value) == 'table' and data.value
+    or {}
+end
+
+--- The active pull requests of an Azure DevOps repository
+---@param remote DyForgeRemote
+---@param set fun(state: string, note: string?, items: DyProjectItem[]?)
+local function azure_reviews(remote, set)
+  forge.api(remote, {
+    area = 'git',
+    resource = 'pullRequests',
+    route = { project = remote.project, repositoryId = remote.repo },
+    query = {
+      ['searchCriteria.status'] = 'active',
+      ['$top'] = M.LIMIT + 1,
+    },
+  }, function(data, err)
+    if not data then return set('failed', err) end
+    local items = {}
+    for _, row in ipairs(azure_rows(data)) do
+      if type(row) == 'table' and row.pullRequestId then
+        table.insert(items, {
+          text = ('!%s %s'):format(
+            tostring(row.pullRequestId),
+            row.title or ''
+          ),
+          url = ('https://dev.azure.com/%s/%s/_git/%s/pullrequest/%s'):format(
+            remote.org,
+            forge.encode(remote.project),
+            forge.encode(remote.repo),
+            tostring(row.pullRequestId)
+          ),
+        })
+      end
+    end
+    local count = #items > M.LIMIT and (M.LIMIT .. '+') or tostring(#items)
+    set('done', ('%s open on %s'):format(count, remote.slug), items)
+  end)
+end
+
+--- The last run on `branch` of any pipeline of an Azure DevOps repository
+---@param remote DyForgeRemote
+---@param branch string
+---@param set fun(state: string, note: string?, items: DyProjectItem[]?)
+local function azure_pipeline(remote, branch, set)
+  local ci = require('tools.ci_inline')
+  forge.api(remote, {
+    area = 'build',
+    resource = 'builds',
+    route = { project = remote.project },
+    query = {
+      branchName = 'refs/heads/' .. branch,
+      queryOrder = 'queueTimeDescending',
+      ['$top'] = M.AZURE_RUNS,
+    },
+  }, function(data, err)
+    if not data then return set('failed', err) end
+    local last
+    for _, row in ipairs(azure_rows(data)) do
+      local repo = type(row) == 'table'
+        and vim.tbl_get(row, 'repository', 'name')
+      if type(repo) == 'string' and repo:lower() == remote.repo:lower() then
+        last = row
+        break
+      end
+    end
+    if not last then return set('done', 'no pipeline on ' .. branch) end
+    local bucket = ci.bucket(last.status, last.result)
+    set('done', branch, {
+      {
+        text = ('%s %s %s'):format(
+          ci.SYMBOLS[bucket],
+          bucket,
+          vim.tbl_get(last, 'definition', 'name') or ('#' .. tostring(last.id))
+        ),
+        url = vim.tbl_get(last, '_links', 'web', 'href'),
+      },
+    })
+  end)
+end
+
 --- The open merge or pull requests of the forge of `root`
 ---@param remote DyForgeRemote?
 ---@param set fun(state: string, note: string?, items: DyProjectItem[]?)
 function M.reviews(remote, set)
-  if not remote then return set('skipped', 'no GitHub or GitLab remote') end
+  if not remote then return set('skipped', NO_FORGE) end
+  if remote.kind == 'azure' then return azure_reviews(remote, set) end
   local endpoint = remote.kind == 'github'
       and ('repos/%s/pulls?state=open&per_page=%d'):format(
         remote.slug,
@@ -305,8 +398,9 @@ end
 ---@param branch string?
 ---@param set fun(state: string, note: string?, items: DyProjectItem[]?)
 function M.pipeline(remote, branch, set)
-  if not remote then return set('skipped', 'no GitHub or GitLab remote') end
+  if not remote then return set('skipped', NO_FORGE) end
   if not branch then return set('skipped', 'not on a branch') end
+  if remote.kind == 'azure' then return azure_pipeline(remote, branch, set) end
   local ci = require('tools.ci_inline')
   local endpoint = remote.kind == 'github'
       and ('repos/%s/actions/runs?branch=%s&per_page=1'):format(

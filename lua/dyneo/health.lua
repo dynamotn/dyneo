@@ -497,6 +497,7 @@ local function requirements()
   local on_demand = {
     infracost = '`:DyTfPlan cost`',
     glab = '`:DyCiStatus` and `:DyCiLint` on GitLab',
+    az = '`:DyCiStatus` and `:DyProject` on Azure DevOps (with its `azure-devops` extension)',
     jq = '`:DyQuery` on JSON, and the jq filter of `:DyLog`',
     yq = '`:DyQuery` on YAML, `:DyOpenApiRequest` and `:DyArchitecture`',
     openssl = '`:DyInspect` on a certificate',

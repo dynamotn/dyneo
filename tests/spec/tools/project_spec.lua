@@ -237,6 +237,40 @@ describe('tools.project', function()
     )
   end)
 
+  it('lists open requests and the last pipeline on Azure DevOps', function()
+    cli('az', {
+      'case "$*" in',
+      [[  *"--resource pullRequests"*) echo '{"count":1,"value":[{"pullRequestId":4,"title":"Add y"}]}';;]],
+      -- The project's runs come together: the repository's is picked out
+      [[  *"--resource builds"*) echo '{"count":2,"value":[{"id":1,"status":"completed","result":"succeeded","repository":{"name":"other"}},{"id":2,"status":"inProgress","definition":{"name":"web-ci"},"repository":{"name":"Web"},"_links":{"web":{"href":"https://dev.azure.com/c/2"}}}]}';;]],
+      'esac',
+    })
+    local remote = {
+      kind = 'azure',
+      host = 'dev.azure.com',
+      slug = 'c/My Project/web',
+      name = 'origin',
+      org = 'c',
+      project = 'My Project',
+      repo = 'web',
+    }
+    local reviews, pipeline
+    project.reviews(remote, function(...) reviews = { ... } end)
+    project.pipeline(remote, 'main', function(...) pipeline = { ... } end)
+    assert.is_true(
+      vim.wait(5000, function() return reviews and pipeline end, 10)
+    )
+    assert.equals('1 open on c/My Project/web', reviews[2])
+    assert.same({
+      text = '!4 Add y',
+      url = 'https://dev.azure.com/c/My%20Project/_git/web/pullrequest/4',
+    }, reviews[3][1])
+    assert.same(
+      { text = '● running web-ci', url = 'https://dev.azure.com/c/2' },
+      pipeline[3][1]
+    )
+  end)
+
   it('says there are more requests than it lists', function()
     project.LIMIT = 2
     cli('gh', { [[echo '[{"number":1},{"number":2},{"number":3}]']] })
@@ -281,7 +315,7 @@ describe('tools.project', function()
     project.pipeline({ kind = 'github' }, nil, into('pipeline'))
     project.jira(into('jira'))
     assert.same({
-      reviews = 'skipped: no GitHub or GitLab remote',
+      reviews = 'skipped: no GitHub, GitLab or Azure DevOps remote',
       pipeline = 'skipped: not on a branch',
       jira = 'skipped: the jira CLI is not installed',
     }, got)
