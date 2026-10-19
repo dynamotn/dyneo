@@ -3,7 +3,7 @@ local h = require('helpers')
 describe('plugins.lsp.server', function()
   local spec, restores, dir, cleanup
   -- What the stubs record
-  local calls, base, mason_packages, installed, enabled_of
+  local calls, base, mason_packages, installed, enabled_of, held
 
   --- Record a call under `name`
   ---@param name string
@@ -27,7 +27,7 @@ describe('plugins.lsp.server', function()
   before_each(function()
     h.globals()
     dir, cleanup = h.tmpdir()
-    calls, installed = {}, {}
+    calls, installed, held = {}, {}, {}
     enabled_of = { sonarlint = true, bashls = true }
     -- What `lsp/<server>.lua` would ship, read by `vim.lsp.config[server]`
     base = {
@@ -108,6 +108,9 @@ describe('plugins.lsp.server', function()
         run = record('workspace_diagnostics'),
       }),
       h.stub(package.loaded, 'tiny-inline-diagnostic', nil),
+      h.stub(package.loaded, 'util.untrusted', {
+        held = function(bufnr) return held[bufnr] == true end,
+      }),
       h.stub(vim.lsp, 'enable', record('enable')),
       h.stub(
         vim.lsp,
@@ -412,24 +415,83 @@ describe('plugins.lsp.server', function()
       assert.same({ Lua = {} }, calls.config.lua_ls.settings)
     end)
 
-    it('lets a conditional server decide per buffer', function()
-      configure(opts)
-      h.write(dir .. '/proj/sonar-project.properties')
-      h.write(dir .. '/proj/a.py')
-      h.write(dir .. '/other/b.py')
-      local inside = h.buffer({ name = dir .. '/proj/a.py' })
-      local outside = h.buffer({ name = dir .. '/other/b.py' })
-      local root_dir = calls.config.sonarlint.root_dir
-      local roots = {}
+    describe('root_dir', function()
+      before_each(function()
+        -- What `lsp/<server>.lua` ships, read from the runtimepath only once a
+        -- buffer asks: resolving `vim.lsp.config[server]` up front would
+        -- search the runtimepath for every server
+        h.write(dir .. '/lsp/sonarlint.lua', {
+          "return { root_markers = { 'sonar-project.properties' } }",
+        })
+        h.write(dir .. '/lsp/lua_ls.lua', {
+          "return { root_markers = { '.luarc.json' } }",
+        })
+        h.write(dir .. '/lsp/termuxls.lua', {
+          "return { root_dir = function(_, on_dir) on_dir('/termux') end }",
+        })
+        vim.opt.runtimepath:prepend(dir)
+        h.write(dir .. '/proj/sonar-project.properties')
+        h.write(dir .. '/proj/.luarc.json')
+        h.write(dir .. '/proj/a.py')
+        h.write(dir .. '/other/b.py')
+      end)
+      after_each(function() vim.opt.runtimepath:remove(dir) end)
+
+      local roots
       local function on_dir(path) table.insert(roots, path or false) end
-      root_dir(inside, on_dir)
-      root_dir(outside, on_dir)
-      enabled_of.sonarlint = false
-      root_dir(inside, on_dir)
-      assert.same({ dir .. '/proj', false }, roots)
-      -- A server with a `root_dir` of its own keeps it
-      calls.config.termuxls.root_dir(inside, on_dir)
-      assert.are.equal('/termux', roots[3])
+
+      it('lets a conditional server decide per buffer', function()
+        configure(opts)
+        roots = {}
+        local inside = h.buffer({ name = dir .. '/proj/a.py' })
+        local outside = h.buffer({ name = dir .. '/other/b.py' })
+        local root_dir = calls.config.sonarlint.root_dir
+        root_dir(inside, on_dir)
+        root_dir(outside, on_dir)
+        enabled_of.sonarlint = false
+        root_dir(inside, on_dir)
+        assert.same({ dir .. '/proj', false }, roots)
+        -- A server with a `root_dir` of its own keeps it
+        calls.config.termuxls.root_dir(inside, on_dir)
+        assert.are.equal('/termux', roots[3])
+      end)
+
+      it('holds every server off a held buffer', function()
+        configure(opts)
+        roots = {}
+        local inside = h.buffer({ name = dir .. '/proj/a.py' })
+        -- Not only the conditional servers
+        local root_dir = calls.config.lua_ls.root_dir
+        assert.is_function(root_dir)
+        root_dir(inside, on_dir)
+        assert.same({ dir .. '/proj' }, roots)
+        held[inside] = true
+        root_dir(inside, on_dir)
+        calls.config.sonarlint.root_dir(inside, on_dir)
+        calls.config.termuxls.root_dir(inside, on_dir)
+        assert.same({ dir .. '/proj' }, roots)
+        -- Let go, it attaches again
+        held[inside] = nil
+        root_dir(inside, on_dir)
+        assert.same({ dir .. '/proj', dir .. '/proj' }, roots)
+      end)
+
+      it('keeps the condition a later language leaves out', function()
+        -- `bashls` is conditional for `sh` only; a language naming it
+        -- plainly after that must not drop the condition
+        package.loaded['config.languages'].zsh = {
+          filetypes = { 'zsh' },
+          lsp_servers = { 'bashls' },
+        }
+        h.unload('util.languages')
+        configure(opts)
+        roots = {}
+        local inside = h.buffer({ name = dir .. '/proj/a.py' })
+        enabled_of.bashls = false
+        calls.config.bashls.root_dir(inside, on_dir)
+        assert.same({}, roots)
+        package.loaded['config.languages'].zsh = nil
+      end)
     end)
 
     it('installs a server on the first buffer of its language', function()
@@ -458,6 +520,15 @@ describe('plugins.lsp.server', function()
       assert.is_nil(calls.install_once)
       enabled_of.bashls = true
       -- No `filetypes` configured: any buffer of the language will do
+      handlers.sh({ buf = bufnr, match = 'sh' })
+      assert.same({ { 'bash-language-server' } }, calls.install_once)
+      -- Nor for a held buffer
+      installed['bash-language-server'] = nil
+      calls.install_once = nil
+      held[bufnr] = true
+      handlers.sh({ buf = bufnr, match = 'sh' })
+      assert.is_nil(calls.install_once)
+      held[bufnr] = nil
       handlers.sh({ buf = bufnr, match = 'sh' })
       assert.same({ { 'bash-language-server' } }, calls.install_once)
       -- A server with no config at all is left alone

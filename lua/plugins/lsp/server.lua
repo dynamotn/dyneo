@@ -32,6 +32,24 @@ local function shipped_before_init(server)
   end
 end
 
+--- The `root_dir` and `root_markers` of `lsp/<server>.lua` on the
+--- runtimepath, later files over earlier ones as `vim.lsp` merges them
+---@param server string
+---@return { root_dir?: string|function, root_markers?: table }
+local function shipped_root(server)
+  local root = {}
+  for _, file in
+    ipairs(vim.api.nvim_get_runtime_file('lsp/' .. server .. '.lua', true))
+  do
+    local ok, config = pcall(dofile, file)
+    if ok and type(config) == 'table' then
+      root.root_dir = config.root_dir or root.root_dir
+      root.root_markers = config.root_markers or root.root_markers
+    end
+  end
+  return root
+end
+
 --- Defaults under whatever the specs loaded ahead of this one set
 ---@return PluginLspOpts
 local function default_opts()
@@ -334,12 +352,60 @@ return {
         return widened_filetypes[server]
       end
 
+      -- The per-buffer condition of each server, from whichever language
+      -- gave one: a language naming the server plainly must not drop it
+      local conditions = {} ---@type table<string, fun(bufnr: integer): boolean>
+
+      --- A `root_dir` turning a buffer down where the server must not run.
+      --- `vim.lsp` only attaches once `root_dir` hands a directory to
+      --- `on_dir`, so withholding the call is how a buffer is turned down:
+      --- one the server's condition rejects, or one under a held directory
+      --- (a review's worktree), whose code the server would run. Decided per
+      --- buffer, since deciding once at startup would pin the answer to
+      --- whatever directory Neovim was launched from.
+      ---@param server string
+      ---@param server_opts vim.lsp.Config
+      ---@return fun(bufnr: integer, on_dir: fun(root_dir?: string))
+      local function guarded_root_dir(server, server_opts)
+        local root_dir, root_markers ---@type any, any
+        local resolved = false
+        return function(bufnr, on_dir)
+          local condition = conditions[server]
+          if condition and not condition(bufnr) then return end
+          if require('util.untrusted').held(bufnr) then return end
+          -- What `lsp/<server>.lua` ships is read on the first buffer, not
+          -- at startup: resolving `vim.lsp.config[server]` searches the
+          -- runtimepath for every server, and once configured it answers
+          -- with this very function.
+          if not resolved then
+            resolved = true
+            local shipped = shipped_root(server)
+            local star = vim.lsp.config['*'] or {}
+            root_dir = server_opts.root_dir or shipped.root_dir or star.root_dir
+            root_markers = server_opts.root_markers
+              or shipped.root_markers
+              or star.root_markers
+          end
+          if type(root_dir) == 'function' then
+            return root_dir(bufnr, on_dir)
+          end
+          -- A custom `root_dir` makes `vim.lsp` skip `root_markers`, so
+          -- they are resolved here in its place.
+          on_dir(
+            root_dir
+              or (root_markers and vim.fs.root(bufnr, root_markers))
+              or nil
+          )
+        end
+      end
+
       ---@param server string
       ---@param enabled? fun(bufnr: integer): boolean
       ---@param name string
       ---@param language DyLangSpec
       local function configure(server, enabled, name, language)
         if server == '*' then return end
+        if enabled then conditions[server] = enabled end
         -- `false` turns a server off; a server nobody mentions is on
         local server_opts = opts.servers[server]
         if server_opts == nil then server_opts = {} end
@@ -354,32 +420,6 @@ return {
         if declared_filetypes[server] then
           server_opts = vim.tbl_extend('force', server_opts, {
             filetypes = vim.deepcopy(widen_filetypes(server, server_opts)),
-          })
-        end
-
-        -- A server that only suits some buffers is still configured up front,
-        -- and decides per buffer instead: `vim.lsp` only attaches once
-        -- `root_dir` hands a directory to `on_dir`, so withholding the call is
-        -- how a buffer is turned down. Deciding once at startup would pin the
-        -- answer to whatever directory Neovim was launched from.
-        if enabled then
-          local base = vim.lsp.config[server] or {}
-          local root_dir = server_opts.root_dir or base.root_dir
-          local root_markers = server_opts.root_markers or base.root_markers
-          server_opts = vim.tbl_extend('force', server_opts, {
-            root_dir = function(bufnr, on_dir)
-              if not enabled(bufnr) then return end
-              if type(root_dir) == 'function' then
-                return root_dir(bufnr, on_dir)
-              end
-              -- A custom `root_dir` makes `vim.lsp` skip `root_markers`, so
-              -- they are resolved here in its place.
-              on_dir(
-                root_dir
-                  or (root_markers and vim.fs.root(bufnr, root_markers))
-                  or nil
-              )
-            end,
           })
         end
 
@@ -405,6 +445,7 @@ return {
                 local lsp_config = vim.lsp.config[server]
                 if lsp_config == nil then return end
                 if enabled and not enabled(args.buf) then return end
+                if require('util.untrusted').held(args.buf) then return end
                 if
                   lsp_config.filetypes == nil
                   or vim.tbl_contains(lsp_config.filetypes, args.match)
@@ -436,6 +477,9 @@ return {
             end,
           })
         end
+        server_opts = vim.tbl_extend('force', server_opts, {
+          root_dir = guarded_root_dir(server, server_opts),
+        })
         -- Merged into what was set for the server so far, not into its
         -- resolved config: resolving it here would search the runtimepath
         -- once more, and `vim.lsp` lays `lsp/<server>.lua` and `*` underneath
