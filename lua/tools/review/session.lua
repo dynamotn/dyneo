@@ -49,6 +49,8 @@ M.FORGE_NAMES = { github = 'GitHub', gitlab = 'GitLab', azure = 'Azure DevOps' }
 ---@field keyed table<integer, boolean> Buffers given the review's keys
 ---@field jump? { path: string, side: DyReviewSide, line: integer }
 ---@field told_deps? boolean
+---@field ci? DyReviewCi The CI state of the head, once asked for
+---@field ci_loading? boolean A fetch of it is on its way
 ---@field ai_summary? string What the last AI pass said of the change
 ---@field ai_order? string[] The reading order of the last AI pass
 
@@ -484,6 +486,8 @@ function M.start(remote, pull, adapter, fail)
                 load_forge(s, function()
                   M.save(s)
                   review.show()
+                  -- Never waited for: the review is usable without it
+                  require('tools.review.ci').load(s)
                 end)
               end)
             end)
