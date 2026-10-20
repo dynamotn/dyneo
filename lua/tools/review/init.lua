@@ -38,6 +38,11 @@ M.list_drafts = pickers.drafts
 ---@param s? DyReviewSession
 function M.submit(s) require('tools.review.submit').run(s) end
 
+--- Run the AI pass over the open review: `tools.review.ai`, loaded when
+--- asked
+---@param s? DyReviewSession
+function M.ai(s) require('tools.review.ai').run(s) end
+
 --- Put the cursor where the session was asked to go, once `side` of `path`
 --- is shown
 ---@param s DyReviewSession
@@ -110,9 +115,9 @@ function M.command(args)
   if not vim.tbl_contains(M.SUBCOMMANDS, sub) then
     return notify('Unknown subcommand: ' .. sub, vim.log.levels.ERROR)
   end
-  if sub == 'ai' then return notify(('`:DyReview %s`: not yet'):format(sub)) end
   local run = {
     pick = M.pick,
+    ai = function() M.ai() end,
     branch = M.branch,
     since = M.since,
     drafts = M.list_drafts,
