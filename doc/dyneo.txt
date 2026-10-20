@@ -852,13 +852,14 @@ days.
 chain -- each certificate's subject, end date and state, whether each is
 issued by the next, and what `openssl verify` says of the first one against
 the system trust store, the rest given as intermediates -- then what each
-certificate says, as |:DyInspect| would.  It reads PEM chains, binary DER
-certificates and PKCS#7 bundles (`.p7b`), up to 20 certificates of a file
-of at most 1 MiB.
+certificate says, as |:DyInspect| would.  It reads PEM chains, DER
+certificates -- binary, or the bare base64 of one with no PEM header, as
+Azure and Windows export a `.cer` -- and PKCS#7 bundles (`.p7b`), up to 20
+certificates of a file of at most 1 MiB.
 
-A binary `.der`, `.cer`, `.crt`, `.cert`, `.p7b` or `.p7c` file opens as
-that report rather than its bytes, in a buffer that is never written back;
-one holding PEM text stays text to edit.  A PKCS#12 bundle (`.p12`, `.pfx`)
+A DER `.der`, `.cer`, `.crt`, `.cert`, `.p7b` or `.p7c` file, binary or
+base64, opens as that report rather than its bytes, in a buffer that is
+never written back; one holding PEM text stays text to edit.  A PKCS#12 bundle (`.p12`, `.pfx`)
 is not opened: it is password protected and holds a private key.
 
 7.4 CI pipelines                                                    *dyneo-ci*

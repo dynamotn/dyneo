@@ -117,6 +117,20 @@ describe('tools.cert', function()
     assert.is_nil(cert.kind('a.crt', 'hello'))
   end)
 
+  it('unwraps DER written as bare base64, and nothing else', function()
+    local der = '\48\130\1\10abc'
+    local text = vim.base64.encode(der)
+    assert.equals(der, cert.unwrap(text))
+    -- Wrapped at 64 columns with CRLF, as Windows exports it
+    assert.equals(der, cert.unwrap(text:sub(1, 4) .. '\r\n' .. text:sub(5)))
+    assert.equals('der', cert.kind('a.cer', cert.unwrap(text)))
+    -- Base64 that is no DER, or text that is no base64, stays as it is
+    local other = vim.base64.encode('hello there')
+    assert.equals(other, cert.unwrap(other))
+    assert.equals('not base64!', cert.unwrap('not base64!'))
+    assert.equals(der, cert.unwrap(der))
+  end)
+
   it('reads subject and issuer from what openssl prints', function()
     assert.same(
       { subject = 'CN = a', issuer = 'CN = b' },
@@ -249,6 +263,23 @@ describe('tools.cert', function()
         event = 'BufReadPost',
         pattern = '*.der',
       }))
+    end)
+
+    it('reads a .cer of bare base64 DER, as Azure exports it', function()
+      if not ready then return pending('openssl is not installed') end
+      local der = assert(io.open(dir .. '/leaf.der', 'rb')):read('*a')
+      vim.fn.writefile({ vim.base64.encode(der) }, dir .. '/fw.cer')
+      local text = built(cert, { path = dir .. '/fw.cer' })
+      assert.is_truthy(text:find('1 certificate, DER', 1, true))
+      assert.is_truthy(text:find('CN%s*=%s*leaf.test'))
+      vim.cmd.source(h.root .. '/plugin/cert.lua')
+      vim.cmd.edit(vim.fn.fnameescape(dir .. '/fw.cer'))
+      local bufnr = vim.api.nvim_get_current_buf()
+      assert.equals('nofile', vim.bo[bufnr].buftype)
+      assert.is_true(vim.wait(10000, function()
+        local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+        return table.concat(lines, '\n'):find('CN%s*=%s*leaf.test') ~= nil
+      end, 10))
     end)
 
     it('leaves a PEM file as text to edit', function()

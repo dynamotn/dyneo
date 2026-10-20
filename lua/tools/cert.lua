@@ -1,8 +1,8 @@
 --- What a certificate file holds, and whether its chain holds together
 ---
 --- `:DyInspect` reads the one PEM block under the cursor; a certificate file
---- is often more than that: a chain of PEM blocks, a binary DER `.cer`, a
---- PKCS#7 `.p7b` bundle. `:DyCert [file]` reads every certificate of the
+--- is often more than that: a chain of PEM blocks, a binary DER `.cer` or
+--- its bare base64 with no PEM header, a PKCS#7 `.p7b` bundle. `:DyCert [file]` reads every certificate of the
 --- file, or of the buffer (base64 in a Kubernetes Secret too), into a
 --- scratch tab: a summary of the chain -- each certificate's subject, end
 --- date and state, whether each is issued by the next, and what
@@ -54,6 +54,20 @@ function M.kind(path, bytes)
     return (ext == 'p7b' or ext == 'p7c') and 'pkcs7' or 'der'
   end
   return nil
+end
+
+--- The DER inside `bytes` when they are bare base64 of it, with no PEM
+--- header -- the `.cer` Azure and Windows export -- or else `bytes` as they
+--- are
+---@param bytes string
+---@return string
+function M.unwrap(bytes)
+  local text = bytes:gsub('%s', '')
+  if text == '' or text:find('[^%w%+/=]') then return bytes end
+  local decoded = require('tools.inspect').base64(text)
+  -- Every DER structure here is a SEQUENCE
+  if decoded and decoded:byte(1) == 0x30 then return decoded end
+  return bytes
 end
 
 --- The bytes of `path`, or why they are not read
@@ -158,6 +172,7 @@ function M.certificates(source, on_done)
   end
   local bytes, err = M.read_file(assert(source.path))
   if not bytes then return on_done(nil, nil, err) end
+  bytes = M.unwrap(bytes)
   local kind = M.kind(source.path, bytes)
   if not kind then return on_done(nil, nil, 'No certificate in this file') end
   if kind == 'pkcs12' then
@@ -396,7 +411,7 @@ function M.read(bufnr)
   if name:match('^%a[%w+.-]*://') then return end
   local path = vim.fs.normalize(vim.fn.fnamemodify(name, ':p'))
   local bytes = M.read_file(path)
-  local kind = bytes and M.kind(path, bytes)
+  local kind = bytes and M.kind(path, M.unwrap(bytes))
   if kind ~= 'der' and kind ~= 'pkcs7' then return end
   -- The report is no copy of the file: it must never be written over it
   vim.bo[bufnr].buftype = 'nofile'
