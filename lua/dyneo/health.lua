@@ -502,7 +502,7 @@ local function requirements()
     az = '`:DyCiStatus` and `:DyProject` on Azure DevOps (with its `azure-devops` extension)',
     jq = '`:DyQuery` on JSON, and the jq filter of `:DyLog`',
     yq = '`:DyQuery` on YAML, `:DyOpenApiRequest` and `:DyArchitecture`',
-    openssl = '`:DyInspect` on a certificate',
+    openssl = '`:DyInspect` and `:DyCert` on a certificate',
     quarto = '`:QuartoPreview` of a Quarto document',
     sops = 'opening a SOPS file decrypted, and `:DyEncryptedRotate`',
     ['ansible-vault'] = 'opening an Ansible Vault decrypted',

@@ -846,6 +846,21 @@ a private key is named, never decoded.
 and puts an error on one that expired, a warning on one ending within 30
 days.
 
+                                                             *dyneo-cert-file*
+`<leader>ix` (|:DyCert|) reads every certificate of a file, or of the buffer
+(its unsaved text, base64 in a Secret too), into a tab: a summary of the
+chain -- each certificate's subject, end date and state, whether each is
+issued by the next, and what `openssl verify` says of the first one against
+the system trust store, the rest given as intermediates -- then what each
+certificate says, as |:DyInspect| would.  It reads PEM chains, binary DER
+certificates and PKCS#7 bundles (`.p7b`), up to 20 certificates of a file
+of at most 1 MiB.
+
+A binary `.der`, `.cer`, `.crt`, `.cert`, `.p7b` or `.p7c` file opens as
+that report rather than its bytes, in a buffer that is never written back;
+one holding PEM text stays text to edit.  A PKCS#12 bundle (`.p12`, `.pfx`)
+is not opened: it is password protected and holds a private key.
+
 7.4 CI pipelines                                                    *dyneo-ci*
 
 In a `.gitlab-ci.yml`, a GitHub Actions workflow or an `azure-pipelines.yml`,
@@ -1841,6 +1856,10 @@ Operations ~
 :DyInspect              Decode the certificate, key or JWT under the cursor.
 :DyInspect expiry       Warn on each certificate of the buffer expired or
                         ending soon.  See |dyneo-inspect|.
+
+                                                                     *:DyCert*
+:DyCert [{file}]        Show and check every certificate of {file}, or of
+                        the buffer.  See |dyneo-cert-file|.
 
                                                                  *:DyCiStatus*
 :DyCiStatus             Show the last pipeline on the jobs of this

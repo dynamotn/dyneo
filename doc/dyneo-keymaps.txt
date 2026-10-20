@@ -309,6 +309,7 @@ one of the same keys in those buffers.
 `<leader>ip`           n      Pod Logs
 `<leader>iq`           n      Query JSON/YAML (jq, yq)
 `<leader>it`           n      Explain Cron Schedule
+`<leader>ix`           n      Certificate Chain of File
 
 ==============================================================================
 <leader>k  security

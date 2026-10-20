@@ -119,8 +119,9 @@ below follow the sections of `:help dyneo`.
 - **Logs** of files, the journal and pods read as records, filtered by level,
   request or jq. `:DyLog`
 - **Certificates & tokens** — the certificate, key or JWT under the cursor
-  decoded, held back from AI; expired or expiring certificates flagged.
-  `:DyInspect`
+  decoded, held back from AI; expired or expiring certificates flagged;
+  PEM, DER and PKCS#7 files read as their chain, checked. `:DyInspect` ·
+  `:DyCert`
 - **CI** — the last pipeline on the jobs of the file that defines them,
   GitLab, GitHub, Azure DevOps, Jenkins and Argo Workflows, and the tasks
   of Airflow, Prefect and Dagster pipelines; GitLab's and Jenkins' lint,

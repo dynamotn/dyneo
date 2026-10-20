@@ -359,6 +359,7 @@ map("n", "<leader>pAT", "<cmd>DyThreat new<cr>", { desc = "New Threat Model" })
 map("n", "<leader>ia", "<cmd>DyArchitecture<cr>", { desc = "Architecture Diagram" })
 map("n", "<leader>ii", "<cmd>DyInspect<cr>", { desc = "Decode Certificate, Key or JWT" })
 map("n", "<leader>ie", "<cmd>DyInspect expiry<cr>", { desc = "Certificate Expiry" })
+map("n", "<leader>ix", "<cmd>DyCert<cr>", { desc = "Certificate Chain of File" })
 map("n", "<leader>il", function()
   local file = vim.api.nvim_buf_get_name(0)
   if file == "" then return vim.notify("The buffer has no file", vim.log.levels.WARN, { title = "DyNeo" }) end
