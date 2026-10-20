@@ -487,3 +487,52 @@ Test `tests/spec/tools/review/init_spec.lua`, `tests/spec/tools/review/panel_spe
 - [ ] **Step 6:** `git rm -r docs/superpowers`, commit
   `chore(review): drop the design notes`, `git rebase main`, rerun Step 3's
   specs; `git diff main --stat` shows no `docs/superpowers` path.
+
+### Task 14: CI status of the pull request's head (runs after Task 12, before Task 13)
+
+Integrates the CI work of `feat/ci-jenkins-argo` (commit `bcbf7d5`, stacked on
+`3600e71`). **Before starting:** if `main` contains `bcbf7d5`, rebase this
+branch on `main`; otherwise rebase on `feat/ci-jenkins-argo` and say so in the
+report (the user merges that branch first).
+
+**Files:** Create `lua/tools/review/ci.lua`; Modify `lua/tools/review/panel.lua`
+(header line), `lua/tools/review/init.lua` (fetch on open, `r` refresh, `<CR>`
+on the CI line); Test `tests/spec/tools/review/ci_spec.lua`.
+
+**Interfaces:**
+- Consumes (peer branch): `tools.ci_inline.bucket(status, conclusion) ->
+  'pass'|'fail'|'running'|'pending'|'skipped'|'attention'`;
+  `tools.ci_jenkins.target(dir, branch, cb)` + `tools.ci_jenkins.fetch(target, cb)`;
+  `tools.ci_argo.target(dir, lines, cb)` + `tools.ci_argo.fetch(target, cb)`;
+  all fetches answer a `DyCiPipeline {id, status, url?, jobs = {{id, name,
+  status, conclusion?}}, note?}`. `util.forge.api` for the SHA-keyed calls.
+- Produces:
+  ```lua
+  ---@class DyReviewCiRun
+  ---@field provider 'github'|'gitlab'|'azure'|'jenkins'|'argo'
+  ---@field name string
+  ---@field state 'pass'|'fail'|'running'|'pending'|'skipped'|'attention'
+  ---@field url? string
+  ---@field by 'commit'|'branch'  what the status is keyed on
+  ```
+  `M.status(session, cb(runs: DyReviewCiRun[], errors: string[]))` -- every
+  source asked in parallel through `util.system.each` (limit 3); a failing
+  source adds its reason to `errors`, never an empty "all green".
+- Forge sources, keyed by `pull.head_sha`:
+  GitHub `repos/{slug}/commits/{sha}/check-runs?per_page=100` (name,
+  status, conclusion, html_url); GitLab
+  `projects/{id}/pipelines?sha={sha}&per_page=1` then its jobs; Azure
+  `build/builds` with query `branchName=refs/pull/<id>/merge` and the newest
+  whose `sourceVersion` or trigger info names the head, else `by = 'branch'`.
+- Jenkins and Argo: only when their `target` resolves for the worktree;
+  asked with `pull.head_ref`; `by = 'branch'`. Argo's `lines` are the lines
+  of the worktree file the peer module expects (read its `target` doc).
+- Panel header: `CI: 12 pass · 1 fail · 2 running` plus `(by branch)`
+  when any run is branch-keyed, `CI: could not ask <sources>` on errors.
+  `<CR>` on that line opens a picker of runs; `<CR>` on a run opens its `url`
+  with `vim.ui.open`. No log viewing here (spec non-goal).
+- [ ] Steps: failing tests with fake `gh`/`glab`/`az` and stubbed
+  `tools.ci_jenkins`/`tools.ci_argo` (`h.stub`): SHA used in each forge
+  call; one failing source reported while others show; branch-keyed marker;
+  header text; run -> FAIL; implement; pass; check-startup; commit
+  `feat(review): show the CI state of a pull request's head`.
