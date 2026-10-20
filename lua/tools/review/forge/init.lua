@@ -53,6 +53,7 @@ local M = {}
 M.ADAPTERS = {
   github = 'tools.review.forge.github',
   gitlab = 'tools.review.forge.gitlab',
+  azure = 'tools.review.forge.azure',
 }
 
 --- The adapter answering for `remote`'s forge

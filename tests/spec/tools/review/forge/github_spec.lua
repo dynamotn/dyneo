@@ -955,7 +955,7 @@ describe('tools.review.forge', function()
       require('tools.review.forge.github'),
       (forge.for_remote({ kind = 'github', host = 'h', slug = 'o/r' }))
     )
-    local adapter, err = forge.for_remote({ kind = 'azure' })
+    local adapter, err = forge.for_remote({ kind = 'bitbucket' })
     assert.is_nil(adapter)
     assert.equals('not yet supported', err)
   end)

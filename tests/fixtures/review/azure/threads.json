@@ -1,0 +1,63 @@
+{
+  "count": 6,
+  "value": [
+    {
+      "id": 5,
+      "status": "active",
+      "isDeleted": false,
+      "threadContext": {
+        "filePath": "/a.lua",
+        "rightFileStart": {"line": 8, "offset": 1},
+        "rightFileEnd": {"line": 10, "offset": 4}
+      },
+      "comments": [
+        {"id": 1, "parentCommentId": 0, "author": {"id": "x", "displayName": "Alice"}, "content": "Why?", "publishedDate": "2026-10-01T10:00:00Z", "commentType": "text"},
+        {"id": 2, "parentCommentId": 1, "author": null, "content": "Because.", "publishedDate": "2026-10-01T11:00:00Z", "commentType": "text"},
+        {"id": 3, "parentCommentId": 1, "author": {"displayName": "Bob"}, "content": "gone", "isDeleted": true, "commentType": "text"}
+      ]
+    },
+    {
+      "id": 6,
+      "status": "fixed",
+      "threadContext": {
+        "filePath": "/b.lua",
+        "leftFileStart": {"line": 4, "offset": 1},
+        "leftFileEnd": {"line": 4, "offset": 1}
+      },
+      "comments": [
+        {"id": 1, "author": {"displayName": "Bob"}, "content": "Gone now.", "publishedDate": "2026-10-02T10:00:00Z", "commentType": "text"}
+      ]
+    },
+    {
+      "id": 7,
+      "status": "closed",
+      "threadContext": {"filePath": "/c.lua"},
+      "comments": [
+        {"id": 1, "author": {"displayName": "Carol"}, "content": "Whole file.", "publishedDate": "2026-10-03T10:00:00Z", "commentType": "text"}
+      ]
+    },
+    {
+      "id": 8,
+      "status": "active",
+      "threadContext": null,
+      "comments": [
+        {"id": 1, "author": {"displayName": "Carol"}, "content": "On the PR.", "commentType": "text"}
+      ]
+    },
+    {
+      "id": 9,
+      "status": "unknown",
+      "threadContext": null,
+      "comments": [
+        {"id": 1, "author": {"displayName": "Microsoft.VisualStudio.Services.TFS"}, "content": "Alice voted 10", "commentType": "system"}
+      ]
+    },
+    {
+      "id": 10,
+      "status": "active",
+      "isDeleted": true,
+      "threadContext": {"filePath": "/d.lua", "rightFileStart": {"line": 1, "offset": 1}, "rightFileEnd": {"line": 1, "offset": 1}},
+      "comments": []
+    }
+  ]
+}

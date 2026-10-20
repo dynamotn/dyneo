@@ -1,0 +1,9 @@
+{
+  "changeEntries": [
+    {"changeTrackingId": 11, "changeId": 1, "item": {"path": "/a.lua"}, "changeType": "edit"},
+    {"changeTrackingId": 12, "changeId": 2, "item": {"path": "/b.lua"}, "originalPath": "/b_old.lua", "changeType": "rename, edit"},
+    {"changeTrackingId": 13, "changeId": 3, "item": {"path": "/c.lua"}, "changeType": "add"}
+  ],
+  "nextSkip": 0,
+  "nextTop": 0
+}
