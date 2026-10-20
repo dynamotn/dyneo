@@ -136,6 +136,8 @@ return {
           vim.defer_fn(function()
             if leaving or vim.v.exiting ~= vim.NIL then return end
             if not vim.api.nvim_buf_is_valid(args.buf) then return end
+            -- Linters load the project's own config and plugins
+            if require('util.untrusted').held(args.buf) then return end
             -- The other linters run from `config`, which asks each one's
             -- `condition`. `vale` looks for its config next to the file and
             -- upwards from there, so asking the working directory answers
@@ -173,6 +175,10 @@ return {
         if leaving or vim.v.exiting ~= vim.NIL then return end
         -- A help page, a picker or a hover float is nothing to lint
         if vim.bo.buftype ~= '' then return end
+        -- Linters load the project's own config and plugins (eslint,
+        -- golangci-lint, ...): none under a directory still held untrusted.
+        -- Released, it lints from the `on_release` below.
+        if require('util.untrusted').held(0) then return end
         -- nvim-lint's own resolution first: the full filetype, else each
         -- part of a dotted one
         local names =
@@ -210,6 +216,11 @@ return {
 
         if #names > 0 then lint.try_lint(names) end
       end
+
+      require('util.untrusted').on_release(
+        'nvim-lint',
+        function(bufnr) vim.api.nvim_buf_call(bufnr, run) end
+      )
 
       local timer = assert(vim.uv.new_timer())
       vim.api.nvim_create_autocmd(opts.events, {

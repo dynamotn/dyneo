@@ -47,6 +47,9 @@ describe('plugins.lang.dart', function()
           table.insert(attached, vim.api.nvim_get_current_buf())
         end,
       }),
+      h.stub(package.loaded, 'flutter-tools.commands', {
+        pub_get = function() end,
+      }),
     }
     h.unload('util.untrusted')
     local untrusted = require('util.untrusted')
@@ -69,6 +72,41 @@ describe('plugins.lang.dart', function()
     flutter_tools.config(nil, flutter_tools.opts)
     untrusted.release(dir .. '/held')
     assert.same({ free, held }, attached)
+    for i = #restores, 1, -1 do
+      restores[i]()
+    end
+    vim.cmd('silent! %bwipeout!')
+  end)
+
+  it('runs pub get on a pubspec write only outside a held buffer', function()
+    local pulled = 0
+    local restores = {
+      h.stub(package.loaded, 'flutter-tools', { setup = function() end }),
+      h.stub(package.loaded, 'flutter-tools.lsp', { attach = function() end }),
+      h.stub(package.loaded, 'flutter-tools.commands', {
+        pub_get = function() pulled = pulled + 1 end,
+      }),
+    }
+    h.unload('util.untrusted')
+    local untrusted = require('util.untrusted')
+    local flutter_tools = specs()
+    flutter_tools.config(nil, flutter_tools.opts)
+    local held = h.buffer({ name = dir .. '/held/pubspec.yaml' })
+    local free = h.buffer({ name = dir .. '/free/pubspec.yaml' })
+    untrusted.hold(dir .. '/held')
+    -- What its `BufWritePost` autocmd calls, in the buffer written
+    local commands = require('flutter-tools.commands')
+    vim.api.nvim_set_current_buf(held)
+    commands.pub_get()
+    assert.are.equal(0, pulled)
+    vim.api.nvim_set_current_buf(free)
+    commands.pub_get()
+    assert.are.equal(1, pulled)
+    -- Configured again: wrapped once, not twice
+    flutter_tools.config(nil, flutter_tools.opts)
+    commands.pub_get()
+    assert.are.equal(2, pulled)
+    untrusted.forget(dir .. '/held')
     for i = #restores, 1, -1 do
       restores[i]()
     end

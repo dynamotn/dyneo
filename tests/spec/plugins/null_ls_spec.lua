@@ -136,6 +136,42 @@ describe('plugins.lsp.null_ls', function()
     assert.same({ 'stylua', 'trail_space' }, formatter.sources(bufnr))
   end)
 
+  it('attaches to a buffer only once its directory is let go', function()
+    local dir, cleanup = h.tmpdir()
+    h.unload('util.untrusted')
+    local untrusted = require('util.untrusted')
+    local added = {}
+    table.insert(
+      restores,
+      h.stub(package.loaded, 'null-ls.client', {
+        try_add = function(bufnr) table.insert(added, bufnr) end,
+      })
+    )
+    none_ls().config(nil, {})
+    local held = h.buffer({ name = dir .. '/a.lua' })
+    local free = h.buffer({ name = dir .. '-other/a.lua' })
+    untrusted.hold(dir)
+    assert.is_false(setup_opts.should_attach(held))
+    assert.is_true(setup_opts.should_attach(free))
+    untrusted.release(dir)
+    assert.same({ held }, added)
+    assert.is_true(setup_opts.should_attach(held))
+    cleanup()
+  end)
+
+  it('keeps the should_attach a spec before it set up', function()
+    local calls = {}
+    none_ls().config(nil, {
+      should_attach = function(bufnr)
+        table.insert(calls, bufnr)
+        return false
+      end,
+    })
+    local bufnr = h.buffer({})
+    assert.is_false(setup_opts.should_attach(bufnr))
+    assert.same({ bufnr }, calls)
+  end)
+
   it('keeps what a spec before it set up', function()
     local root_dir = function() end
     local inited = {}

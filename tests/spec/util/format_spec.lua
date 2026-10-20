@@ -83,6 +83,58 @@ describe('util.format', function()
     assert.is_true(format.enabled())
   end)
 
+  it('formats nothing under a held directory, even when forced', function()
+    local dir, cleanup = h.tmpdir()
+    h.unload('util.untrusted')
+    local untrusted = require('util.untrusted')
+    local ran = 0
+    local notified = {}
+    restores[#restores + 1] = h.stub(
+      vim,
+      'notify',
+      function(msg) table.insert(notified, msg) end
+    )
+    format.register({
+      name = 'x',
+      priority = 1,
+      primary = true,
+      sources = function() return { 'x' } end,
+      format = function() ran = ran + 1 end,
+    })
+    local bufnr = h.buffer({ name = dir .. '/a.lua' })
+    untrusted.hold(dir)
+    format.format({ buf = bufnr })
+    format.format({ buf = bufnr, force = true })
+    assert.are.equal(0, ran)
+    assert.same({}, notified)
+    untrusted.release(dir)
+    format.format({ buf = bufnr })
+    assert.are.equal(1, ran)
+    cleanup()
+  end)
+
+  it('leaves formatexpr to Vim under a held directory', function()
+    local dir, cleanup = h.tmpdir()
+    h.unload('util.untrusted')
+    local untrusted = require('util.untrusted')
+    restores[#restores + 1] = h.stub(
+      package.loaded,
+      'lazy.core.config',
+      { spec = { plugins = { ['conform.nvim'] = {} } }, plugins = {} }
+    )
+    restores[#restores + 1] = h.stub(
+      package.loaded,
+      'conform',
+      { formatexpr = function() return 7 end }
+    )
+    vim.api.nvim_set_current_buf(h.buffer({ name = dir .. '/a.lua' }))
+    untrusted.hold(dir)
+    assert.are.equal(1, format.formatexpr())
+    untrusted.forget(dir)
+    assert.are.equal(7, format.formatexpr())
+    cleanup()
+  end)
+
   it('warns when forced with no formatter to run', function()
     local notified = {}
     restores[#restores + 1] = h.stub(

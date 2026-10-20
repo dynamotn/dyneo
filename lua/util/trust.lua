@@ -18,6 +18,9 @@ local verdicts = {}
 ---@param sticky? boolean Keep a refusal for the session too
 ---@return boolean
 function M.ask(purpose, dir, question, sticky)
+  -- A directory a review still holds untrusted runs nothing, and is not
+  -- asked: that is one question for the whole pull request, up front
+  if require('util.untrusted').held(dir) then return false end
   dir = vim.fs.normalize(vim.uv.fs_realpath(dir) or dir)
   verdicts[purpose] = verdicts[purpose] or {}
   local known = verdicts[purpose]

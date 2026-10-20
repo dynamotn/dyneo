@@ -67,6 +67,32 @@ describe('plugins.executor.linting', function()
     assert.same({ { 'present' } }, runs())
   end)
 
+  it('lints a held directory only once it is let go', function()
+    local dir, cleanup = h.tmpdir()
+    h.unload('util.untrusted')
+    local untrusted = require('util.untrusted')
+    local opts = spec.opts(nil, {})
+    opts.events = { 'BufWritePost' }
+    opts.linters_by_ft = { dytext = { 'present' } }
+    spec.config(nil, opts)
+    local bufnr = h.buffer({ name = dir .. '/a.txt', filetype = 'dytext' })
+    local other =
+      h.buffer({ name = dir .. '-other/a.txt', filetype = 'dytext' })
+    untrusted.hold(dir)
+    vim.api.nvim_set_current_buf(bufnr)
+    vim.api.nvim_exec_autocmds('BufWritePost', { buffer = bufnr })
+    assert.is_false(vim.wait(300, function() return #runs() > 0 end, 10))
+    -- Its sibling is nothing held
+    vim.api.nvim_set_current_buf(other)
+    vim.api.nvim_exec_autocmds('BufWritePost', { buffer = other })
+    assert.is_true(vim.wait(500, function() return #runs() > 0 end, 10))
+    linted = {}
+    -- Let go: the buffers under it are linted once, whichever is current
+    untrusted.release(dir)
+    assert.same({ { 'present' } }, runs())
+    cleanup()
+  end)
+
   it('lints nothing while the editor quits, again once it stays', function()
     lint_on_write(function() vim.api.nvim_exec_autocmds('QuitPre', {}) end)
     assert.same({}, runs())
@@ -183,6 +209,16 @@ describe('plugins.executor.linting: rebuilding and vale', function()
       executable.vale = nil
       h.write(dir .. '/.vale.ini', { 'StylesPath = styles' })
       assert.is_false(write(dir .. '/a.md'))
+    end)
+
+    it('stays quiet for a held directory', function()
+      h.write(dir .. '/.vale.ini', { 'StylesPath = styles' })
+      h.unload('util.untrusted')
+      local untrusted = require('util.untrusted')
+      untrusted.hold(dir)
+      assert.is_false(write(dir .. '/docs/a.md'))
+      untrusted.forget(dir)
+      assert.is_true(write(dir .. '/docs/b.md'))
     end)
 
     it('stays quiet for a buffer without a file', function()

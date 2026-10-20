@@ -37,6 +37,17 @@ return vim.list_contains(DyNeo.enabled_languages, 'dart')
             if require('util.untrusted').held(0) then return end
             return attach(...)
           end
+          -- It runs `flutter pub get` when a pubspec is saved, which runs
+          -- the project's build hooks. Its autocmd, `:FlutterPubGet` and its
+          -- menu all look `pub_get` up on the module (the command when the
+          -- first Dart buffer enters), so wrapping the field covers them.
+          local commands = require('flutter-tools.commands')
+          local pub_get = commands.dy_pub_get or commands.pub_get
+          commands.dy_pub_get = pub_get
+          commands.pub_get = function(...)
+            if require('util.untrusted').held(0) then return end
+            return pub_get(...)
+          end
           require('util.untrusted').on_release('flutter-tools', function(bufnr)
             if
               vim.list_contains(language.filetypes, vim.bo[bufnr].filetype)

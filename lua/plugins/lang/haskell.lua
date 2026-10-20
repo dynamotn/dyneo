@@ -33,16 +33,20 @@ return vim.list_contains(DyNeo.enabled_languages, 'haskell')
           })
         end,
         -- Its ftplugin is what starts the server, and it does not run again
-        -- for a buffer already open when its directory is let go. Haskell
-        -- sources only: hls takes a cabal file only from versions the
-        -- ftplugin checks for.
+        -- for a buffer already open when its directory is let go. A cabal
+        -- file gets it only from the hls versions that read one, which the
+        -- ftplugin checks the same way.
         config = function()
           require('util.untrusted').on_release('haskell-tools', function(bufnr)
+            local filetype = vim.bo[bufnr].filetype
+            if not vim.list_contains(filetypes, filetype) then return end
             if
-              vim.list_contains(language.filetypes, vim.bo[bufnr].filetype)
+              not vim.list_contains(language.filetypes, filetype)
+              and not require('haskell-tools.lsp.helpers').is_hls_version_with_cabal_support()
             then
-              require('haskell-tools').lsp.start(bufnr)
+              return
             end
+            require('haskell-tools').lsp.start(bufnr)
           end)
         end,
         keys = {

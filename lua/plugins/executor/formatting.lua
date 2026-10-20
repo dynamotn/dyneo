@@ -8,6 +8,8 @@ return {
       {
         '<leader>cF',
         function()
+          -- Injected code goes to formatters that load the project's code
+          if require('util.untrusted').held(0) then return end
           require('conform').format({
             formatters = { 'injected' },
             timeout_ms = 3000,

@@ -45,6 +45,19 @@ describe('util.trust', function()
     assert.equals(3, asked)
   end)
 
+  it('says no, without asking, to a held directory', function()
+    h.unload('util.untrusted')
+    local untrusted = require('util.untrusted')
+    answers = { 1, 1 }
+    untrusted.hold(dir)
+    assert.is_false(trust.ask('deps', dir, 'Run?'))
+    assert.is_false(trust.ask('deps', dir .. '/sub', 'Run?'))
+    assert.equals(0, asked)
+    untrusted.release(dir)
+    assert.is_true(trust.ask('deps', dir, 'Run?'))
+    assert.equals(1, asked)
+  end)
+
   it('says no to a call made while the question is open', function()
     local inner
     restore()

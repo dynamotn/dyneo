@@ -34,6 +34,9 @@ end
 
 ---@param opts? { timeout_ms?: number, format_options?: table }|vim.lsp.get_clients.Filter
 function M.format(opts)
+  -- Conform and the formatters it runs load the project's own code
+  local buf = opts and opts.bufnr or 0
+  if require('util.untrusted').held(buf) then return end
   -- What the caller asked for wins over the defaults
   opts = vim.tbl_deep_extend(
     'force',

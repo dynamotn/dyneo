@@ -44,6 +44,19 @@ return {
       opts.temp_dir = opts.temp_dir or vim.fs.dirname(vim.fn.tempname())
       opts.sources = {}
 
+      -- Its sources run linters and formatters that load the project's own
+      -- config and plugins, so none attaches to a buffer under a directory
+      -- still held untrusted. Released, the buffers get it from `try_add`.
+      local should_attach = opts.should_attach
+      opts.should_attach = function(bufnr)
+        if require('util.untrusted').held(bufnr) then return false end
+        return not should_attach or should_attach(bufnr)
+      end
+      require('util.untrusted').on_release(
+        'none-ls',
+        function(bufnr) require('null-ls.client').try_add(bufnr) end
+      )
+
       -- Unified null_ls source configs
       local source_configs = {}
       local languages = require('config.languages')

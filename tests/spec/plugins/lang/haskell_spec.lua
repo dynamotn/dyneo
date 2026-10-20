@@ -71,6 +71,36 @@ describe('plugins.lang.haskell', function()
     assert.same({ held }, started)
   end)
 
+  it('starts hls for a released cabal file only when hls reads it', function()
+    local started, supported = {}, false
+    table.insert(
+      restores,
+      h.stub(package.loaded, 'haskell-tools', {
+        lsp = { start = function(bufnr) table.insert(started, bufnr) end },
+      })
+    )
+    table.insert(
+      restores,
+      h.stub(package.loaded, 'haskell-tools.lsp.helpers', {
+        is_hls_version_with_cabal_support = function() return supported end,
+      })
+    )
+    h.unload('util.untrusted')
+    local untrusted = require('util.untrusted')
+    table.insert(restores, function() untrusted.forget('/work/held') end)
+    spec('mrcjkb/haskell-tools.nvim').config()
+    local cabal = h.buffer({ name = '/work/held/a.cabal', filetype = 'cabal' })
+    local project =
+      h.buffer({ name = '/work/held/cabal.project', filetype = 'cabalproject' })
+    untrusted.hold('/work/held')
+    untrusted.release('/work/held')
+    assert.same({}, started)
+    untrusted.hold('/work/held')
+    supported = true
+    untrusted.release('/work/held')
+    assert.same({ cabal, project }, started)
+  end)
+
   it('opens the REPL of the package or of the buffer', function()
     local calls = {}
     table.insert(
