@@ -133,6 +133,9 @@ function M.render(session)
   end
   if #summary > 0 then add(' ' .. table.concat(summary, '   ')) end
   if session.blocked then add(' Read only: ' .. session.blocked) end
+  if session.threads_error then
+    add(' Threads not read: ' .. session.threads_error)
+  end
   if not session.trusted then
     add(' Diff only: no language server runs until `:DyReview trust`')
   end

@@ -42,6 +42,7 @@ M.FORGE_NAMES = { github = 'GitHub', gitlab = 'GitLab', azure = 'Azure DevOps' }
 ---@field state DyReviewState
 ---@field trusted boolean
 ---@field blocked? string Why nothing can be sent
+---@field threads_error? string Why the threads are not shown
 ---@field collapsed? table<DyReviewKind, boolean>
 ---@field panel_buf? integer
 ---@field panel_rows? table<integer, DyReviewPanelRow>
@@ -141,6 +142,14 @@ end
 function M.rev_parse(dir, rev, cb)
   local args = { 'rev-parse', '--verify', '--quiet', '--end-of-options' }
   M.git_line(dir, vim.list_extend(args, { rev .. '^{commit}' }), cb)
+end
+
+--- The remote `branch` tracks in `dir`, nil when it tracks none
+---@param dir string
+---@param branch string
+---@param cb fun(name?: string)
+function M.tracked_remote(dir, branch, cb)
+  M.git_line(dir, { 'config', '--get', 'branch.' .. branch .. '.remote' }, cb)
 end
 
 --- Every remote of `root` on a known forge, one per repository
@@ -284,7 +293,10 @@ local function load_forge(s, cb)
   end
   s.adapter.threads(s.remote, s.pull, function(threads, err, capped)
     s.threads = threads or {}
-    if err then notify('Could not read the threads: ' .. err, WARN) end
+    if err or not threads then
+      s.threads_error = err or 'no answer'
+      notify('Could not read the threads: ' .. s.threads_error, WARN)
+    end
     if capped then notify('Only the first threads were read', WARN) end
     done()
   end)
@@ -323,30 +335,54 @@ local function autocmds(s)
   })
 end
 
---- Open a review of `pull` on `remote`, or show the one already open
+--- Whether review `s` is of pull request `id` of `remote`
+---@param s DyReviewSession
+---@param remote DyForgeRemote
+---@param id string
+---@return boolean
+function M.same(s, remote, id)
+  return s.remote.host == remote.host
+    and s.remote.slug == remote.slug
+    and s.pull.id == id
+end
+
+--- Open a review of `pull` on `remote`, or show the one already open. A
+--- review of an older head of the same pull request is closed first.
 ---@param remote DyForgeRemote
 ---@param pull DyReviewPull
 function M.open(remote, pull)
   local review = require('tools.review')
-  if
-    session
-    and session.remote.host == remote.host
-    and session.remote.slug == remote.slug
-    and session.pull.id == pull.id
-  then
-    return review.show()
+  if session and M.same(session, remote, pull.id) then
+    if session.pull.head_sha == pull.head_sha then return review.show() end
+    notify(
+      ('The pull request moved to %s: opening the new head'):format(
+        pull.head_sha:sub(1, 7)
+      )
+    )
   end
   if opening then return notify('A review is already opening', WARN) end
   local adapter, why = forge.for_remote(remote)
   if not adapter then
     return notify(('%s: %s'):format(remote.kind, why or 'no adapter'), WARN)
   end
-  if session then M.close() end
   opening = true
   local function fail(what, reason)
     opening = false
     notify(('%s: %s'):format(what, reason or 'unknown error'), ERROR)
   end
+  local function start() M.start(remote, pull, adapter, fail) end
+  if not session then return start() end
+  -- The new head goes where the old one was: wait until it is gone
+  if not M.close(start) then opening = false end
+end
+
+--- Get the pull request and make it the session; `fail` says why not
+---@param remote DyForgeRemote
+---@param pull DyReviewPull
+---@param adapter DyReviewForge
+---@param fail fun(what: string, reason?: string)
+function M.start(remote, pull, adapter, fail)
+  local review = require('tools.review')
   M.repo_root(function(root, root_err)
     if not root then return fail('Cannot review here', root_err) end
     local head = pull.head_sha
@@ -407,7 +443,7 @@ function M.open(remote, pull)
                 local loaded, state = pcall(store.load, remote, pull.id)
                 if not loaded then
                   untrusted.forget(s.worktree)
-                  return fail('Could not read the review', state)
+                  return fail('Could not read the review', tostring(state))
                 end
                 s.state = state
                 session, opening = s, false
@@ -426,12 +462,39 @@ function M.open(remote, pull)
   end)
 end
 
+--- Buffers holding unsaved text of review `s`: its worktree's files, and
+--- draft editors
+---@param s DyReviewSession
+---@return string[] names
+local function unsaved(s)
+  local names = {}
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    local name = vim.api.nvim_buf_get_name(bufnr)
+    if
+      vim.bo[bufnr].modified
+      and (
+        vim.startswith(name, 'dyreview://draft/') or M.under(s.worktree, name)
+      )
+    then
+      names[#names + 1] = name
+    end
+  end
+  return names
+end
+
 --- End the review: diff, panel and keys go, the refs but `reviewed` are
---- deleted, and the worktree is removed unless git refuses or a buffer there
---- has unsaved changes. A worktree kept stays held.
-function M.close()
+--- deleted, and the worktree is removed unless git refuses; a worktree kept
+--- stays held. Nothing ends while a buffer of the review holds unsaved text.
+---@param on_done? fun() Once the worktree is removed or kept
+---@return boolean closed
+function M.close(on_done)
   local s = M.need()
-  if not s then return end
+  if not s then return false end
+  local names = unsaved(s)
+  if #names > 0 then
+    notify('Not closed: unsaved changes in ' .. table.concat(names, ', '), WARN)
+    return false
+  end
   session = nil
   pcall(vim.api.nvim_del_augroup_by_name, 'dy_review')
   diff.close()
@@ -444,38 +507,29 @@ function M.close()
       end
     end
   end
-  local unsaved = 0
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
     if M.under(s.worktree, vim.api.nvim_buf_get_name(bufnr)) then
-      if vim.bo[bufnr].modified then
-        unsaved = unsaved + 1
-      else
-        pcall(vim.api.nvim_buf_delete, bufnr, {})
-      end
+      pcall(vim.api.nvim_buf_delete, bufnr, {})
     end
   end
   git.delete_refs(s.root, s.refs, { s.refs .. 'reviewed' }, function(_, err)
     if err then notify('Could not delete the review refs: ' .. err, WARN) end
   end)
-  if unsaved > 0 then
-    return notify(
-      ('Kept the review worktree at %s: %d buffer(s) there have unsaved changes'):format(
-        s.worktree,
-        unsaved
-      ),
-      WARN
-    )
-  end
   git.worktree_remove(s.root, s.worktree, function(ok, err)
-    if ok then return untrusted.forget(s.worktree) end
-    notify(
-      ('Kept the review worktree at %s: %s'):format(
-        s.worktree,
-        err or 'git refused to remove it'
-      ),
-      WARN
-    )
+    if ok then
+      untrusted.forget(s.worktree)
+    else
+      notify(
+        ('Kept the review worktree at %s: %s'):format(
+          s.worktree,
+          err or 'git refused to remove it'
+        ),
+        WARN
+      )
+    end
+    if on_done then on_done() end
   end)
+  return true
 end
 
 return M

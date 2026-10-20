@@ -8,6 +8,7 @@ local M = {}
 local diff = require('tools.review.diff')
 local drafts = require('tools.review.drafts')
 local session = require('tools.review.session')
+local store = require('tools.review.store')
 
 local notify = require('util.notify').titled('Review')
 local WARN, ERROR = vim.log.levels.WARN, vim.log.levels.ERROR
@@ -87,6 +88,29 @@ local function with_hunks(s, path, cb)
     end
     cb(s.hunks[path])
   end)
+end
+
+--- Change the drafts of review `s` and save them. A float saved after its
+--- review closed changes the review open on that pull request now, or else
+--- its state on disk, so no text written is lost.
+---@param s DyReviewSession
+---@param change fun(state: DyReviewState)
+local function apply(s, change)
+  local live = session.current()
+  if live and session.same(live, s.remote, s.pull.id) then
+    change(live.state)
+    return session.changed(live)
+  end
+  local loaded, state = pcall(store.load, s.remote, s.pull.id)
+  if not loaded then
+    return notify('Could not read the review: ' .. tostring(state), ERROR)
+  end
+  change(state)
+  local saved, err = pcall(store.save, s.remote, s.pull.id, state)
+  if not saved then
+    return notify('Could not save the review: ' .. tostring(err), ERROR)
+  end
+  notify(('Kept in the closed review of !%s'):format(s.pull.id))
 end
 
 ---@type integer
@@ -192,12 +216,8 @@ function M.comment(opts)
       table.insert(initial, '```')
     end
     editor('Comment', initial, function(text)
-      if s ~= session.current() then
-        return notify('The review was closed', WARN)
-      end
       fields.body, fields.suggestion = parse(text)
-      drafts.add(s.state, fields)
-      session.changed(s)
+      apply(s, function(state) drafts.add(state, fields) end)
     end)
   end)
 end
@@ -229,16 +249,19 @@ function M.reply()
   local thread = thread_at(s, path, side, line)
   if not thread then return notify('No thread on this line', WARN) end
   editor('Reply', {}, function(text)
-    if s ~= session.current() then return end
     local body = parse(text)
-    drafts.add(s.state, {
-      path = path,
-      side = side,
-      line = thread.line,
-      body = body,
-      reply_to = thread.id,
-    })
-    session.changed(s)
+    apply(
+      s,
+      function(state)
+        drafts.add(state, {
+          path = path,
+          side = side,
+          line = thread.line,
+          body = body,
+          reply_to = thread.id,
+        })
+      end
+    )
   end)
 end
 
@@ -282,7 +305,7 @@ end
 ---@param line integer
 ---@return DyReviewDraft?
 local function draft_at(s, path, side, line)
-  local found
+  local found ---@type DyReviewDraft?
   for _, draft in ipairs(s.state.drafts) do
     if
       draft.path == path
@@ -309,10 +332,19 @@ function M.ai_action(action)
     if draft.origin == 'forge' then
       return notify('A draft pending on the forge cannot be edited here', WARN)
     end
+    local id = draft.id
     return editor('Edit', vim.split(draft.body, '\n'), function(text)
-      local ok, why = drafts.set_body(draft, (parse(text)))
-      if not ok then return notify(why or 'Cannot edit', WARN) end
-      if s == session.current() then session.changed(s) end
+      local body = parse(text)
+      apply(s, function(state)
+        for _, d in ipairs(state.drafts) do
+          if d.id == id then
+            local ok, why = drafts.set_body(d, body)
+            if not ok then notify(why or 'Cannot edit', WARN) end
+            return
+          end
+        end
+        notify('The draft is gone: the edit is not kept', WARN)
+      end)
     end)
   end
   local ok, why =

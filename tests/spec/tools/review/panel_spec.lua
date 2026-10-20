@@ -131,6 +131,11 @@ describe('tools.review.panel', function()
       )
     end)
 
+    it('says when the threads could not be read', function()
+      local lines = panel.render(session({ threads_error = 'HTTP 500' }))
+      assert.is_true(vim.tbl_contains(lines, ' Threads not read: HTTP 500'))
+    end)
+
     it('leaves the summary line out when there is nothing to say', function()
       local s = session()
       s.state.reviewed = {}

@@ -110,8 +110,9 @@ describe('tools.review', function()
       vim.fn.mkdir(dir, 'p')
       cb(true)
     end)
-    stub(git, 'worktree_remove', function(_, _, cb)
+    stub(git, 'worktree_remove', function(_, dir, cb)
       rec('worktree_remove')
+      vim.fn.delete(dir, 'rf')
       cb(true)
     end)
     stub(git, 'delete_refs', function(_, prefix, keep, cb)
@@ -421,6 +422,181 @@ describe('tools.review', function()
       assert.equals('blob1', review.current().state.reviewed['src/auth.lua'])
       review.mark('src/auth.lua')
       assert.is_nil(review.current().state.reviewed['src/auth.lua'])
+    end)
+  end)
+
+  describe('a new push', function()
+    it('closes the old head and opens the new one', function()
+      review.open(remote, pull())
+      calls = {}
+      local moved = ('d'):rep(40)
+      review.open(remote, pull({ head_sha = moved }))
+      assert.is_true(
+        vim.tbl_contains(
+          vim.tbl_map(function(n) return n.msg end, notes),
+          'The pull request moved to ddddddd: opening the new head'
+        )
+      )
+      assert.is_true(vim.tbl_contains(calls, 'worktree_remove'))
+      assert.is_true(vim.tbl_contains(calls, 'fetch'))
+      assert.equals(moved, review.current().pull.head_sha)
+    end)
+
+    it('stays on the old head when the review cannot close', function()
+      review.open(remote, pull())
+      local s = review.current()
+      local bufnr = h.buffer({
+        name = vim.fs.joinpath(s.worktree, 'src', 'auth.lua'),
+        lines = { 'x' },
+      })
+      vim.bo[bufnr].modified = true
+      calls = {}
+      review.open(remote, pull({ head_sha = ('d'):rep(40) }))
+      assert.equals(s, review.current())
+      assert.is_false(vim.tbl_contains(calls, 'fetch'))
+      assert.is_truthy(said(vim.log.levels.WARN)[1]:find('auth.lua', 1, true))
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+
+  describe('threads', function()
+    it('says when they could not be read', function()
+      adapter.threads = function(_, _, cb) cb(nil, 'HTTP 500') end
+      review.open(remote, pull())
+      assert.is_truthy(review.current().threads_error:find('HTTP 500', 1, true))
+    end)
+  end)
+
+  describe('drafts and close', function()
+    local bufnr
+
+    before_each(function()
+      review.open(remote, pull())
+      bufnr = h.buffer({ lines = vim.fn['repeat']({ 'x' }, 20) })
+      vim.api.nvim_set_current_buf(bufnr)
+      stub(diff, 'locate', function(b)
+        if b == bufnr then return 'src/auth.lua', 'new' end
+      end)
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+    end)
+
+    after_each(function()
+      for _, b in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.api.nvim_buf_get_name(b):find('dyreview://', 1, true) then
+          vim.bo[b].modified = false
+          pcall(vim.api.nvim_buf_delete, b, { force = true })
+        end
+      end
+      if vim.api.nvim_buf_is_valid(bufnr) then
+        vim.api.nvim_buf_delete(bufnr, { force = true })
+      end
+    end)
+
+    it('refuses to close while a draft is being written', function()
+      local s = review.current()
+      review.comment()
+      local editor = vim.api.nvim_get_current_buf()
+      vim.api.nvim_buf_set_lines(editor, 0, -1, false, { 'half' })
+      review.close()
+      assert.equals(s, review.current())
+      local warning = said(vim.log.levels.WARN)[1]
+      assert.is_truthy(warning:find(vim.api.nvim_buf_get_name(editor), 1, true))
+      assert.is_false(vim.tbl_contains(calls, 'worktree_remove'))
+    end)
+
+    it('stores a draft written after its review closed', function()
+      review.comment()
+      local editor = vim.api.nvim_get_current_buf()
+      review.close()
+      assert.is_nil(review.current())
+      local saved
+      stub(
+        store,
+        'save',
+        function(r, id, state) saved = { remote = r, id = id, state = state } end
+      )
+      vim.api.nvim_buf_set_lines(editor, 0, -1, false, { 'late' })
+      vim.cmd('write')
+      assert.equals('7', saved.id)
+      assert.equals('o/r', saved.remote.slug)
+      assert.equals('late', saved.state.drafts[1].body)
+    end)
+
+    it('stores an edit finished after its review closed', function()
+      local draft = {
+        id = 'a1',
+        origin = 'ai',
+        state = 'pending',
+        path = 'src/auth.lua',
+        side = 'new',
+        line = 2,
+        body = 'old',
+      }
+      review.current().state.drafts = { draft }
+      review.ai_action('edit')
+      local editor = vim.api.nvim_get_current_buf()
+      review.close()
+      local saved
+      stub(
+        store,
+        'load',
+        function() return { reviewed = {}, drafts = { vim.deepcopy(draft) } } end
+      )
+      stub(store, 'save', function(_, _, state) saved = state end)
+      vim.api.nvim_buf_set_lines(editor, 0, -1, false, { 'new words' })
+      vim.cmd('write')
+      assert.equals('new words', saved.drafts[1].body)
+      assert.equals('edited', saved.drafts[1].state)
+    end)
+  end)
+
+  describe('branch', function()
+    local origin = vim.tbl_extend('force', remote, { name = 'origin' })
+    local upstream =
+      vim.tbl_extend('force', remote, { name = 'upstream', slug = 'u/r' })
+    local mirror =
+      vim.tbl_extend('force', remote, { name = 'mirror', slug = 'm/r' })
+    local has, asked, opened
+
+    before_each(function()
+      has, asked, opened = {}, nil, nil
+      stub(require('util.forge'), 'branch', function(_, cb) cb('feature') end)
+      stub(session, 'tracked_remote', function(_, _, cb) cb('origin') end)
+      stub(
+        session,
+        'remotes',
+        function(_, cb) cb({ mirror, origin, upstream }) end
+      )
+      stub(forge, 'for_remote', function(r)
+        return {
+          for_branch = function(_, _, cb)
+            cb(has[r.name] and pull({ id = has[r.name] }) or nil)
+          end,
+        }
+      end)
+      stub(vim.ui, 'select', function(items) asked = items end)
+      stub(session, 'open', function(r, p) opened = { r.name, p.id } end)
+    end)
+
+    it('opens the pull request of the tracked remote', function()
+      has = { origin = '3', upstream = '9' }
+      review.branch()
+      assert.same({ 'origin', '3' }, opened)
+      assert.is_nil(asked)
+    end)
+
+    it('never opens another remote pull request without asking', function()
+      has = { upstream = '9' }
+      review.branch()
+      assert.is_nil(opened)
+      assert.equals(1, #asked)
+    end)
+
+    it('asks which when two other remotes have one', function()
+      has = { upstream = '9', mirror = '4' }
+      review.branch()
+      assert.is_nil(opened)
+      assert.equals(2, #asked)
     end)
   end)
 
