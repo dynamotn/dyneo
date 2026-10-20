@@ -222,6 +222,64 @@ describe('tools.review.git', function()
     end)
   end)
 
+  describe('renames', function()
+    it('gives the real change of a renamed file in hunks', function()
+      local hunks, err = await(
+        function(cb)
+          git.hunks(root, sha.base, sha.feature, 'new.txt', 'old.txt', cb)
+        end
+      )
+      assert.is_nil(err)
+      assert.same({ { 21, 21 } }, hunks.new)
+      assert.same({}, hunks.old)
+    end)
+
+    it('gives only the real change of a renamed file in diff', function()
+      local diffs = await(
+        function(cb)
+          git.diff(
+            root,
+            sha.base,
+            sha.feature,
+            { { path = 'new.txt', old_path = 'old.txt' }, 'a.txt' },
+            1024 * 1024,
+            cb
+          )
+        end
+      )
+      assert.is_truthy(diffs['new.txt']:find('rename from old.txt', 1, true))
+      assert.is_truthy(diffs['new.txt']:find('+more', 1, true))
+      assert.is_nil(diffs['new.txt']:find('+line 1\n', 1, true))
+      assert.is_truthy(diffs['a.txt'])
+    end)
+  end)
+
+  describe('options', function()
+    it('never reads an argument as an option', function()
+      local out = root .. '/written.txt'
+      local flag = '--output=' .. out
+      local calls = {
+        function(cb) git.fetch(root, '--upload-pack=touch ' .. out, {}, cb) end,
+        function(cb) git.merge_base(root, flag, 'main', cb) end,
+        function(cb) git.files(root, flag, 'main', cb) end,
+        function(cb) git.blobs(root, flag, { 'a.txt' }, cb) end,
+        function(cb) git.hunks(root, flag, 'main', 'a.txt', cb) end,
+        function(cb) git.interdiff(root, flag, 'main', 'main', 'main', cb) end,
+        function(cb) git.diff(root, flag, 'main', { 'a.txt' }, 100, cb) end,
+        function(cb) git.update_ref(root, flag, sha.main, cb) end,
+        function(cb) git.delete_refs(root, flag, {}, cb) end,
+        function(cb) git.worktree_add(root, flag, 'main', cb) end,
+        function(cb) git.worktree_remove(root, flag, cb) end,
+      }
+      for i, call in ipairs(calls) do
+        local first, err = await(call)
+        assert.is_falsy(first, 'call ' .. i)
+        assert.is_truthy(err and err:find('option'), 'call ' .. i)
+      end
+      assert.is_equal(0, vim.fn.filereadable(out))
+    end)
+  end)
+
   describe('interdiff', function()
     it('finds nothing when a rebase changed no patch', function()
       local paths, err = await(

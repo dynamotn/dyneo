@@ -67,6 +67,31 @@ local function run(root, args, opts, on_done)
   end)
 end
 
+--- Why `...` cannot go to git, nil when it can
+---
+--- A revision, remote, ref or directory starting with `-` would be read as
+--- an option (`--output=<file>`, `--upload-pack=<cmd>`). `--end-of-options`
+--- covers the commands that honour it; this covers the rest, and fails
+--- closed with a reason.
+---@param ... string?
+---@return string?
+local function refuse(...)
+  for i = 1, select('#', ...) do
+    local value = select(i, ...)
+    if type(value) == 'string' and value:sub(1, 1) == '-' then
+      return ('refusing "%s": it reads as a git option'):format(value)
+    end
+  end
+end
+
+--- Hand `cb` a refusal on the main loop, as `run` answers
+---@param cb function
+---@param ... any
+local function answer(cb, ...)
+  local args = vim.F.pack_len(...)
+  vim.schedule(function() cb(vim.F.unpack_len(args)) end)
+end
+
 --- Split NUL-separated output, dropping the empty field after the last NUL
 ---@param out string
 ---@return string[]
@@ -106,7 +131,9 @@ end
 ---@param refspecs string[]
 ---@param cb fun(ok: boolean, err?: string)
 function M.fetch(root, remote, refspecs, cb)
-  local args = { 'fetch', '--no-tags', '--quiet', remote }
+  local bad = refuse(remote)
+  if bad then return answer(cb, false, bad) end
+  local args = { 'fetch', '--no-tags', '--quiet', '--end-of-options', remote }
   vim.list_extend(args, refspecs)
   run(root, args, {
     timeout = M.FETCH_TIMEOUT,
@@ -122,9 +149,11 @@ end
 ---@param sha string
 ---@param cb fun(ok: boolean, err?: string)
 function M.update_ref(root, ref, sha, cb)
+  local bad = refuse(ref, sha)
+  if bad then return answer(cb, false, bad) end
   run(
     root,
-    { 'update-ref', ref, sha },
+    { 'update-ref', '--end-of-options', ref, sha },
     { max_bytes = 64 * 1024 },
     function(_, err) cb(err == nil, err) end
   )
@@ -136,9 +165,11 @@ end
 ---@param keep string[] Full ref names to leave alone
 ---@param cb fun(deleted?: string[], err?: string)
 function M.delete_refs(root, prefix, keep, cb)
+  local bad = refuse(prefix)
+  if bad then return answer(cb, nil, bad) end
   run(
     root,
-    { 'for-each-ref', '--format=%(refname)', prefix },
+    { 'for-each-ref', '--format=%(refname)', '--end-of-options', prefix },
     { max_bytes = M.MAX_LIST_BYTES },
     function(listing, err)
       if err then return cb(nil, err) end
@@ -173,9 +204,11 @@ end
 ---@param b string
 ---@param cb fun(sha?: string, err?: string)
 function M.merge_base(root, a, b, cb)
+  local bad = refuse(a, b)
+  if bad then return answer(cb, nil, bad) end
   run(
     root,
-    { 'merge-base', a, b },
+    { 'merge-base', '--end-of-options', a, b },
     { max_bytes = 64 * 1024 },
     function(result, err)
       if err then
@@ -301,11 +334,23 @@ end
 ---@param head string
 ---@param cb fun(files?: table[], err?: string) DyReviewFile without kind and risk
 function M.files(root, base, head, cb)
+  local bad = refuse(base, head)
+  if bad then return answer(cb, nil, bad) end
   local function diff_job(flag)
     return function(done)
       run(
         root,
-        { 'diff', '--no-ext-diff', flag, '-z', '-M', base, head, '--' },
+        {
+          'diff',
+          '--no-ext-diff',
+          flag,
+          '-z',
+          '-M',
+          '--end-of-options',
+          base,
+          head,
+          '--',
+        },
         { max_bytes = M.MAX_LIST_BYTES },
         function(result, err) done(result and result.stdout, err) end
       )
@@ -348,13 +393,15 @@ end
 ---@param paths string[]
 ---@param cb fun(blobs?: table<string, string>, err?: string)
 function M.blobs(root, rev, paths, cb)
+  local bad = refuse(rev)
+  if bad then return answer(cb, nil, bad) end
   local batches = {}
   for i = 1, #paths, M.BATCH do
     table.insert(batches, vim.list_slice(paths, i, i + M.BATCH - 1))
   end
   local blobs, failed = {}, nil
   sys.each(batches, M.CONCURRENCY, function(batch, done)
-    local args = { 'ls-tree', '-z', rev, '--' }
+    local args = { 'ls-tree', '-z', '--end-of-options', rev, '--' }
     vim.list_extend(args, batch)
     run(root, args, { max_bytes = M.MAX_LIST_BYTES }, function(result, err)
       failed = failed or err
@@ -378,18 +425,30 @@ end
 ---@param base string
 ---@param head string
 ---@param path string
----@param cb fun(hunks?: DyReviewHunks, err?: string)
-function M.hunks(root, base, head, path, cb)
-  run(root, {
+---@param old_path? string Where a renamed file was, so only its real change shows
+---@param cb? fun(hunks?: DyReviewHunks, err?: string)
+function M.hunks(root, base, head, path, old_path, cb)
+  if type(old_path) == 'function' then
+    cb, old_path = old_path, nil
+  end
+  ---@cast cb fun(hunks?: DyReviewHunks, err?: string)
+  local bad = refuse(base, head)
+  if bad then return answer(cb, nil, bad) end
+  -- Both names, or the diff of the new one alone is the whole file added
+  local args = {
     'diff',
     '--no-color',
     '--no-ext-diff',
     '-U0',
+    '-M',
+    '--end-of-options',
     base,
     head,
     '--',
-    path,
-  }, {}, function(result, err)
+  }
+  if old_path and old_path ~= path then table.insert(args, old_path) end
+  table.insert(args, path)
+  run(root, args, {}, function(result, err)
     if err then return cb(nil, err) end
     local hunks = { old = {}, new = {} }
     for line in vim.gsplit(result.stdout, '\n', { plain = true }) do
@@ -421,6 +480,7 @@ local function patch_id(root, base, head, path, cb)
     '--no-color',
     '--no-ext-diff',
     '-U0',
+    '--end-of-options',
     base,
     head,
     '--',
@@ -452,6 +512,8 @@ end
 ---@param head_new string
 ---@param cb fun(paths?: string[], err?: string) Sorted
 function M.interdiff(root, base_old, head_old, base_new, head_new, cb)
+  local bad = refuse(base_old, head_old, base_new, head_new)
+  if bad then return answer(cb, nil, bad) end
   local function names(base, head)
     return function(done)
       run(
@@ -462,6 +524,7 @@ function M.interdiff(root, base_old, head_old, base_new, head_new, cb)
           '-z',
           '--no-renames',
           '--no-ext-diff',
+          '--end-of-options',
           base,
           head,
           '--',
@@ -519,23 +582,34 @@ end
 ---@param root string
 ---@param base string
 ---@param head string
----@param paths string[]
+---@param paths (string|{ path: string, old_path?: string })[] A renamed file as `{ path, old_path }`, so only its real change shows
 ---@param max_bytes integer
 ---@param cb fun(diffs?: table<string, string>, err?: string, cut: boolean)
 function M.diff(root, base, head, paths, max_bytes, cb)
+  local bad = refuse(base, head)
+  if bad then return answer(cb, nil, bad, false) end
+  local names = {}
+  for i, entry in ipairs(paths) do
+    names[i] = type(entry) == 'table' and (entry.path or entry[1]) or entry
+  end
   local results, failed = {}, nil
-  sys.each(paths, M.CONCURRENCY, function(path, done)
+  sys.each(paths, M.CONCURRENCY, function(entry, done)
     if failed then return done() end
-    run(root, {
+    local path = type(entry) == 'table' and (entry.path or entry[1]) or entry
+    local old_path = type(entry) == 'table' and entry.old_path or nil
+    local args = {
       'diff',
       '--no-color',
       '--no-ext-diff',
       '-M',
+      '--end-of-options',
       base,
       head,
       '--',
-      path,
-    }, {
+    }
+    if old_path and old_path ~= path then table.insert(args, old_path) end
+    table.insert(args, path)
+    run(root, args, {
       -- One byte past the budget tells that this file alone overflows it
       max_bytes = max_bytes + 1,
     }, function(result, err)
@@ -552,7 +626,7 @@ function M.diff(root, base, head, paths, max_bytes, cb)
   end, function()
     if failed then return cb(nil, failed, false) end
     local diffs, used, cut = {}, 0, false
-    for _, path in ipairs(paths) do
+    for _, path in ipairs(names) do
       local entry = results[path]
       if entry and entry.text and used + #entry.text <= max_bytes then
         diffs[path] = entry.text
@@ -571,9 +645,11 @@ end
 ---@param rev string
 ---@param cb fun(ok: boolean, err?: string)
 function M.worktree_add(root, dir, rev, cb)
+  local bad = refuse(dir, rev)
+  if bad then return answer(cb, false, bad) end
   run(
     root,
-    { 'worktree', 'add', '--detach', dir, rev },
+    { 'worktree', 'add', '--detach', '--end-of-options', dir, rev },
     { max_bytes = 64 * 1024, timeout = M.FETCH_TIMEOUT },
     function(_, err) cb(err == nil, err) end
   )
@@ -585,9 +661,11 @@ end
 ---@param dir string
 ---@param cb fun(ok: boolean, err?: string)
 function M.worktree_remove(root, dir, cb)
+  local bad = refuse(dir)
+  if bad then return answer(cb, false, bad) end
   run(
     root,
-    { 'worktree', 'remove', dir },
+    { 'worktree', 'remove', '--end-of-options', dir },
     { max_bytes = 64 * 1024 },
     function(_, err) cb(err == nil, err) end
   )
