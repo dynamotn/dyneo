@@ -43,7 +43,7 @@ end
 
 define_highlights()
 vim.api.nvim_create_autocmd('ColorScheme', {
-  group = vim.api.nvim_create_augroup('dy_review', { clear = true }),
+  group = vim.api.nvim_create_augroup('dy_review_drafts', { clear = true }),
   callback = define_highlights,
 })
 

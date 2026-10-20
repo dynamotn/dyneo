@@ -441,6 +441,16 @@ one of the same keys in those buffers.
 `<leader>pss`          n      LSP settings of the clients
 
 ==============================================================================
+<leader>pv  review
+
+`<leader>pva`          n      AI Review Pass
+`<leader>pvb`          n      Review This Branch's Pull Request
+`<leader>pvd`          n      Review Drafts
+`<leader>pvq`          n      Close Review
+`<leader>pvs`          n      Submit Review
+`<leader>pvv`          n      Review a Pull Request
+
+==============================================================================
 <leader>q  quit/session
 
 `<leader>qS`           n      Select Session
