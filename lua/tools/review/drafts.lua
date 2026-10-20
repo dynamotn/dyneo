@@ -8,8 +8,6 @@
 --- a draft's text.
 local M = {}
 
----@alias DyReviewHunks { old: integer[][], new: integer[][] }
-
 M.HL = {
   draft = 'DyReviewDraft',
   ai = 'DyReviewAi',
@@ -71,16 +69,30 @@ function M.add(state, fields)
   return draft
 end
 
---- Change a draft's state
+--- The states `set_state` may give a draft of each origin
 ---
---- A draft imported from the forge's pending review is read-only here.
+--- `edited` is reached only through `set_body`. A dropped AI draft may be
+--- kept again, since any explicit action counts as looking at it. A forge
+--- draft is never dropped here.
+local ALLOWED = {
+  ai = { pending = true, kept = true, dropped = true },
+  user = { ready = true, dropped = true },
+  forge = { ready = true },
+}
+
+--- Change a draft's state, within what its origin allows
 ---@param draft DyReviewDraft
----@param new_state DyReviewDraft['state']
+---@param new_state 'ready'|'pending'|'kept'|'edited'|'dropped'
 ---@return boolean ok
 ---@return string? reason
 function M.set_state(draft, new_state)
-  if draft.origin == 'forge' and new_state == 'dropped' then
-    return false, 'a draft pending on the forge cannot be dropped here'
+  local allowed = ALLOWED[draft.origin]
+  if not (allowed and allowed[new_state]) then
+    if draft.origin == 'forge' then
+      return false, 'a draft pending on the forge cannot be changed here'
+    end
+    return false,
+      ('a %s draft cannot become %s'):format(draft.origin, new_state)
   end
   draft.state = new_state
   return true
@@ -122,11 +134,11 @@ end
 function M.sendable(state)
   local send, skipped = {}, 0
   for _, draft in ipairs(state.drafts) do
-    if draft.posted then
-      -- already on the forge
+    if draft.posted or draft.state == 'dropped' then
+      -- already on the forge, or not wanted
     elseif draft.origin == 'forge' then
       send[#send + 1] = draft
-    elseif draft.state == 'pending' then
+    elseif draft.origin == 'ai' and draft.state == 'pending' then
       skipped = skipped + 1
     elseif
       draft.state == 'ready'
