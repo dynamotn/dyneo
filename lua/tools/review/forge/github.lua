@@ -405,10 +405,11 @@ local function forge_draft_id(id)
   return vim.fn.sha256('github:' .. tostring(id)):sub(1, 12)
 end
 
---- My pending review of `pull`, nil without an error when there is none
+--- My pending review of `pull`, nil without an error when there is none,
+--- and every review of `pull` GitHub listed
 ---@param remote DyForgeRemote
 ---@param pull DyReviewPull
----@param on_done fun(review?: table, err?: string)
+---@param on_done fun(review?: table, err?: string, reviews?: table[])
 local function pending_review(remote, pull, on_done)
   login(remote, function(me, err)
     if not me then return on_done(nil, err) end
@@ -433,10 +434,10 @@ local function pending_review(remote, pull, on_done)
           if not (int(review.id) and text(review.node_id)) then
             return on_done(nil, 'GitHub answered with a malformed review')
           end
-          return on_done(review)
+          return on_done(review, nil, rows)
         end
       end
-      on_done(nil)
+      on_done(nil, nil, rows)
     end)
   end)
 end
@@ -624,12 +625,16 @@ local function parse_posted(posted)
   return tonumber(review), tonumber(comment)
 end
 
+--- Why a pending review cannot be submitted as it is
+local CHANGED = 'the pending review on GitHub no longer matches the drafts '
+  .. 'here; open the pull request again'
+
 --- Why pending review `review` is not what the drafts say it holds, nil when
 --- it is
 ---
 --- It holds the imported drafts not yet sent and every draft sent into it
---- before; a comment more or one less was made or removed on GitHub since,
---- and submitting would publish what no one confirmed.
+--- before; a comment more or one less means the review or the drafts here
+--- changed since, and submitting would publish what no one confirmed.
 ---@param review table
 ---@param comments table[]
 ---@param drafts DyReviewDraft[]
@@ -651,16 +656,12 @@ local function changed(review, comments, drafts)
     if imported[id] then
       comment_of[id] = comment.id
     elseif not sent[comment.id] then
-      return 'the pending review changed on GitHub; open the pull request again',
-        comment_of
+      return CHANGED, comment_of
     end
     held = held + 1
   end
   local expected = vim.tbl_count(imported) + vim.tbl_count(sent)
-  if held ~= expected then
-    return 'the pending review changed on GitHub; open the pull request again',
-      comment_of
-  end
+  if held ~= expected then return CHANGED, comment_of end
   return nil, comment_of
 end
 
@@ -704,6 +705,30 @@ local function create_review(remote, pull, on_done)
   )
 end
 
+--- Resolve the thread of each of `drafts`, reporting a draft with nothing
+--- more to send
+---
+--- A thread is resolved before its reply goes in: resolving again does
+--- nothing, while a reply sent twice shows twice.
+---@param remote DyForgeRemote
+---@param drafts DyReviewDraft[]
+---@param progress fun(draft: DyReviewDraft, forge_id: string)
+---@param on_done fun(err?: string)
+local function resolve_all(remote, drafts, progress, on_done)
+  in_turn(drafts, function(draft, next)
+    graphql(
+      remote,
+      RESOLVE,
+      { input = { threadId = draft.reply_to } },
+      function(data, err)
+        if not data then return next(err) end
+        if body_of(draft) == '' then progress(draft, draft.reply_to) end
+        next()
+      end
+    )
+  end, on_done)
+end
+
 --- Fill pending review `review` and submit it: resolutions, then new
 --- threads, then replies, each draft reported once it is in the review, and
 --- the verdict last
@@ -723,20 +748,6 @@ local function fill_and_submit(
   progress,
   on_done
 )
-  --- A thread is resolved before its reply goes in: resolving again does
-  --- nothing, while a reply sent twice shows twice
-  local function resolve(draft, next)
-    graphql(
-      remote,
-      RESOLVE,
-      { input = { threadId = draft.reply_to } },
-      function(data, err)
-        if not data then return next(err) end
-        if body_of(draft) == '' then progress(draft, draft.reply_to) end
-        next()
-      end
-    )
-  end
   local function add_thread(draft, next)
     graphql(
       remote,
@@ -787,7 +798,7 @@ local function fill_and_submit(
       on_done(nil)
     end)
   end
-  in_turn(groups.resolves, resolve, function(resolve_err)
+  resolve_all(remote, groups.resolves, progress, function(resolve_err)
     if resolve_err then return on_done(resolve_err) end
     in_turn(groups.new, add_thread, function(thread_err)
       if thread_err then return on_done(thread_err) end
@@ -799,24 +810,56 @@ local function fill_and_submit(
   end)
 end
 
+--- The drafts sent into a review GitHub no longer lists, and whether any
+--- went into a review that is out (no longer pending)
+---@param drafts DyReviewDraft[]
+---@param pending? table The pending review, whose drafts are checked apart
+---@param reviews table[] Every review of the pull request
+---@return string[] lost Their local ids
+---@return boolean out
+local function sent_before(drafts, pending, reviews)
+  local states = {}
+  for _, row in ipairs(reviews) do
+    if type(row) == 'table' and int(row.id) then states[row.id] = row.state end
+  end
+  local lost, out = {}, false
+  for _, draft in ipairs(drafts) do
+    local review, comment = parse_posted(draft.posted)
+    if comment and not (pending and review == pending.id) then
+      local state = states[review]
+      if state == nil then
+        table.insert(lost, draft.id)
+      elseif state ~= 'PENDING' then
+        out = true
+      end
+    end
+  end
+  return lost, out
+end
+
 --- Send `drafts` with `review`'s verdict and text
 ---
 --- Everything goes through one pending review: mine on GitHub when there is
 --- one, a new one otherwise. Threads are resolved, new threads and replies
---- added to it, and it is submitted with the verdict last. A pending review
---- holding more or less than the drafts say is refused before any write,
---- since submitting it publishes all it holds. Each draft is reported
---- through `progress` as soon as it is in the review, so a submit cut short
---- and run again never adds it twice, and a run with nothing left to add
---- still submits the review; a draft already `posted` is never sent. A
---- failed call stops the submit there and is never tried again here: one
---- that timed out may still have reached GitHub.
+--- added to it, and it is submitted with the verdict last. Each draft is
+--- reported through `progress` as soon as it is in the review, so a submit
+--- cut short and run again never adds it twice; a draft already `posted` is
+--- never sent. A failed call stops the submit there and is never tried
+--- again here: one that timed out may still have reached GitHub.
+---
+--- Refused before any write: a pending review holding more or less than the
+--- drafts say, since submitting it publishes all it holds; and drafts sent
+--- into a pending review since deleted, named in `info.lost`, which only
+--- the caller may send again. No review is made when the one the drafts
+--- went into is already out and there is nothing new, nor for a comment
+--- verdict with nothing in it, which GitHub refuses: the threads are only
+--- resolved.
 ---@param remote DyForgeRemote
 ---@param pull DyReviewPull
 ---@param drafts DyReviewDraft[]
 ---@param review { verdict: string, body?: string }
 ---@param progress fun(draft: DyReviewDraft, forge_id: string)
----@param cb fun(err?: string)
+---@param cb fun(err?: string, info?: { lost?: string[] })
 function M.submit(remote, pull, drafts, review, progress, cb)
   local verdict = type(review) == 'table' and review.verdict
   local event = EVENTS[verdict]
@@ -837,6 +880,9 @@ function M.submit(remote, pull, drafts, review, progress, cb)
       end
     end
   end
+  local nothing_new = #groups.new == 0 and #groups.replies == 0
+  local empty_comment = event == 'COMMENT'
+    and (review.body == nil or review.body == '')
   local verdict_input = { event = event, body = review.body }
   local function fill(pending, comment_of)
     fill_and_submit(
@@ -849,8 +895,20 @@ function M.submit(remote, pull, drafts, review, progress, cb)
       cb
     )
   end
-  pending_review(remote, pull, function(pending, err)
+  local function resolve_only()
+    resolve_all(remote, groups.resolves, progress, function(err) cb(err) end)
+  end
+  pending_review(remote, pull, function(pending, err, reviews)
     if err then return cb(err) end
+    local lost, out = sent_before(drafts, pending, reviews or {})
+    if #lost > 0 then
+      return cb(
+        ('%d drafts went into a pending review that was deleted on GitHub'):format(
+          #lost
+        ),
+        { lost = lost }
+      )
+    end
     if not pending then
       -- Submitted or deleted on GitHub since they were imported: sending
       -- them again could show them twice
@@ -860,6 +918,8 @@ function M.submit(remote, pull, drafts, review, progress, cb)
             .. 'open the pull request again'
         )
       end
+      -- The review is out, its verdict with it, or would hold nothing
+      if nothing_new and (out or empty_comment) then return resolve_only() end
       return create_review(remote, pull, function(created, create_err)
         if not created then return cb(create_err) end
         fill(created, {})
@@ -869,6 +929,9 @@ function M.submit(remote, pull, drafts, review, progress, cb)
       if not comments then return cb(list_err) end
       local why, comment_of = changed(pending, comments, drafts)
       if why then return cb(why) end
+      if nothing_new and #comments == 0 and empty_comment then
+        return resolve_only()
+      end
       fill({ id = pending.id, node_id = pending.node_id }, comment_of)
     end)
   end)

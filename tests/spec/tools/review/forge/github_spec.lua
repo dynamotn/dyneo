@@ -478,8 +478,15 @@ exit 1
     local REVIEWS = 'repos_o_r_pulls_7_reviews_per_page_100_page_1'
     local COMMENTS =
       'repos_o_r_pulls_7_reviews_302_comments_per_page_100_page_1'
-    local CHANGED =
-      'the pending review changed on GitHub; open the pull request again'
+    local CHANGED = 'the pending review on GitHub no longer matches the '
+      .. 'drafts here; open the pull request again'
+    --- My review 301, submitted long ago
+    local SUBMITTED = {
+      id = 301,
+      node_id = 'PRR_301',
+      state = 'COMMENTED',
+      user = { login = 'me' },
+    }
 
     --- A draft with `fields` over a plain one on the new side
     ---@param fields table
@@ -507,10 +514,11 @@ exit 1
     end
 
     --- Submit `drafts` with `review` and hand back the error and every
-    --- `progress` report, as `{ draft id, forge id }`
+    --- `progress` report, as `{ draft id, forge id }`, and what came with
+    --- the error
     local function submit(drafts, review)
       local reports = {}
-      local err = wait(function(cb)
+      local err, info = wait(function(cb)
         github.submit(
           remote,
           pull,
@@ -520,7 +528,7 @@ exit 1
           cb
         )
       end)
-      return err, reports
+      return err, reports, info
     end
 
     --- The GraphQL inputs of every call, in order
@@ -543,7 +551,7 @@ exit 1
 
     it('fills one new pending review, then submits it last', function()
       answer('user', 'user.json')
-      answer(REVIEWS, {})
+      answer(REVIEWS, { SUBMITTED })
       writes_succeed()
       local err, reports = submit({
         draft({ id = 'line', path = 'a.lua', line = 3, body = 'One line.' }),
@@ -576,7 +584,7 @@ exit 1
           body = '',
           resolve = true,
         }),
-        draft({ id = 'done', posted = '111/5', body = 'Sent before.' }),
+        draft({ id = 'done', posted = '301/5', body = 'Sent before.' }),
       }, { verdict = 'request_changes', body = 'Summary.' })
       assert.is_nil(err)
       assert.same({
@@ -725,7 +733,7 @@ exit 1
         draft({ id = 'b', posted = '302/502' }),
         draft({ id = 'c', posted = '302/503' }),
         -- Published long ago in another review
-        draft({ id = 'old', posted = '111/5' }),
+        draft({ id = 'old', posted = '301/5' }),
       }, { verdict = 'comment', body = '' })
       assert.is_nil(err)
       assert.same(
@@ -747,6 +755,75 @@ exit 1
       assert.is_string(err)
       assert.same({}, reports)
       assert.same({ 'user', REVIEWS }, keys())
+    end)
+
+    it('only resolves when a comment review would be empty', function()
+      answer('user', 'user.json')
+      answer(REVIEWS, {})
+      writes_succeed()
+      local err, reports = submit(
+        { draft({ id = 'r', reply_to = 'PRRT_2', body = '', resolve = true }) },
+        { verdict = 'comment' }
+      )
+      assert.is_nil(err)
+      assert.same({ 'user', REVIEWS, 'graphql_DyReviewResolve' }, keys())
+      assert.same({ { 'r', 'PRRT_2' } }, reports)
+    end)
+
+    it('refuses drafts sent into a pending review since deleted', function()
+      answer('user', 'user.json')
+      answer(REVIEWS, 'reviews.json')
+      answer(COMMENTS, 'review-comments.json')
+      writes_succeed()
+      local err, reports, info = submit({
+        imported(501),
+        imported(502),
+        imported(503),
+        draft({ id = 'lost1', posted = '555/1' }),
+        draft({ id = 'lost2', posted = '555/2' }),
+        draft({ id = 'old', posted = '301/5' }),
+        draft({ id = 'new' }),
+      }, { verdict = 'approve' })
+      assert.equals(
+        '2 drafts went into a pending review that was deleted on GitHub',
+        err
+      )
+      assert.same({ lost = { 'lost1', 'lost2' } }, info)
+      assert.same({}, reports)
+      assert.same({ 'user', REVIEWS }, keys())
+    end)
+
+    it('sends nothing again once the review went out', function()
+      answer('user', 'user.json')
+      answer(REVIEWS, { SUBMITTED })
+      writes_succeed()
+      local err, reports = submit({
+        draft({ id = 'a', posted = '301/1' }),
+        draft({ id = 'b', posted = '301/2' }),
+      }, { verdict = 'approve', body = 'LGTM' })
+      assert.is_nil(err)
+      assert.same({}, reports)
+      assert.same({ 'user', REVIEWS }, keys())
+    end)
+
+    it('sends new drafts in a new review after one went out', function()
+      answer('user', 'user.json')
+      answer(REVIEWS, { SUBMITTED })
+      writes_succeed()
+      local err, reports = submit({
+        draft({ id = 'a', posted = '301/1' }),
+        draft({ id = 'new' }),
+      }, { verdict = 'approve' })
+      assert.is_nil(err)
+      assert.same({
+        'user',
+        REVIEWS,
+        'graphql_DyReviewPullId',
+        'graphql_DyReviewCreate',
+        'graphql_DyReviewAddThread',
+        'graphql_DyReviewSubmit',
+      }, keys())
+      assert.same({ { 'new', '900/601' } }, reports)
     end)
 
     it('refuses a verdict GitHub does not have, asking nothing', function()
