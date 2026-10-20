@@ -399,12 +399,16 @@ return {
         end
       end
 
+      -- The servers `configure` saw, by name
+      local configured = {} ---@type table<string, true>
+
       ---@param server string
       ---@param enabled? fun(bufnr: integer): boolean
       ---@param name string
       ---@param language DyLangSpec
       local function configure(server, enabled, name, language)
         if server == '*' then return end
+        configured[server] = true
         if enabled then conditions[server] = enabled end
         -- `false` turns a server off; a server nobody mentions is on
         local server_opts = opts.servers[server]
@@ -527,14 +531,27 @@ return {
       -- installs for the ones it has not -- and `vim.lsp.enable` replays
       -- `FileType` over the buffers that are already open, so a server
       -- enabled a tick late still attaches to this one.
-      vim.schedule(
-        function()
-          require('mason-lspconfig').setup({
-            ensure_installed = Plugin.dedup(ensure_installed),
-            automatic_enable = { exclude = Plugin.dedup(mason_exclude) },
-          })
+      vim.schedule(function()
+        -- `automatic_enable` starts every installed server, also one no
+        -- language names (put in by hand, or left from a language since
+        -- removed), with the `root_dir` nvim-lspconfig ships. It gets the
+        -- guard too, so it still serves the buffers that are not held.
+        for _, server in
+          ipairs(require('mason-lspconfig').get_installed_servers())
+        do
+          if
+            not configured[server]
+            and not vim.list_contains(mason_exclude, server)
+          then
+            configured[server] = true
+            vim.lsp.config(server, { root_dir = guarded_root_dir(server, {}) })
+          end
         end
-      )
+        require('mason-lspconfig').setup({
+          ensure_installed = Plugin.dedup(ensure_installed),
+          automatic_enable = { exclude = Plugin.dedup(mason_exclude) },
+        })
+      end)
     end,
   },
 }

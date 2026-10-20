@@ -4,6 +4,8 @@ describe('plugins.lsp.server', function()
   local spec, restores, dir, cleanup
   -- What the stubs record
   local calls, base, mason_packages, installed, enabled_of, held
+  -- What Mason reports as installed, by server name
+  local installed_servers
 
   --- Record a call under `name`
   ---@param name string
@@ -28,6 +30,7 @@ describe('plugins.lsp.server', function()
     h.globals()
     dir, cleanup = h.tmpdir()
     calls, installed, held = {}, {}, {}
+    installed_servers = {}
     enabled_of = { sonarlint = true, bashls = true }
     -- What `lsp/<server>.lua` would ship, read by `vim.lsp.config[server]`
     base = {
@@ -95,6 +98,7 @@ describe('plugins.lsp.server', function()
         get_mappings = function()
           return { lspconfig_to_package = mason_packages }
         end,
+        get_installed_servers = function() return installed_servers end,
         setup = record('mason_setup'),
       }),
       h.stub(package.loaded, 'mason-registry', {
@@ -474,6 +478,30 @@ describe('plugins.lsp.server', function()
         held[inside] = nil
         root_dir(inside, on_dir)
         assert.same({ dir .. '/proj', dir .. '/proj' }, roots)
+      end)
+
+      it('holds a server only Mason knows off a held buffer', function()
+        -- Installed by hand, named by no language: `automatic_enable` would
+        -- start it with the `root_dir` nvim-lspconfig ships
+        h.write(dir .. '/lsp/handmade.lua', {
+          "return { root_markers = { '.luarc.json' } }",
+        })
+        installed_servers = { 'handmade', 'lua_ls', 'gopls' }
+        configure(opts)
+        roots = {}
+        local inside = h.buffer({ name = dir .. '/proj/a.py' })
+        local root_dir = calls.config.handmade.root_dir
+        assert.is_function(root_dir)
+        root_dir(inside, on_dir)
+        assert.same({ dir .. '/proj' }, roots)
+        held[inside] = true
+        root_dir(inside, on_dir)
+        assert.same({ dir .. '/proj' }, roots)
+        held[inside] = nil
+        root_dir(inside, on_dir)
+        assert.same({ dir .. '/proj', dir .. '/proj' }, roots)
+        -- Not a server it left to another plugin
+        assert.is_nil(calls.config.gopls)
       end)
 
       it('keeps the condition a later language leaves out', function()
