@@ -1825,10 +1825,10 @@ Files are grouped in buckets by what triage makes of them; a file with a
 risk is marked `!`, one you marked reviewed `✓`, and one that changed since
 you marked it `⟳`.  Generated files are collapsed.  The header shows the AI
 summary, once the pass has run, and the CI line: the runs counted by state,
-`(by branch)` for runs of Jenkins and Argo, which know no commit, and
-`(by name)` for a run found by its name; a run keyed on the head commit
-carries no note.  A
-source held back is named with what it waits for.  Threads that could not be
+`(by branch)` for runs of Jenkins, or of Azure Pipelines found by branch
+because none matches the head commit, `(by name)` for an Argo workflow found
+by its name; a run keyed on the head commit carries no note.  A source held
+back is named with what it waits for.  Threads that could not be
 read are said as `Threads not read`, never left out silently.
 
 In the panel: `<CR>` opens a file, folds a bucket or lists the CI runs,
@@ -1869,8 +1869,8 @@ what will go out -- the drafts, those imported, the AI drafts left out, the
 comments outside the diff -- and sends on `Send`.  Before sending it reads
 the pull request again and refuses if it moved to a new head or became
 read-only; if the drafts changed while you were asking, it asks again.  The
-body is optional, except for a verdict that asks for changes with nothing
-else to say.  A failure part-way is remembered: submit again and only what is
+body is optional, except for GitHub's Request changes with nothing else
+to say.  A failure part-way is remembered: submit again and only what is
 not out yet is sent; comments already out are not sent twice.  Drafts lost
 because the pending review was deleted on the forge are offered to be sent
 again.  Verdicts:
