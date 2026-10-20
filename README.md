@@ -247,7 +247,7 @@ lua/
 │   └── languages.lua   one entry per language: parser, servers, tools, dap
 ├── plugins/<group>/    lazy.nvim specs; lang/ holds per-language extras
 ├── tools/              features built here (runbook, kube, tfplan, sbom…)
-│   └── mason-registry/ the config's own Mason registry
+│   └── mason-registry/ Mason packages dytoy installs (the rest: dynamotn/mason-registry)
 ├── util/               shared helpers (sensitive, ai_guard, root, system…)
 ├── lint/linters/       custom nvim-lint linters
 ├── overseer/template/  task templates

@@ -1,84 +1,13 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "description": [
-    "Every pinned version in this configuration lives in one of three places: the pre-commit hooks, the actions of the CI workflow, and the purls of the configuration's own Mason registry.",
+    "Every pinned version in this configuration lives in one of two places: the pre-commit hooks and the actions of the CI workflow. The Mason packages it adds are pinned and bumped in dynamotn/mason-registry; those of `lua/tools/mason-registry/` come from dytoy and pin nothing.",
     "The workflow runs the StyLua version it reads off the pre-commit hook, so that one bump covers both.",
     "Plugin versions are deliberately left out. `lazy-lock.json` is lazy.nvim's own lockfile and is rewritten by `:Lazy update`, so a bot editing it would only fight the plugin manager."
   ],
   "extends": ["config:recommended", ":dependencyDashboard"],
-  "enabledManagers": ["pre-commit", "github-actions", "custom.regex"],
+  "enabledManagers": ["pre-commit", "github-actions"],
   "pre-commit": {
     "enabled": true
-  },
-  "customManagers": [
-    {
-      "customType": "regex",
-      "description": "Tools the own Mason registry installs from a GitHub release",
-      "managerFilePatterns": ["/^lua/tools/mason-registry/[^/]+\\.lua$/"],
-      "matchStrings": [
-        "'pkg:github/(?<depName>[^@']+)@(?<currentValue>v?\\d[^']*)'"
-      ],
-      "datasourceTemplate": "github-releases"
-    },
-    {
-      "customType": "regex",
-      "description": "Tools the own Mason registry installs with `go install`",
-      "managerFilePatterns": ["/^lua/tools/mason-registry/[^/]+\\.lua$/"],
-      "matchStrings": [
-        "'pkg:golang/(?<depName>[^@']+)@(?<currentValue>v\\d[^'#]*)(?:#[^']*)?'"
-      ],
-      "datasourceTemplate": "go"
-    },
-    {
-      "customType": "regex",
-      "description": "Tools the own Mason registry installs from npm; a scoped name is written `%40scope/name` in a purl and looked up as `@scope/name`",
-      "managerFilePatterns": ["/^lua/tools/mason-registry/[^/]+\\.lua$/"],
-      "matchStrings": [
-        "'pkg:npm/(?:%40(?<scope>[^/@']+)/)?(?<name>[^/@']+)@(?<currentValue>\\d[^']*)'"
-      ],
-      "depNameTemplate": "{{#if scope}}@{{scope}}/{{/if}}{{name}}",
-      "datasourceTemplate": "npm"
-    },
-    {
-      "customType": "regex",
-      "description": "Tools the own Mason registry installs from PyPI",
-      "managerFilePatterns": ["/^lua/tools/mason-registry/[^/]+\\.lua$/"],
-      "matchStrings": [
-        "'pkg:pypi/(?<depName>[^@']+)@(?<currentValue>\\d[^']*)'"
-      ],
-      "datasourceTemplate": "pypi"
-    },
-    {
-      "customType": "regex",
-      "description": "Entries that build their purl from a version variable, and say so in a `-- renovate:` comment",
-      "managerFilePatterns": ["/^lua/tools/mason-registry/[^/]+\\.lua$/"],
-      "matchStrings": [
-        "--\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\s*\\nlocal version = '(?<currentValue>[^']+)'"
-      ]
-    },
-    {
-      "customType": "regex",
-      "description": "Tools the own Mason registry builds with `cargo` from a commit of a repository that has no release, followed on its `main` branch",
-      "managerFilePatterns": ["/^lua/tools/mason-registry/[^/]+\\.lua$/"],
-      "matchStrings": [
-        "'pkg:cargo/(?<depName>[^@']+)@(?<currentDigest>[0-9a-f]{40})\\?repository_url=(?<packageName>[^&']+)&rev=true'"
-      ],
-      "datasourceTemplate": "git-refs",
-      "currentValueTemplate": "main"
-    }
-  ],
-  "packageRules": [
-    {
-      "description": "A Mason bump is only picked up once the package is reinstalled by hand, so they arrive together in one pull request rather than one each.",
-      "matchManagers": ["custom.regex"],
-      "groupName": "mason registry",
-      "schedule": ["before 9am on monday"]
-    },
-    {
-      "description": "Hold a release back for the same week `tools.mason-quarantine` and the npm, bun, pnpm and uv configurations do. Only datasources that date their releases are listed: a commit followed through `git-refs` carries no date to wait on.",
-      "matchManagers": ["custom.regex"],
-      "matchDatasources": ["github-releases", "github-tags", "go", "npm", "pypi"],
-      "minimumReleaseAge": "7 days"
-    }
-  ]
+  }
 }

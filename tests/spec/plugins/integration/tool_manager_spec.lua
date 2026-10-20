@@ -63,6 +63,39 @@ describe('plugins.integration.tool_manager: mason.nvim', function()
     vim.cmd('silent! %bwipeout!')
   end)
 
+  it('reads the own registries ahead of the upstream one', function()
+    assert.same({
+      'lua:tools.mason-registry',
+      'lua:dy-mason-registry',
+      'github:mason-org/mason-registry',
+    }, spec().opts.registries)
+    -- `lua:dy-mason-registry` is a module of this plugin
+    assert.same(
+      { { 'dynamotn/mason-registry', dev = true } },
+      spec().dependencies
+    )
+  end)
+
+  -- mason keys the index it fetched on the list of registries, and fetches
+  -- again for any other list
+  it('is given the same registries by the scripts and CI', function()
+    local wanted = table.concat(
+      vim.tbl_map(
+        function(r) return "'" .. r .. "'" end,
+        spec().opts.registries
+      ),
+      ', '
+    )
+    for _, file in ipairs({
+      'scripts/install-parsers.lua',
+      '.github/workflows/check.yml',
+    }) do
+      local text = table.concat(vim.fn.readfile(h.root .. '/' .. file), ' ')
+      local found = text:match('registries = {%s*(.-),?%s*}')
+      assert.equals(wanted, found and found:gsub(',%s+', ', '), file)
+    end
+  end)
+
   it('installs each wanted tool once, skipping the unknown', function()
     packages.a = package_('absent')
     packages.b = package_('installed')

@@ -30,7 +30,7 @@ the machine-wide agent rules in `~/.config/AGENTS.md`, and
 | `lua/config/languages.lua`| one `DyLangSpec` per language: parser, servers, linters, formatters, dap, tests |
 | `lua/plugins/<group>/`    | lazy.nvim specs; `lang/` holds per-language extras     |
 | `lua/tools/`              | features built here (runbook, kube, tfplan, sbom, ...) |
-| `lua/tools/mason-registry/` | the config's own Mason registry                      |
+| `lua/tools/mason-registry/` | the Mason packages dytoy installs; the rest are in `dynamotn/mason-registry` |
 | `lua/util/`               | shared helpers (`sensitive`, `ai_guard`, `forge`, `scratch`, `root`, ...) |
 | `lua/dyneo/health.lua`    | `:checkhealth dyneo`                                   |
 | `lua/per_machine/`        | `config.lua.tmpl`, rendered by chezmoi; never in a clone |
@@ -86,8 +86,10 @@ A new language or tool is an entry in `lua/config/languages.lua`.
 
 - A tool has up to three names -- `[1]` for conform or nvim-lint, `command`
   for the binary, `mason.package` for the installer -- and the last two are
-  written down whenever they differ. A tool Mason lacks gets a package in
-  `lua/tools/mason-registry/` (a release purl, or `dytoy:<tool>`), or
+  written down whenever they differ. A tool Mason lacks gets a package: one
+  with a release purl in `dynamotn/mason-registry` (its own repository,
+  checked out under `DyNeo.dev_plugins_path`) until upstream takes it, one
+  installed by dytoy (`dytoy:<tool>`) in `lua/tools/mason-registry/`, or
   `mason = { enabled = false }` when it comes from the system.
 - A server is given every filetype of the language that names it. One that
   suits only a dialect lists its own: `{ 'helm_ls', filetypes =
@@ -222,7 +224,8 @@ Every one of these came from a bug that shipped. Keep to them.
   `lazy-lock.stable.json`). Each writes only its own lockfile; CI tests both.
 - Plugin bumps are their own `chore: update version of plugins` commit.
   Renovate deliberately leaves lockfiles to lazy.nvim, and covers pre-commit
-  hooks, workflow actions and the purls in `lua/tools/mason-registry/`.
+  hooks and workflow actions; the purls of the Mason packages are bumped in
+  `dynamotn/mason-registry`.
 - A plugin whose last release lags what the config needs goes in
   `stale_releases` in `lua/config/lazy.lua`, with a comment saying why, so
   `stable` follows its branch.

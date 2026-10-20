@@ -28,6 +28,11 @@ vim.opt.runtimepath:append(data .. '/lazy/mason-nvim-dap.nvim')
 local registry = data
   .. '/mason/registries/github/mason-org/mason-registry/registry.json'
 
+-- The packages of `dynamotn/mason-registry`, the registry beside the dytoy
+-- one of this tree
+local plugin_dir = dofile(root .. '/scripts/lib/mason_registry.lua').dir(root)
+local plugin_registry = plugin_dir and plugin_dir .. '/lua/dy-mason-registry'
+
 -- Every check reads its answer out of `stdpath('data')`. On a machine that has
 -- never run this configuration -- a fresh clone, a container, CI -- none of it
 -- is there, and a tool that cannot be looked up is not the same thing as a
@@ -39,7 +44,7 @@ local checkable = {
   lsp = vim.fn.isdirectory(data .. '/lazy/nvim-lspconfig') == 1,
   dap = vim.fn.isdirectory(data .. '/lazy/mason-nvim-dap.nvim') == 1
     and vim.fn.isdirectory(data .. '/lazy/mason.nvim') == 1,
-  mason = vim.fn.filereadable(registry) == 1,
+  mason = vim.fn.filereadable(registry) == 1 and plugin_registry ~= nil,
 }
 
 ---@type table<string, string> What each group needs, for the message
@@ -48,31 +53,36 @@ local needs = {
   linters = 'nvim-lint',
   lsp = 'nvim-lspconfig',
   dap = 'mason-nvim-dap.nvim and mason.nvim',
-  mason = 'the Mason registry',
+  mason = 'the Mason registry and dynamotn/mason-registry',
 }
 
---- Tool names the repo's own Mason registry adds
+--- The package files of the registries this configuration adds, by name
 ---
---- Read straight off this tree instead of through `require`: the module picks
---- its folder with `stdpath('config')`, which is the configuration in use and
---- not necessarily the one being checked. A package handed to dytoy
---- (`dytoy:<tool>`) counts as soon as its file is here: whether dytoy knows
---- that tool is not checked.
----@return table<string, true>
+--- Read straight off the folders instead of through `require`, so that the
+--- dytoy packages are those of this tree, not of the configuration in use. A
+--- package handed to dytoy (`dytoy:<tool>`) counts as soon as its file is
+--- here: whether dytoy knows that tool is not checked.
+---@return table<string, string>
 local function own_registry()
-  local names = {}
-  local files =
-    vim.fn.glob(root .. '/lua/tools/mason-registry/*.lua', true, true)
-  for _, file in ipairs(files) do
-    local tool = vim.fn.fnamemodify(file, ':t:r')
-    if tool ~= 'init' then names[tool] = true end
+  local files = {}
+  local dirs = { root .. '/lua/tools/mason-registry', plugin_registry }
+  for _, dir in ipairs(dirs) do
+    for _, file in ipairs(vim.fn.glob(dir .. '/*.lua', true, true)) do
+      local tool = vim.fn.fnamemodify(file, ':t:r')
+      if tool ~= 'init' then files[tool] = files[tool] or file end
+    end
   end
-  return names
+  return files
 end
+
+local own_packages = own_registry()
 
 ---@return table<string, true>
 local function mason_packages()
-  local packages = own_registry()
+  local packages = {}
+  for name in pairs(own_packages) do
+    packages[name] = true
+  end
   if checkable.mason then
     for _, package in
       ipairs(vim.json.decode(table.concat(vim.fn.readfile(registry), '\n')))
@@ -194,6 +204,82 @@ for _, name in ipairs(names) do
         adapter,
         string.format('no Mason package `%s`', package)
       )
+    end
+  end
+end
+
+--- The config of `server`, first the one that sets `cmd`: an override in
+--- `after/lsp/`, then this tree's `lsp/`, then nvim-lspconfig's
+---@param server string
+---@return string[] files That exist, in that order
+local function server_files(server)
+  local files = {}
+  for _, file in ipairs({
+    string.format('%s/after/lsp/%s.lua', root, server),
+    string.format('%s/lsp/%s.lua', root, server),
+    string.format('%s/lazy/nvim-lspconfig/lsp/%s.lua', data, server),
+  }) do
+    if vim.fn.filereadable(file) == 1 then table.insert(files, file) end
+  end
+  return files
+end
+
+--- Load a server config as `vim.lsp.config` would, with `stdpath` pointed at
+--- a throwaway folder: some create theirs on load (`sonarlint` its tokens)
+---@param file string
+---@return boolean ok
+---@return any config Or the error
+local function load_server(file)
+  local dir = vim.fn.tempname()
+  local stdpath = vim.fn.stdpath
+  vim.fn.stdpath = function(_) return dir end
+  local ok, config = pcall(dofile, file)
+  vim.fn.stdpath = stdpath
+  vim.fn.delete(dir, 'rf')
+  return ok, config
+end
+
+-- A package of the own registries that names a server: mason-lspconfig
+-- installs it for that server, which only works when the server is
+-- configured somewhere and starts the binary the package puts on `PATH`
+local own_names = vim.tbl_keys(own_packages)
+table.sort(own_names)
+for _, name in ipairs(own_names) do
+  local ok, spec = pcall(dofile, own_packages[name])
+  local server = ok
+    and type(spec) == 'table'
+    and vim.tbl_get(spec, 'neovim', 'lspconfig')
+  if not ok then
+    report('(mason)', 'package', name, 'does not load: ' .. tostring(spec))
+  elseif server then
+    local files = server_files(server)
+    if #files == 0 then
+      if checkable.lsp then
+        report('(mason)', 'lsp', server, 'no server config for ' .. name)
+      end
+    else
+      for _, file in ipairs(files) do
+        local loaded, config = load_server(file)
+        local cmd = loaded and type(config) == 'table' and config.cmd
+        if not loaded then
+          report('(mason)', 'lsp', server, 'does not load: ' .. config)
+          break
+        elseif type(cmd) == 'table' then
+          if not (spec.bin or {})[cmd[1]] then
+            report(
+              '(mason)',
+              'lsp',
+              server,
+              string.format(
+                'starts `%s`, which %s does not install',
+                cmd[1],
+                name
+              )
+            )
+          end
+          break
+        end
+      end
     end
   end
 end

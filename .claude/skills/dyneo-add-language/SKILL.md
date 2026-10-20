@@ -46,8 +46,10 @@ Decide from the answers:
   `jq -r '.[] | select(.neovim.lspconfig == "<server>") | .name' <registry.json>`
   (`nickel_ls` → `nickel-lang-lsp`); `validate-tools.lua` checks only lspconfig.
 - Formatter / linter whose Mason package or binary differs from `[1]` → write
-  `command` and `mason.package`; no package → a `lua/tools/mason-registry/` entry (release
-  purl, else `dytoy:<tool>`), or `mason = { enabled = false }` for a system
+  `command` and `mason.package`; no package → one with a release purl in
+  `dynamotn/mason-registry` (checked out under `DyNeo.dev_plugins_path`,
+  committed there on its own), else a `dytoy:<tool>` entry in
+  `lua/tools/mason-registry/`, or `mason = { enabled = false }` for a system
   tool.
 
 ## Then

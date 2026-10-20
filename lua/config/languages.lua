@@ -88,11 +88,11 @@
 --- that binary, and one that runs inside Neovim itself names `lua`, which
 --- `util.languages.is_available` counts as always there.
 ---
---- A tool Mason has no package for still names a package, one of
---- `tools.mason-registry`. It is built from a release or a language registry
---- where one exists, and otherwise -- a tool that ships with the language's
---- toolchain (`mix`, `zig`, `dart`), with the system (`clang-tidy`), or from a
---- package manager Mason does not speak (CPAN) -- its source is
+--- A tool Mason has no package for still names a package. One built from a
+--- release or a language registry is in `dynamotn/mason-registry`; otherwise
+--- -- a tool that ships with the language's toolchain (`mix`, `zig`, `dart`),
+--- with the system (`clang-tidy`), or from a package manager Mason does not
+--- speak (CPAN) -- it is one of `tools.mason-registry`, whose source is
 --- `dytoy:<tool>`, so dytoy installs it the way it does on the rest of the
 --- machine.
 ---
@@ -138,8 +138,8 @@
 --- How Mason installs a tool, when its package is not named after the tool
 ---@class DyMasonSpec
 ---@field enabled? boolean `false` for a tool nothing has to install
----@field package string The Mason package, in its registry or in
---- `tools.mason-registry`
+---@field package string The Mason package, in its registry, in
+--- `dynamotn/mason-registry` or in `tools.mason-registry`
 
 ---@type table<string, {filetypes: string[]}>
 local reuse_filetypes = {
@@ -360,7 +360,7 @@ return {
       'vale',
       -- Reads the buffer from stdin and reports only which rule matched,
       -- never the secret itself, so a leak is flagged before it is saved.
-      -- Mason has no package; `tools.mason-registry.betterleaks` adds one.
+      -- Mason has no package; `dynamotn/mason-registry` adds one.
       'betterleaks',
       -- Only in a project with rules of its own (`.semgrep.yml`), see
       -- `lua/lint/linters/semgrep.lua`. Installed by hand, being a large

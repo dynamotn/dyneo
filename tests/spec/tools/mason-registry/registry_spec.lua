@@ -67,16 +67,6 @@ describe('tools.mason-registry', function()
     LSP = true,
     Runtime = true,
   }
-  local targets = {
-    darwin_arm64 = true,
-    darwin_x64 = true,
-    linux_arm64 = true,
-    linux_x64 = true,
-    linux_x64_gnu = true,
-    linux_x64_musl = true,
-    win_x64 = true,
-    win_arm64 = true,
-  }
 
   for _, name in ipairs(package_names()) do
     describe(name, function()
@@ -106,12 +96,13 @@ describe('tools.mason-registry', function()
         end
       end)
 
+      -- One installed from a release or a language registry belongs in
+      -- `dynamotn/mason-registry`, which Renovate bumps
       it(
-        'has a versioned package URL, or names a dytoy tool',
+        'names a dytoy tool',
         function()
           assert.is_truthy(
-            spec.source.id:match('^pkg:[%w]+/[^@]+@.+$')
-              or spec.source.id:match('^dytoy:[^/@]+$'),
+            spec.source.id:match('^dytoy:[^/@]+$'),
             spec.source.id
           )
         end
@@ -123,18 +114,6 @@ describe('tools.mason-registry', function()
         for bin, target in pairs(spec.bin) do
           assert.are.equal('string', type(bin))
           assert.are.equal('string', type(target))
-        end
-      end)
-
-      it('has one asset per known target, when it lists several', function()
-        local asset = spec.source.asset
-        if asset == nil or not vim.islist(asset) then return end
-        local seen = {}
-        for _, entry in ipairs(asset) do
-          assert.is_true(targets[entry.target] or false, entry.target)
-          assert.is_nil(seen[entry.target], 'duplicate ' .. entry.target)
-          seen[entry.target] = true
-          assert.are.equal('string', type(entry.file))
         end
       end)
 
@@ -152,15 +131,4 @@ describe('tools.mason-registry', function()
       end)
     end)
   end
-
-  it('derives the sonarlint asset from the tagged release', function()
-    local spec = require('tools.mason-registry.sonarlint-language-server')
-    local version = spec.source.id:match('@(.+)$')
-    local release = version:match('^[^+]+')
-    assert.are.equal(
-      'sonarlint-vscode-' .. release .. '.vsix',
-      spec.source.asset.file
-    )
-    assert.is_nil(spec.source.asset.file:find('+', 1, true))
-  end)
 end)

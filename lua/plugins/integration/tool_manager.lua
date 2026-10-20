@@ -3,6 +3,11 @@ return {
     'mason-org/mason.nvim',
     cmd = 'Mason',
     build = ':MasonUpdate',
+    -- The packages Mason lacks, read by `lua:dy-mason-registry` below: on
+    -- the runtimepath before `setup()`, or mason cannot find the module
+    dependencies = {
+      { 'dynamotn/mason-registry', dev = true },
+    },
     -- Other specs add the tools they need to the list
     opts_extend = { 'ensure_installed' },
     opts = {
@@ -33,13 +38,14 @@ return {
         enabled = true,
         auto_managed = true,
       },
-      -- Add custom registries
+      -- The first registry with a package wins. `lua:` rather than `file:`,
+      -- which is read too slowly to be there for the servers set up at
+      -- startup. `tools.mason-registry` holds the tools dytoy installs;
+      -- `dy-mason-registry` those installed from a release or a language
+      -- registry, until upstream has them.
       registries = {
-        -- 'file:' .. vim.fn.stdpath('config') .. '/mason-registry',
-        -- HACK: I can't use file method because it's lazy load and slow to
-        -- append to mason registry and affect to initialize
-        -- my custom LSP servers
         'lua:tools.mason-registry',
+        'lua:dy-mason-registry',
         'github:mason-org/mason-registry',
       },
     },

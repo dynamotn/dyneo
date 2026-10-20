@@ -1,3 +1,6 @@
+--- The Mason packages dytoy installs: tools of a language's toolchain or of
+--- the system, which no release or language registry ships. Those that one
+--- does ship are in `dynamotn/mason-registry`, read as `lua:dy-mason-registry`.
 local M = {}
 -- The directory of this very file: under another `NVIM_APPNAME`, or loaded
 -- from a worktree or a test run, `stdpath('config')` is some other tree

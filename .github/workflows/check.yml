@@ -139,8 +139,8 @@ jobs:
       - name: Fetch Mason registry
         run: |
           nvim --clean --headless \
-            --cmd "set runtimepath^=$GITHUB_WORKSPACE,$HOME/.local/share/nvim/lazy/mason.nvim" \
-            -c "lua require('mason').setup({ registries = { 'lua:tools.mason-registry', 'github:mason-org/mason-registry' } })" \
+            --cmd "set runtimepath^=$GITHUB_WORKSPACE,$HOME/.local/share/nvim/lazy/mason.nvim,$HOME/.local/share/nvim/lazy/mason-registry" \
+            -c "lua require('mason').setup({ registries = { 'lua:tools.mason-registry', 'lua:dy-mason-registry', 'github:mason-org/mason-registry' } })" \
             -c "lua require('mason-registry').refresh(vim.schedule_wrap(function(ok) vim.cmd(ok and 'qa' or 'cq') end))"
       # The language cases of the neogen spec need real parsers, and fail on
       # CI without them; the tree-sitter CLI to build them with comes from

@@ -72,21 +72,6 @@ describe('lsp', function()
     end)
   end
 
-  it('starts the binary its own Mason package installs', function()
-    local registry = h.root .. '/lua/tools/mason-registry/'
-    for _, file in ipairs(vim.fn.glob(registry .. '*.lua', false, true)) do
-      local spec = dofile(file)
-      local server = type(spec) == 'table'
-        and vim.tbl_get(spec, 'neovim', 'lspconfig')
-      if server and vim.uv.fs_stat(h.root .. '/lsp/' .. server .. '.lua') then
-        local cmd = load(server, dir).cmd
-        if type(cmd) == 'table' then
-          assert.is_not_nil((spec.bin or {})[cmd[1]], server .. ': ' .. cmd[1])
-        end
-      end
-    end
-  end)
-
   -- `after/lsp/` overrides what nvim-lspconfig ships for a server, merged
   -- over the plugin's own file, so each is a partial config
   for _, file in ipairs(vim.fn.glob(h.root .. '/after/lsp/*.lua', false, true)) do

@@ -18,6 +18,10 @@ vim.opt.runtimepath:prepend({
   vim.fs.joinpath(lazy, 'mason.nvim'),
   vim.fs.joinpath(lazy, 'nvim-treesitter'),
 })
+-- For `lua:dy-mason-registry`, which mason requires on refresh
+local registry_plugin =
+  dofile(root .. '/scripts/lib/mason_registry.lua').dir(root)
+if registry_plugin then vim.opt.runtimepath:prepend(registry_plugin) end
 
 local TIMEOUT = 10 * 60 * 1000
 
@@ -36,6 +40,7 @@ if vim.fn.executable('tree-sitter') == 0 then
   require('mason').setup({
     registries = {
       'lua:tools.mason-registry',
+      'lua:dy-mason-registry',
       'github:mason-org/mason-registry',
     },
   })
