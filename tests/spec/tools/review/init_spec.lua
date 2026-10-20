@@ -628,8 +628,16 @@ describe('tools.review', function()
 
   describe('command', function()
     it('says not yet for what is still to come', function()
-      review.command({ fargs = { 'submit' } })
+      review.command({ fargs = { 'ai' } })
       assert.is_truthy(notes[1].msg:find('not yet', 1, true))
+    end)
+
+    it('hands submit to the submit module', function()
+      local got = {}
+      local submit = require('tools.review.submit')
+      stub(submit, 'run', function(s) got[#got + 1] = s or 'none' end)
+      review.command({ fargs = { 'submit' } })
+      assert.same({ 'none' }, got)
     end)
 
     it('asks for a review first', function()

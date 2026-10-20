@@ -34,6 +34,10 @@ M.branch = pickers.branch
 M.since = pickers.since
 M.list_drafts = pickers.drafts
 
+--- Send the open review: `tools.review.submit`, loaded when asked
+---@param s? DyReviewSession
+function M.submit(s) require('tools.review.submit').run(s) end
+
 --- Put the cursor where the session was asked to go, once `side` of `path`
 --- is shown
 ---@param s DyReviewSession
@@ -106,14 +110,13 @@ function M.command(args)
   if not vim.tbl_contains(M.SUBCOMMANDS, sub) then
     return notify('Unknown subcommand: ' .. sub, vim.log.levels.ERROR)
   end
-  if sub == 'ai' or sub == 'submit' then
-    return notify(('`:DyReview %s`: not yet'):format(sub))
-  end
+  if sub == 'ai' then return notify(('`:DyReview %s`: not yet'):format(sub)) end
   local run = {
     pick = M.pick,
     branch = M.branch,
     since = M.since,
     drafts = M.list_drafts,
+    submit = function() M.submit() end,
     close = function() M.close() end,
     trust = function()
       local s = session.need()
