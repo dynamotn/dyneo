@@ -850,35 +850,113 @@ exit 1
       assert.same({ { 'b', '101' } }, reports)
     end)
 
-    it('resolves a thread a sent reply was to resolve, still open', function()
+    --- Thread 6, active, with my reply 3 holding `body` when given
+    local function thread6(body)
+      local comments = { { id = 1, author = { id = 'x' }, content = 'Why?' } }
+      if body then
+        comments[2] = { id = 3, author = { id = ME }, content = body }
+      end
+      return mine(6, 'Why?', at('b.lua', 'old', 4, 4), { comments = comments })
+    end
+
+    --- A reply to thread 6 that resolves it
+    local function reply_resolve(fields)
+      return draft(vim.tbl_extend('force', {
+        id = 'both',
+        reply_to = '6',
+        body = 'Fixed.',
+        resolve = true,
+      }, fields or {}))
+    end
+
+    it('never resolves again for a reply sent before', function()
       writes_succeed()
-      answer(THREADS, {
-        value = {
-          mine(6, 'Why?', at('b.lua', 'old', 4, 4), {
-            comments = {
-              { id = 1, author = { id = 'x' }, content = 'Why?' },
-              { id = 3, author = { id = ME }, content = 'Fixed.' },
-            },
-          }),
-        },
-      })
+      answer(THREADS, { value = { thread6('Fixed.') } })
       my_vote(10)
-      local err, reports, info = submit({
-        draft({
-          id = 'both',
-          reply_to = '6',
-          body = 'Fixed.',
-          resolve = true,
-          posted = '6/3',
-        }),
-      }, { verdict = 'approve' })
+      local err, reports, info = submit(
+        { reply_resolve({ posted = '6/3' }) },
+        { verdict = 'approve' }
+      )
       assert.is_nil(err)
       assert.same({ already = 10 }, info)
       assert.same({}, reports)
+      -- The author may have opened it again since: not ours to close
+      assert.same({ WHO, THREADS, REVIEWERS }, keys())
+    end)
+
+    it('replies, then resolves, for a reply not sent yet', function()
+      writes_succeed()
+      answer(THREADS, { value = { thread6(nil) } })
+      my_vote(10)
+      local err, reports = submit({ reply_resolve() }, { verdict = 'approve' })
+      assert.is_nil(err)
+      assert.same({ { 'both', '6/3' } }, reports)
+      assert.same({
+        WHO,
+        THREADS,
+        REVIEWERS,
+        'POST_pullRequestThreadComments_7_6',
+        'PATCH_pullRequestThreads_7_6',
+      }, keys())
+    end)
+
+    it('takes a reply that went out unreported, and resolves', function()
+      writes_succeed()
+      answer(THREADS, { value = { thread6('Fixed.') } })
+      my_vote(10)
+      local err, reports, info = submit(
+        { reply_resolve() },
+        { verdict = 'approve' }
+      )
+      assert.is_nil(err)
+      assert.same({ already = 10 }, info)
+      assert.same({ { 'both', '6/3' } }, reports)
       assert.same(
         { WHO, THREADS, REVIEWERS, 'PATCH_pullRequestThreads_7_6' },
         keys()
       )
+    end)
+
+    it('takes threads that went out unreported, posting the rest', function()
+      writes_succeed()
+      answer(THREADS, {
+        value = {
+          mine(100, 'One.', at('a.lua', 'new', 3, 3)),
+          mine(102, 'L40: Outside.', at('c.lua')),
+          -- Not mine, deleted, or on another line: never taken
+          mine(103, 'Two.', at('a.lua', 'new', 5, 5), {
+            comments = {
+              { id = 1, author = { id = 'x' }, content = 'Two.' },
+            },
+          }),
+          mine(104, 'Two.', at('a.lua', 'new', 5, 5), { isDeleted = true }),
+          mine(105, 'Two.', at('a.lua', 'new', 6, 6)),
+        },
+      })
+      answer(NEW_THREAD .. '.1', { id = 106 })
+      local err, reports = submit({
+        draft({ id = 'a', line = 3, body = 'One.' }),
+        draft({
+          id = 'f',
+          path = 'c.lua',
+          line = 40,
+          body = 'Outside.',
+          file_level = true,
+        }),
+        draft({ id = 'b', line = 5, body = 'Two.' }),
+      }, { verdict = 'approve' })
+      assert.is_nil(err)
+      assert.same({
+        WHO,
+        THREADS,
+        REVIEWERS,
+        ITERATIONS,
+        CHANGES,
+        NEW_THREAD,
+        VOTE,
+      }, keys())
+      assert.same(first('Two.'), calls()[6].body.comments)
+      assert.same({ { 'a', '100' }, { 'f', '102' }, { 'b', '106' } }, reports)
     end)
 
     it('stops at the first failure, before the vote', function()

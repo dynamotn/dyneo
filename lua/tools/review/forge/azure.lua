@@ -871,6 +871,92 @@ local function body_out(rows, me, body)
   return false
 end
 
+--- Whether `row` is a live thread of mine on the file and line of
+--- `draft`, opened with its text
+---@param row table
+---@param me string
+---@param draft DyReviewDraft
+---@return boolean
+local function same_thread(row, me, draft)
+  local thread = to_thread(row)
+  local first = live_comments(row)[1]
+  if not (thread and first and is_me(first.author, me)) then return false end
+  if first.content ~= body_of(draft) or thread.path ~= draft.path then
+    return false
+  end
+  if draft.file_level then return thread.line == nil end
+  return thread.side == draft.side and thread.line == draft.line
+end
+
+--- Take the drafts of `plan` that are on Azure DevOps already, a post
+--- that timed out after it landed: each is reported through `progress`
+--- and not posted again. A reply that resolves still resolves.
+---
+--- Only threads and comments of mine count, each for one draft, and none
+--- a draft sent before stands for.
+---@param rows table[] Every thread
+---@param me string
+---@param plan DyReviewAzureSend
+---@param sent { thread: integer, comment?: integer }[]
+---@param progress fun(draft: DyReviewDraft, forge_id: string)
+---@return integer taken How many drafts were found
+local function take_unreported(rows, me, plan, sent, progress)
+  local taken, count = {}, 0
+  for _, item in ipairs(sent) do
+    taken[item.comment and ('%d/%d'):format(item.thread, item.comment) or tostring(
+      item.thread
+    )] =
+      true
+  end
+  local threads = {}
+  for _, draft in ipairs(plan.threads) do
+    local found
+    for _, row in ipairs(rows) do
+      local id = tostring(row.id)
+      if not taken[id] and same_thread(row, me, draft) then
+        found = id
+        break
+      end
+    end
+    if found then
+      taken[found], count = true, count + 1
+      progress(draft, found)
+    else
+      threads[#threads + 1] = draft
+    end
+  end
+  local replies = {}
+  for _, draft in ipairs(plan.replies) do
+    local found
+    for _, row in ipairs(rows) do
+      if tostring(row.id) == draft.reply_to and row.isDeleted ~= true then
+        -- The first comment opens the thread: a reply is never it
+        for index, comment in ipairs(live_comments(row)) do
+          local id = ('%s/%s'):format(draft.reply_to, tostring(comment.id))
+          if
+            index > 1
+            and int(comment.id)
+            and not taken[id]
+            and is_me(comment.author, me)
+            and comment.content == body_of(draft)
+          then
+            found = id
+            break
+          end
+        end
+      end
+    end
+    if found then
+      taken[found], count = true, count + 1
+      progress(draft, found)
+    else
+      replies[#replies + 1] = draft
+    end
+  end
+  plan.threads, plan.replies = threads, replies
+  return count
+end
+
 --- Send `drafts` with `review`'s vote and text
 ---
 --- Each new draft becomes a thread, or a comment in the thread it answers,
@@ -880,6 +966,11 @@ end
 --- own (Azure DevOps has no review text), and my vote set last. A failed
 --- call stops the submit there and is never tried again here: one that
 --- timed out may still have reached Azure DevOps.
+---
+--- A draft found on Azure DevOps with its text and place (a post that
+--- timed out after it landed) is reported, not posted again. Threads are
+--- resolved only for drafts not sent when the submit starts: one resolved
+--- before may have been opened again since.
 ---
 --- Refused before any write: drafts sent before whose thread or comment is
 --- gone, named in `info.lost`, which only the caller may send again. With
@@ -968,18 +1059,7 @@ function M.submit(remote, pull, drafts, review, progress, cb)
             if comment.id == item.comment then there = true end
           end
         end
-        if not there then
-          lost[#lost + 1] = item.draft.id
-        elseif
-          item.comment
-          and item.draft.resolve
-          and item.draft.reply_to == tostring(item.thread)
-          and row.status == 'active'
-        then
-          -- Its reply went out but the thread was never resolved
-          table.insert(plan.resolves, item.draft)
-          plan.replied[item.draft] = true
-        end
+        if not there then lost[#lost + 1] = item.draft.id end
       end
       if #lost > 0 then
         return cb(
@@ -988,6 +1068,7 @@ function M.submit(remote, pull, drafts, review, progress, cb)
           { lost = lost }
         )
       end
+      local matched = take_unreported(rows, me, plan, sent, progress)
       local has_body = review.body ~= nil and review.body ~= ''
       local out = has_body and body_out(rows, me, review.body --[[@as string]])
       -- A submit that timed out after the body went out
@@ -997,7 +1078,7 @@ function M.submit(remote, pull, drafts, review, progress, cb)
         plan.now = now
         local nothing_new = #plan.threads == 0 and #plan.replies == 0
         if nothing_new and now == want and (not has_body or out) then
-          if verdict ~= 'no_vote' or out or #sent > 0 then
+          if verdict ~= 'no_vote' or out or #sent + matched > 0 then
             return resolve_only({ already = want })
           end
           return resolve_only({ skipped = 'empty comment review' })
