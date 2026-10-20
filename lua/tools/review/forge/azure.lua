@@ -48,8 +48,17 @@ M.VOTES = {
   reject = -10,
 }
 
---- Why a pull request whose source cannot be fetched opens read-only
+--- Why a pull request whose source cannot be fetched cannot be reviewed
 M.FORK = 'the source branch lives in a fork that cannot be fetched'
+
+--- The API version `connectionData` is asked at: the Location area has
+--- only preview versions
+M.CONNECTION_API_VERSION = '7.1-preview'
+
+--- The verdicts whose body asks the author for something: their thread
+--- stays active, every other summary is posted closed so a "comments must
+--- be resolved" policy does not hold the merge on it
+local OPEN_BODY = { wait_for_author = true, reject = true }
 
 --- The thread statuses that read as resolved
 local RESOLVED =
@@ -60,6 +69,9 @@ local NO_MERGE = { conflicts = true, failure = true, rejectedByPolicy = true }
 
 --- `active`, as a new thread's status is written
 local ACTIVE = 1
+
+--- `closed`, as a new thread's status is written
+local CLOSED = 4
 
 --- A plain text comment, as a new comment's type is written
 local TEXT = 1
@@ -207,17 +219,18 @@ local function to_pull(remote, raw)
   local n = raw.pullRequestId
   local refs = ('refs/dyneo/review/azure-%d/'):format(n)
   local fork = tbl(raw.forkSource) ~= nil
-  local fetch, read_only = {}, nil
+  local fetch, read_only, unfetchable = {}, nil, nil
   if commit_id(raw.lastMergeCommit) and not NO_MERGE[raw.mergeStatus] then
     fetch[1] = ('+refs/pull/%d/merge:%smerge'):format(n, refs)
   else
     if fork then
-      read_only = M.FORK
+      unfetchable = M.FORK
     elseif plain_ref(head_ref) then
       fetch[#fetch + 1] = ('+refs/heads/%s:%shead'):format(head_ref, refs)
     else
-      read_only = 'the source branch has a name that cannot be fetched'
+      unfetchable = 'the source branch has a name that cannot be fetched'
     end
+    read_only = unfetchable
     if plain_ref(base_ref) then
       fetch[#fetch + 1] = ('+refs/heads/%s:%sbase'):format(base_ref, refs)
     end
@@ -247,6 +260,7 @@ local function to_pull(remote, raw)
     fetch = fetch,
     fork = fork,
     read_only = read_only,
+    unfetchable = unfetchable,
   }
 end
 
@@ -256,20 +270,21 @@ end
 local function whoami(remote, on_done)
   local known = ids[remote.org]
   if known then return on_done(known) end
-  forge.api(
-    remote,
-    { area = 'Location', resource = 'connectionData', route = {} },
-    function(data, err)
-      local user = tbl(data) and tbl(data.authenticatedUser)
-      local id = user and text(user.id)
-      if not id then
-        return on_done(nil, err or 'Azure DevOps did not say who is signed in')
-      end
-      -- Ids are GUIDs, written in either case
-      ids[remote.org] = id:lower()
-      on_done(ids[remote.org])
+  forge.api(remote, {
+    area = 'Location',
+    resource = 'connectionData',
+    route = {},
+    api_version = M.CONNECTION_API_VERSION,
+  }, function(data, err)
+    local user = tbl(data) and tbl(data.authenticatedUser)
+    local id = user and text(user.id)
+    if not id then
+      return on_done(nil, err or 'Azure DevOps did not say who is signed in')
     end
-  )
+    -- Ids are GUIDs, written in either case
+    ids[remote.org] = id:lower()
+    on_done(ids[remote.org])
+  end)
 end
 
 --- Whether `identity` is the user `me`
@@ -724,6 +739,7 @@ end
 ---@field replied table<DyReviewDraft, boolean> Resolves whose draft is reported by its reply
 ---@field body? string              a thread on the pull request
 ---@field vote integer
+---@field verdict string
 ---@field now integer               my vote as it stands
 ---@field me string
 
@@ -791,7 +807,7 @@ local function send(remote, pull, plan, progress, on_done)
       comments = {
         { parentCommentId = 0, content = plan.body, commentType = TEXT },
       },
-      status = ACTIVE,
+      status = OPEN_BODY[plan.verdict] and ACTIVE or CLOSED,
     }, function(data, err) next(data == nil and err or nil) end)
   end
   local function vote(next)
@@ -882,6 +898,7 @@ function M.submit(remote, pull, drafts, review, progress, cb)
   if not want then
     return cb('Azure DevOps has no verdict ' .. tostring(verdict))
   end
+  ---@cast verdict string
   local bad = bad_remote(remote)
   if bad then return cb(bad) end
   if not number(pull) then return cb('Not a pull request number') end
@@ -893,6 +910,7 @@ function M.submit(remote, pull, drafts, review, progress, cb)
     replied = {},
     body = review.body,
     vote = want,
+    verdict = verdict,
     now = 0,
     me = '',
   }

@@ -59,6 +59,7 @@ M.TIMEOUT = 30 * 1000
 ---@field query? table<string, string|integer>
 ---@field method? 'GET'|'POST'|'PATCH'|'PUT'|'DELETE' `GET` unless given
 ---@field body? table Sent as JSON, from a file `az` reads
+---@field api_version? string `M.AZURE_API_VERSION` unless given: an area with no released version asks a preview
 
 --- The host and the path of a clone URL: `https://host/a/b(.git)`,
 --- `ssh://git@host:22/a/b`, `git@host:a/b`
@@ -309,7 +310,7 @@ function M.command(remote, endpoint)
     '--resource',
     call.resource,
     '--api-version',
-    M.AZURE_API_VERSION,
+    call.api_version or M.AZURE_API_VERSION,
     '--http-method',
     call.method or 'GET',
     '--output',

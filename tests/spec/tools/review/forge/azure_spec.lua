@@ -216,6 +216,8 @@ exit 1
       local who = calls()[1].args
       assert.same({ 'Location' }, flag_words(who, '--area'))
       assert.same({ 'connectionData' }, flag_words(who, '--resource'))
+      assert.same({ '7.1-preview' }, flag_words(who, '--api-version'))
+      assert.same({ '7.1' }, flag_words(args, '--api-version'))
     end)
 
     it('asks who I am once per organization', function()
@@ -294,6 +296,7 @@ exit 1
         '+refs/heads/main:refs/dyneo/review/azure-7/base',
       }, pull.fetch)
       assert.is_nil(pull.read_only)
+      assert.is_nil(pull.unfetchable)
     end)
 
     it('opens a fork without a merge ref read-only', function()
@@ -311,6 +314,7 @@ exit 1
         'the source branch lives in a fork that cannot be fetched',
         pull.read_only
       )
+      assert.equals(pull.read_only, pull.unfetchable)
       assert.same(
         { '+refs/heads/main:refs/dyneo/review/azure-7/base' },
         pull.fetch
@@ -670,7 +674,8 @@ exit 1
         assert.same({ 'PATCH' }, flag_words(list[12].args, '--http-method'))
         assert.same({ status = 'fixed' }, list[12].body)
         assert.same({ status = 'fixed' }, list[13].body)
-        assert.same({ comments = first('Summary.'), status = 1 }, list[14].body)
+        -- A summary that asks nothing of the author never blocks a merge
+        assert.same({ comments = first('Summary.'), status = 4 }, list[14].body)
         assert.same({ 'PUT' }, flag_words(list[15].args, '--http-method'))
         assert.is_true(
           vim.tbl_contains(
@@ -961,8 +966,24 @@ exit 1
       assert.is_nil(err)
       assert.is_nil(info)
       assert.same({ WHO, THREADS, REVIEWERS, NEW_THREAD }, keys())
-      assert.same({ comments = first('Hi.'), status = 1 }, calls()[4].body)
+      assert.same({ comments = first('Hi.'), status = 4 }, calls()[4].body)
     end)
+
+    for _, verdict in ipairs({ 'wait_for_author', 'reject' }) do
+      it(
+        ('leaves the body of %s open for the author'):format(verdict),
+        function()
+          writes_succeed()
+          local err = submit({}, { verdict = verdict, body = 'Fix it.' })
+          assert.is_nil(err)
+          assert.same({ WHO, THREADS, REVIEWERS, NEW_THREAD, VOTE }, keys())
+          assert.same(
+            { comments = first('Fix it.'), status = 1 },
+            calls()[4].body
+          )
+        end
+      )
+    end
 
     it(
       'refuses a verdict Azure DevOps does not have, asking nothing',

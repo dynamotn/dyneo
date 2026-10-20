@@ -305,6 +305,20 @@ describe('tools.review', function()
       assert.equals('The pull request is merged', review.current().blocked)
     end)
 
+    it(
+      'says why a pull request whose code cannot be fetched cannot open',
+      function()
+        local why = 'the source branch lives in a fork that cannot be fetched'
+        review.open(remote, pull({ read_only = why, unfetchable = why }))
+        assert.is_nil(review.current())
+        assert.same({}, calls)
+        assert.same({ why .. ': nothing to show' }, said(vim.log.levels.WARN))
+        -- Nothing is left opening: the next pull request opens
+        review.open(remote, pull({ id = '8' }))
+        assert.equals('8', review.current().pull.id)
+      end
+    )
+
     it('stops at a failed fetch, before any worktree', function()
       stub(git, 'fetch', function(_, _, _, cb) cb(false, 'no network') end)
       review.open(remote, pull())

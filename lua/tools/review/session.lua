@@ -386,6 +386,11 @@ function M.open(remote, pull)
     )
   end
   if opening then return notify('A review is already opening', WARN) end
+  -- A head that cannot be fetched leaves no diff to read: say why, before
+  -- any fetch would fail on it with a reason that names none
+  if pull.unfetchable then
+    return notify(pull.unfetchable .. ': nothing to show', WARN)
+  end
   local adapter, why = forge.for_remote(remote)
   if not adapter then
     return notify(('%s: %s'):format(remote.kind, why or 'no adapter'), WARN)

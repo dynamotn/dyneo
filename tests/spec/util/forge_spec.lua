@@ -157,6 +157,21 @@ describe('util.forge', function()
       assert.is_nil(after(command, '--in-file'))
       assert.is_nil(done)
     end)
+
+    it('asks the API version a call names, else the default', function()
+      local pinned = forge.command(remote, {
+        area = 'Location',
+        resource = 'connectionData',
+        route = {},
+        api_version = '7.1-preview',
+      })
+      assert.equals('7.1-preview', after(pinned, '--api-version'))
+      local plain = forge.command(
+        remote,
+        { area = 'build', resource = 'builds', route = { project = 'p' } }
+      )
+      assert.equals(forge.AZURE_API_VERSION, after(plain, '--api-version'))
+    end)
   end)
 
   it('takes the first remote on a known forge, in order', function()
