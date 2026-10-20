@@ -1,0 +1,16 @@
+{"data": {"project": {"mergeRequests": {
+  "pageInfo": {"hasNextPage": true, "endCursor": "c1"},
+  "nodes": [
+    {"iid": "7", "title": "Add a parser", "description": "Parses things.",
+     "webUrl": "https://gitlab.com/g/sub/p/-/merge_requests/7", "state": "opened",
+     "sourceBranch": "parser", "targetBranch": "main",
+     "sourceProjectId": 3, "targetProjectId": 3,
+     "author": {"username": "alice"},
+     "reviewers": {"nodes": [{"username": "ME"}]},
+     "diffRefs": {"baseSha": "b7b7b7", "headSha": "a7a7a7", "startSha": "s7s7s7"}},
+    {"iid": "9", "title": "Not ready", "description": null,
+     "webUrl": "u9", "state": "opened", "sourceBranch": "x", "targetBranch": "main",
+     "sourceProjectId": 3, "targetProjectId": 3,
+     "author": {"username": "bob"}, "reviewers": {"nodes": []},
+     "diffRefs": null}
+  ]}}}}

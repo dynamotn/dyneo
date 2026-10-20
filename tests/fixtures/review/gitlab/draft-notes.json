@@ -1,0 +1,17 @@
+[
+  {"id": 61, "author_id": 42, "discussion_id": null, "resolve_discussion": false,
+   "note": "A range.",
+   "position": {"position_type": "text", "base_sha": "b7b7b7", "start_sha": "s7s7s7",
+     "head_sha": "a7a7a7", "old_path": "a.lua", "new_path": "a.lua",
+     "old_line": null, "new_line": 12,
+     "line_range": {"start": {"type": "new", "new_line": 10}, "end": {"type": "new", "new_line": 12}}}},
+  {"id": 62, "author_id": 42, "discussion_id": null, "resolve_discussion": false,
+   "note": "Old side.",
+   "position": {"position_type": "text", "old_path": "b.lua", "new_path": "b.lua",
+     "old_line": 3, "new_line": null, "line_range": null}},
+  {"id": 63, "author_id": 42, "discussion_id": null, "resolve_discussion": false,
+   "note": "L40: Outside a hunk.",
+   "position": {"position_type": "file", "old_path": "c.lua", "new_path": "c.lua"}},
+  {"id": 64, "author_id": 42, "discussion_id": "d1", "resolve_discussion": true,
+   "note": "Agreed.", "position": null}
+]

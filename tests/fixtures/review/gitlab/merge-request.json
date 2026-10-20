@@ -1,0 +1,14 @@
+{
+  "iid": 12,
+  "state": "merged",
+  "title": "Old work",
+  "description": "Done.",
+  "web_url": "https://gitlab.com/g/sub/p/-/merge_requests/12",
+  "author": {"username": "dave"},
+  "source_branch": "old",
+  "target_branch": "release/1.0",
+  "source_project_id": 5,
+  "target_project_id": 3,
+  "reviewers": [],
+  "diff_refs": {"base_sha": "b12", "head_sha": "a12", "start_sha": "s12"}
+}

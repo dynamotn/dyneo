@@ -955,10 +955,8 @@ describe('tools.review.forge', function()
       require('tools.review.forge.github'),
       (forge.for_remote({ kind = 'github', host = 'h', slug = 'o/r' }))
     )
-    for _, kind in ipairs({ 'gitlab', 'azure' }) do
-      local adapter, err = forge.for_remote({ kind = kind })
-      assert.is_nil(adapter)
-      assert.equals('not yet supported', err)
-    end
+    local adapter, err = forge.for_remote({ kind = 'azure' })
+    assert.is_nil(adapter)
+    assert.equals('not yet supported', err)
   end)
 end)
