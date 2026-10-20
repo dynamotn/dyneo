@@ -598,6 +598,32 @@ describe('tools.review', function()
       assert.is_nil(opened)
       assert.equals(2, #asked)
     end)
+
+    it('takes origin when the branch tracks no remote', function()
+      local alice = vim.tbl_extend('force', remote, {
+        name = 'alice',
+        slug = 'a/r',
+      })
+      stub(session, 'tracked_remote', function(_, _, cb) cb(nil) end)
+      stub(session, 'remotes', function(_, cb) cb({ alice, origin }) end)
+      has = { alice = '5', origin = '3' }
+      review.branch()
+      assert.same({ 'origin', '3' }, opened)
+      assert.is_nil(asked)
+    end)
+
+    it('asks when no remote is the one to use', function()
+      local alice = vim.tbl_extend('force', remote, {
+        name = 'alice',
+        slug = 'a/r',
+      })
+      stub(session, 'tracked_remote', function(_, _, cb) cb(nil) end)
+      stub(session, 'remotes', function(_, cb) cb({ alice }) end)
+      has = { alice = '5' }
+      review.branch()
+      assert.is_nil(opened)
+      assert.equals(1, #asked)
+    end)
   end)
 
   describe('command', function()

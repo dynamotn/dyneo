@@ -229,17 +229,38 @@ function M.pick()
 end
 
 --- The remote `name` of `list`, else the first in `util.forge.REMOTES`
---- order, else the first
+--- order; nil when none of them is a forge remote here
 ---@param list DyForgeRemote[]
 ---@param name? string
----@return DyForgeRemote
+---@return DyForgeRemote?
 local function tracked_of(list, name)
-  for _, wanted in ipairs({ name, unpack(require('util.forge').REMOTES) }) do
+  local order = vim.list_extend(
+    name and { name } or {},
+    vim.deepcopy(require('util.forge').REMOTES)
+  )
+  for _, wanted in ipairs(order) do
     for _, remote in ipairs(list) do
       if remote.name == wanted then return remote end
     end
   end
-  return list[1]
+end
+
+--- Offer `found`, pull requests of remotes the branch does not track
+---@param found table[] `{ remote, pull }` each
+---@param prompt string
+local function offer(found, prompt)
+  vim.ui.select(found, {
+    prompt = prompt,
+    format_item = function(item)
+      return ('%s !%s %s'):format(
+        item.remote.name,
+        item.pull.id,
+        item.pull.title
+      )
+    end,
+  }, function(item)
+    if item then session.open(item.remote, item.pull) end
+  end)
 end
 
 --- Review the pull request of the current branch on the remote it tracks.
@@ -261,35 +282,25 @@ function M.branch()
     forge_remotes(function(list)
       session.tracked_remote(dir, branch, function(name)
         local tracked = tracked_of(list, name)
-        query({ tracked }, ask, function(found)
-          if #found > 0 then
-            return session.open(found[1].remote, found[1].pull)
-          end
+        ---@param where string
+        local function elsewhere(where)
           local others = vim.tbl_filter(
             function(remote) return remote ~= tracked end,
             list
           )
-          query(others, ask, function(elsewhere)
-            if #elsewhere == 0 then
-              return notify(
-                ('No pull request for %s on %s'):format(branch, tracked.name)
-              )
+          query(others, ask, function(found)
+            if #found == 0 then
+              return notify(('No pull request for %s %s'):format(branch, where))
             end
-            vim.ui.select(elsewhere, {
-              prompt = ('None on %s: review one of another remote?'):format(
-                tracked.name
-              ),
-              format_item = function(item)
-                return ('%s !%s %s'):format(
-                  item.remote.name,
-                  item.pull.id,
-                  item.pull.title
-                )
-              end,
-            }, function(item)
-              if item then session.open(item.remote, item.pull) end
-            end)
+            offer(found, ('None %s: review one of these?'):format(where))
           end)
+        end
+        if not tracked then return elsewhere('on a remote it tracks') end
+        query({ tracked }, ask, function(found)
+          if #found > 0 then
+            return session.open(found[1].remote, found[1].pull)
+          end
+          elsewhere('on ' .. tracked.name)
         end)
       end)
     end)
