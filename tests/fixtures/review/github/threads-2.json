@@ -1,0 +1,21 @@
+{"data": {"repository": {"pullRequest": {"reviewThreads": {
+  "pageInfo": {"hasNextPage": false, "endCursor": "c2"},
+  "nodes": [
+    {
+      "id": "PRRT_2", "path": "b.lua", "line": null, "startLine": null,
+      "originalLine": 4, "originalStartLine": null, "diffSide": "LEFT",
+      "isResolved": true, "subjectType": "LINE",
+      "comments": {"pageInfo": {"hasNextPage": false}, "nodes": [
+        {"author": {"login": "bob"}, "body": "Gone now.", "createdAt": "2026-10-02T10:00:00Z"}
+      ]}
+    },
+    {
+      "id": "PRRT_3", "path": "c.lua", "line": null, "startLine": null,
+      "originalLine": null, "originalStartLine": null, "diffSide": "RIGHT",
+      "isResolved": false, "subjectType": "FILE",
+      "comments": {"pageInfo": {"hasNextPage": false}, "nodes": [
+        {"author": {"login": "carol"}, "body": "Whole file.", "createdAt": "2026-10-03T10:00:00Z"}
+      ]}
+    }
+  ]
+}}}}}
