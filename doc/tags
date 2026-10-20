@@ -46,6 +46,7 @@
 :DyQuery	dyneo.txt	/*:DyQuery*
 :DyRego	dyneo.txt	/*:DyRego*
 :DyRename	dyneo.txt	/*:DyRename*
+:DyReview	dyneo.txt	/*:DyReview*
 :DyRoot	dyneo.txt	/*:DyRoot*
 :DyRunbook	dyneo.txt	/*:DyRunbook*
 :DySarif	dyneo.txt	/*:DySarif*
@@ -151,6 +152,9 @@ dyneo-query	dyneo.txt	/*dyneo-query*
 dyneo-rego	dyneo.txt	/*dyneo-rego*
 dyneo-repl	dyneo.txt	/*dyneo-repl*
 dyneo-requirements	dyneo.txt	/*dyneo-requirements*
+dyneo-review	dyneo.txt	/*dyneo-review*
+dyneo-review-ai	dyneo.txt	/*dyneo-review-ai*
+dyneo-review-submit	dyneo.txt	/*dyneo-review-submit*
 dyneo-runbook	dyneo.txt	/*dyneo-runbook*
 dyneo-sbom	dyneo.txt	/*dyneo-sbom*
 dyneo-schema	dyneo.txt	/*dyneo-schema*

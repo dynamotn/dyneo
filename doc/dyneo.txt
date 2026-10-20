@@ -85,6 +85,7 @@ CONTENTS                                                      *dyneo-contents*
        9.13 Postmortems ................................... |dyneo-postmortem|
        9.14 Function history ................................. |dyneo-history|
        9.15 Code owners ....................................... |dyneo-owners|
+       9.16 Pull request review ............................. |dyneo-review|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -1783,6 +1784,129 @@ one with sections -- is read with GitLab's rules: a path not starting with
 case) has its last match and its default owners, the owners of every
 section summed.
 
+9.16 Pull request review                                       *dyneo-review*
+
+`:DyReview` (|:DyReview|, under `<leader>pv`) reviews a pull request of
+GitHub, GitLab or Azure DevOps in one place: a panel of the files changed,
+the diff beside it, your draft comments and the threads already there.  Use
+it for a review you mean to send as one piece; the forge plugins of
+|dyneo-integrations| stay for browsing and chores.
+
+Opening ~
+`<leader>pvv` (`:DyReview`, `:DyReview pick`) picks among the open pull
+requests of every forge remote of the repository.  `<leader>pvb`
+(`:DyReview branch`) opens the one of the branch, looked up on the tracked
+remote, and asks which remote when the branch tracks none.  A pull request
+pushed to since you last opened it reopens on its new head.  One whose code
+cannot be fetched (the source branch lives in a fork, say) is opened for
+reading only and says why; sending is refused.
+
+Subcommands ~
+`pick`      Pick a pull request.                         `<leader>pvv`
+`branch`    The pull request of the current branch.      `<leader>pvb`
+`ai`        The AI pass, see |dyneo-review-ai|.         `<leader>pva`
+`drafts`    Pick among your drafts and jump to one.      `<leader>pvd`
+`since`     Files changed since your last review.
+`submit`    Send the review, see |dyneo-review-submit|.  `<leader>pvs`
+`trust`     Ask the trust question again.
+`close`     Close the review.                            `<leader>pvq`
+
+Trust ~
+The question is asked once per pull request and head commit: may the code of
+this pull request run on this machine?  Until you say yes, the head is
+checked out in a worktree (`.worktrees/dyreview-<forge>-<id>`) where no
+language server, linter, formatter or project `.nvim` folder runs, and the
+diff is read from git objects.  Dependencies are never installed there.
+`:DyReview trust` asks again.  Sources of the CI line that need the code
+(Argo reads the workflow files) wait for the answer.
+
+The panel ~
+Files are grouped in buckets by what triage makes of them; a file with a
+risk is marked `!`, one you marked reviewed `✓`, and one that changed since
+you marked it `⟳`.  Generated files are collapsed.  The header shows the AI
+summary, once the pass has run, and the CI line: the runs counted by state,
+`(by branch)` for runs of Jenkins and Argo, which know no commit, and
+`(by name)` for a run found by its name; a run keyed on the head commit
+carries no note.  A
+source held back is named with what it waits for.  Threads that could not be
+read are said as `Threads not read`, never left out silently.
+
+In the panel: `<CR>` opens a file, folds a bucket or lists the CI runs,
+`r` asks the CI again, `m` marks the file reviewed, `q` closes the panel.
+
+Drafts ~
+In either side of the diff:
+
+    `<localleader>c`   n, x   Comment on the line or the lines selected
+    `<localleader>s`   n, x   Suggest a change over those lines
+    `<localleader>r`   n      Reply to the thread
+    `<localleader>R`   n      Resolve or reopen the thread
+    `<localleader>m`   n      Mark the file reviewed
+    `<localleader>k`   n      Keep the AI draft
+    `<localleader>e`   n      Edit the draft
+    `<localleader>x`   n      Drop the draft
+    `]a` `[a`          n      Next or previous pending AI draft
+
+A draft is drawn as a sign and end-of-line text.  One written by the AI pass
+has its own sign, colour and an `AI` label with its state; the marker lives
+in the editor only, a comment you send carries no AI label.  A pending AI
+draft is never sent: keep it, edit it (which keeps it) or drop it.  Drafts
+already on the forge, imported when the review opens, are read-only here.
+A comment on a line outside the diff is sent as a comment on the file naming
+the line.  Drafts and the files you marked live in the state directory and
+survive a restart.
+
+Since your last review ~
+`:DyReview since` lists the files changed since the head you last reviewed,
+an interdiff held in a private ref, so it survives a rebase or force push;
+without that ref it lists the files whose content differs from when you
+marked them.
+
+                                                         *dyneo-review-submit*
+Submit ~
+`<leader>pvs` (`:DyReview submit`) asks the verdict and the body, then shows
+what will go out -- the drafts, those imported, the AI drafts left out, the
+comments outside the diff -- and sends on `Send`.  Before sending it reads
+the pull request again and refuses if it moved to a new head or became
+read-only; if the drafts changed while you were asking, it asks again.  The
+body is optional, except for a verdict that asks for changes with nothing
+else to say.  A failure part-way is remembered: submit again and only what is
+not out yet is sent; comments already out are not sent twice.  Drafts lost
+because the pending review was deleted on the forge are offered to be sent
+again.  Verdicts:
+
+    GitHub        Approve, Request changes, Comment
+    GitLab        Approve, Revoke approval, Comment
+    Azure DevOps  Approve, Approve with suggestions, Wait for author,
+                  Reject, No vote
+
+GitHub keeps your comments in one pending review, submitted with the
+verdict; resolving a thread is public at once, before the review is
+submitted.  GitLab keeps them as draft notes and publishes every draft note
+of yours on the merge request in one call, so drafts made on the web are
+imported and must match what you confirm.  Azure DevOps has no drafts: each
+comment is published as it is sent, the verdict is your vote (10, 5, 0, -5,
+-10), and the thread of the review body is closed unless the vote asks the
+author to act.  A suggested change is a suggestion block on GitHub and
+GitLab, and a code block on Azure DevOps, which has no such syntax.
+
+                                                             *dyneo-review-ai*
+AI pass ~
+`<leader>pva` (`:DyReview ai`) sends the title, description and diff to the
+AI command of |DyNeo.ai| through |dyneo-ai-guard|, which refuses sensitive
+text.  Generated and binary files are left out and named; a large diff is
+split by file.  It answers a summary and a reading order for the panel and
+draft comments as pending AI drafts.  Notices give counts and paths, never
+the diff or the answer.
+
+Requirements and state ~
+git 2.40 or newer, codediff.nvim, `gh`, `glab`, or `az` with its
+`azure-devops` extension, for the forge in use; `kubectl` for the Argo CI
+source; Jenkins through `git config dyneo.jenkinsUrl` and
+`dyneo.jenkinsJob`, or `DyNeo.jenkins.url`.  `:checkhealth dyneo` reports
+them.  State lives in `stdpath('state')/dyneo/review/` (directories 0700,
+files 0600), and the commits it needs in private refs `refs/dyneo/review/`.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -2241,6 +2365,12 @@ Project ~
                                                                        *:DyC4*
 :DyC4 [{view}]          Draw {view} of the LikeC4 workspace of the buffer,
                         or one picked, through D2.  See |dyneo-diagram|.
+
+                                                                  *:DyReview*
+:DyReview [{sub}]       Review a pull request of any forge remote.  {sub} is
+                        `pick` (the default), `branch`, `ai`, `drafts`,
+                        `since`, `submit`, `trust` or `close`.  See
+                        |dyneo-review|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose
