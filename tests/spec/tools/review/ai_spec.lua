@@ -98,6 +98,18 @@ describe('tools.review.ai', function()
       local files = { file('new.lua', { status = 'R', old_path = 'old.lua' }) }
       local chunks = ai.chunks(files, { ['new.lua'] = 'd\n' }, 100)
       assert.same({ 'old.lua' }, chunks[1].old_paths)
+      assert.same({ ['old.lua'] = 'new.lua' }, chunks[1].renamed)
+    end)
+
+    it('says the last line of each side sent of a cut file', function()
+      local lines = { '@@ -1,1 +1,20 @@', ' ctx' }
+      for i = 2, 20 do
+        lines[#lines + 1] = ('+line %02d'):format(i)
+      end
+      local diffs = { ['big.lua'] = table.concat(lines, '\n') .. '\n' }
+      local chunks = ai.chunks({ file('big.lua') }, diffs, 50)
+      assert.is_true(chunks[1].cut)
+      assert.same({ old = 1, new = 4 }, chunks[1].last['big.lua'])
     end)
   end)
 
@@ -212,6 +224,21 @@ describe('tools.review.ai', function()
         vim.tbl_map(function(d) return d.path end, result.drafts)
       )
       assert.equals(0, result.outside)
+    end)
+
+    it('maps the old path of a renamed file to its new one', function()
+      local result = ai.parse(
+        vim.json.encode({
+          comments = {
+            { path = 'src/old_a.lua', side = 'old', line = 5, body = 'x' },
+          },
+        }),
+        hunks,
+        { renamed = { ['src/old_a.lua'] = 'src/a.lua' } }
+      )
+      assert.equals(0, result.outside)
+      assert.equals('src/a.lua', result.drafts[1].path)
+      assert.equals('old', result.drafts[1].side)
     end)
 
     it('keeps a suggestion as lines, on the new side only', function()
@@ -469,6 +496,112 @@ describe('tools.review.ai', function()
         assert.is_falsy(note.msg:find('SUMMARYTEXT', 1, true), note.msg)
         assert.is_falsy(note.msg:find('Body of the PR', 1, true), note.msg)
       end
+    end)
+
+    --- Every notice, one a line
+    local function said()
+      return table.concat(
+        vim.tbl_map(function(n) return n.msg end, notes),
+        '\n'
+      )
+    end
+
+    it('counts comments on files of another chunk or never sent', function()
+      stub(require('tools.ai.git'), 'MAX_DIFF', 30)
+      s.hunks['go.sum'] = { new = { { 1, 5 } }, old = {} }
+      answers = function(paths)
+        if paths[1] ~= 'src/a.lua' then return '{"comments": []}' end
+        return vim.json.encode({
+          comments = {
+            { path = 'src/b.lua', line = 2, body = 'ANSWERTEXT b' },
+            { path = 'go.sum', line = 2, body = 'ANSWERTEXT sum' },
+            { path = 'src/a.lua', line = 2, body = 'ANSWERTEXT a' },
+          },
+        })
+      end
+      ai.run(s)
+      local new = vim.tbl_filter(
+        function(d) return d.origin == 'ai' and d.state == 'pending' end,
+        s.state.drafts
+      )
+      assert.same(
+        { 'src/a.lua' },
+        vim.tbl_map(function(d) return d.path end, new)
+      )
+      assert.is_truthy(
+        said():find('2 AI comments pointed outside the diff', 1, true)
+      )
+    end)
+
+    it('counts comments past the end of a cut diff', function()
+      stub(require('tools.ai.git'), 'MAX_DIFF', 33)
+      local git = require('tools.review.git')
+      stub(
+        git,
+        'diff',
+        function(_, _, _, _, _, cb)
+          cb({
+            ['src/a.lua'] = '@@ -1,0 +1,5 @@\n+one\n+two\n+three\n+four\n+five\n',
+            ['src/b.lua'] = 'b\n',
+          }, nil, false)
+        end
+      )
+      answers = function(paths)
+        if paths[1] ~= 'src/a.lua' then return '{"comments": []}' end
+        return vim.json.encode({
+          comments = {
+            { path = 'src/a.lua', line = 2, body = 'ANSWERTEXT seen' },
+            { path = 'src/a.lua', line = 5, body = 'ANSWERTEXT unseen' },
+            {
+              path = 'src/a.lua',
+              line = 4,
+              start_line = 2,
+              body = 'ANSWERTEXT across',
+            },
+          },
+        })
+      end
+      ai.run(s)
+      local new = vim.tbl_filter(
+        function(d) return d.origin == 'ai' and d.state == 'pending' end,
+        s.state.drafts
+      )
+      assert.equals(1, #new)
+      assert.equals(2, new[1].line)
+      assert.is_truthy(
+        said():find('2 AI comments pointed outside the diff', 1, true)
+      )
+    end)
+
+    it('names a file whose hunks could not be read as failed', function()
+      stub(require('tools.ai.git'), 'MAX_DIFF', 30)
+      local git = require('tools.review.git')
+      stub(git, 'hunks', function(_, _, _, path, _, cb)
+        if path == 'src/b.lua' then return cb(nil, 'boom') end
+        cb({ new = { { 1, 5 } }, old = {} })
+      end)
+      ai.run(s)
+      local text = said()
+      assert.is_falsy(text:find('outside', 1, true))
+      assert.is_truthy(text:find('failed for src/b.lua', 1, true))
+      local ids = vim.tbl_map(function(d) return d.id end, s.state.drafts)
+      assert.is_true(vim.tbl_contains(ids, 'p-b'))
+    end)
+
+    it('counts an answer that raises as a failed chunk', function()
+      stub(require('tools.ai.git'), 'MAX_DIFF', 30)
+      local parse = ai.parse
+      stub(ai, 'parse', function(answer, hunks, opts)
+        if hunks['src/b.lua'] then error('boom') end
+        return parse(answer, hunks, opts)
+      end)
+      ai.run(s)
+      assert.equals(1, changed)
+      assert.is_truthy(said():find('failed for src/b.lua', 1, true))
+      notes = {}
+      ai.run(s)
+      assert.is_falsy(said():find('running already', 1, true))
+      assert.equals(2, changed)
     end)
 
     it('keeps nothing once the review has closed', function()
