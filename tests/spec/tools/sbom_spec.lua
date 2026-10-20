@@ -96,14 +96,21 @@ describe('tools.sbom', function()
         version = '1.2.3',
         purl = 'pkg:npm/%40ansible/ls@1.2.3?x=y',
         source = 'mason',
+        dir = dir .. '/packages/ls',
       },
       {
         name = 'ansible-lint',
         version = '26.9.0',
         purl = 'pkg:pypi/ansible-lint@26.9.0',
         source = 'mason',
+        dir = dir .. '/packages/ansible-lint',
       },
-      { name = 'mine', version = 'unknown', source = 'mason' },
+      {
+        name = 'mine',
+        version = 'unknown',
+        source = 'mason',
+        dir = dir .. '/packages/mine',
+      },
     }, components)
   end)
 
@@ -143,6 +150,142 @@ describe('tools.sbom', function()
       vim.tbl_map(function(c) return c.name .. ' ' .. c.source end, components)
     )
     assert.equals('pkg:github/o/a.nvim@aaa', components[1].purl)
+  end)
+
+  describe('licenses', function()
+    local MIT = {
+      'MIT License',
+      '',
+      'Copyright (c) 2024 Someone',
+      '',
+      'Permission is hereby granted, free of charge, to any person obtaining',
+      'a copy of this software ...',
+    }
+
+    it('names the license of a text by what it says', function()
+      local cases = {
+        ['MIT'] = table.concat(MIT, '\n'),
+        ['Apache-2.0'] = 'Apache License\n Version 2.0, January 2004',
+        ['GPL-3.0'] = 'GNU GENERAL PUBLIC LICENSE\n  Version 3, 29 June 2007',
+        ['GPL-2.0'] = 'GNU GENERAL PUBLIC LICENSE\n  Version 2, June 1991',
+        ['AGPL-3.0'] = 'GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3',
+        ['LGPL-2.1'] = 'GNU LESSER GENERAL PUBLIC LICENSE\nVersion 2.1',
+        ['MPL-2.0'] = 'Mozilla Public License Version 2.0',
+        ['LGPL-2.0'] = 'GNU LIBRARY GENERAL PUBLIC LICENSE\nVersion 2, June'
+          .. ' 1991 ... the ordinary GNU General Public License',
+        ['BSD-3-Clause'] = 'Redistribution and use in source and binary forms,'
+          .. ' with or without\nmodification ... Neither the name of',
+        ['BSD-2-Clause'] = 'Redistribution and use in source and binary'
+          .. ' forms, with or without modification',
+        ['ISC'] = 'Permission to use, copy, modify, and/or distribute this'
+          .. ' software for any purpose with or without fee is hereby'
+          .. ' granted, provided that the above copyright notice',
+        ['0BSD'] = 'Permission to use, copy, modify, and/or distribute this'
+          .. ' software for any purpose with or without fee is hereby'
+          .. ' granted.',
+        ['Unlicense'] = 'This is free and unencumbered software released'
+          .. ' into the public domain.',
+        ['Apache-2.0 OR MIT'] = '// SPDX-License-Identifier: Apache-2.0 OR MIT',
+        ['Vim'] = 'You may redistribute this package under the same terms as'
+          .. '\nVim itself.',
+      }
+      for spdx, text in pairs(cases) do
+        assert.equals(spdx, sbom.detect_license(text), spdx)
+      end
+      assert.is_nil(sbom.detect_license('All rights reserved.'))
+    end)
+
+    it('reads the license file of a directory', function()
+      h.write(dir .. '/a/LICENSE', MIT)
+      h.write(
+        dir .. '/b/COPYING.md',
+        { 'GNU GENERAL PUBLIC LICENSE', 'Version 3' }
+      )
+      vim.fn.mkdir(dir .. '/c', 'p')
+      assert.equals('MIT', sbom.license_of_dir(dir .. '/a'))
+      assert.equals('GPL-3.0', sbom.license_of_dir(dir .. '/b'))
+      assert.is_nil(sbom.license_of_dir(dir .. '/c'))
+      assert.is_nil(sbom.license_of_dir(dir .. '/missing'))
+    end)
+
+    it('matches a policy entry, a trailing star any version', function()
+      assert.is_true(sbom.license_matches('AGPL-3.0', { 'AGPL-*' }))
+      assert.is_true(sbom.license_matches('MIT OR AGPL-3.0', { 'AGPL-*' }))
+      assert.is_false(sbom.license_matches('LGPL-3.0', { 'GPL-*' }))
+      assert.is_true(sbom.license_matches('SSPL-1.0', { 'SSPL-1.0' }))
+      assert.is_false(sbom.license_matches('MIT', {}))
+    end)
+
+    it('reports denied, flagged and unknown licenses first', function()
+      local lines, counts = sbom.license_report({
+        { name = 'a', version = '1', source = 'mason', license = 'MIT' },
+        {
+          name = 'b',
+          version = '1',
+          source = 'lazy.nvim',
+          license = 'AGPL-3.0',
+        },
+        { name = 'c', version = '1', source = 'lazy.nvim' },
+        { name = 'd', version = '1', source = 'mason', license = 'BUSL-1.1' },
+      }, { deny = { 'BUSL-*' }, review = { 'AGPL-*' } })
+      assert.same({ deny = 1, review = 1, unknown = 1, total = 4 }, counts)
+      local text = table.concat(lines, '\n')
+      assert.is_truthy(
+        text:find('## Denied\n\n- d 1 (mason): BUSL-1.1', 1, true)
+      )
+      assert.is_truthy(
+        text:find('## To review\n\n- b 1 (lazy.nvim): AGPL-3.0', 1, true)
+      )
+      assert.is_truthy(text:find('## Unknown\n\n- c 1 (lazy.nvim)', 1, true))
+      assert.is_truthy(text:find('| MIT | 1 |', 1, true))
+    end)
+
+    it(
+      'lists the license of each component in the CycloneDX document',
+      function()
+        local bom = sbom.bom({
+          { name = 'x', version = '1', source = 'mason', license = 'MIT' },
+          {
+            name = 'y',
+            version = '1',
+            source = 'mason',
+            license = 'MIT OR Apache-2.0',
+          },
+          { name = 'z', version = '1', source = 'mason' },
+        }, 0)
+        assert.same(
+          { { license = { id = 'MIT' } } },
+          bom.components[1].licenses
+        )
+        assert.same(
+          { { expression = 'MIT OR Apache-2.0' } },
+          bom.components[2].licenses
+        )
+        assert.is_nil(bom.components[3].licenses)
+      end
+    )
+
+    it('reads the licenses of what lazy.nvim and Mason installed', function()
+      h.write(dir .. '/plugins/a.nvim/LICENSE', MIT)
+      local components = sbom.with_licenses({
+        {
+          name = 'a.nvim',
+          version = 'x',
+          source = 'lazy.nvim',
+          dir = dir .. '/plugins/a.nvim',
+        },
+        {
+          name = 'tool',
+          version = '1',
+          source = 'mason',
+          dir = dir .. '/none',
+        },
+      }, function(name)
+        if name == 'tool' then return { 'Apache-2.0' } end
+      end)
+      assert.equals('MIT', components[1].license)
+      assert.equals('Apache-2.0', components[2].license)
+    end)
   end)
 
   it('reads a lockfile from disk when no lines are given', function()

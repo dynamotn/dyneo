@@ -7,6 +7,7 @@ describe('plugin/images', function()
     restore = h.stub(package.loaded, 'tools.images', {
       scan = function(bufnr) table.insert(calls, { 'scan', bufnr }) end,
       pin = function(bufnr) table.insert(calls, { 'pin', bufnr }) end,
+      verify = function(bufnr) table.insert(calls, { 'verify', bufnr }) end,
     })
     dofile(h.root .. '/plugin/images.lua')
   end)
@@ -14,11 +15,13 @@ describe('plugin/images', function()
     restore()
     vim.api.nvim_del_user_command('DyImageScan')
     vim.api.nvim_del_user_command('DyImagePin')
+    vim.api.nvim_del_user_command('DyImageVerify')
   end)
 
-  it('scans and pins the current buffer', function()
+  it('scans, pins and verifies the current buffer', function()
     vim.cmd('DyImageScan')
     vim.cmd('DyImagePin')
-    assert.same({ { 'scan', 0 }, { 'pin', 0 } }, calls)
+    vim.cmd('DyImageVerify')
+    assert.same({ { 'scan', 0 }, { 'pin', 0 }, { 'verify', 0 } }, calls)
   end)
 end)

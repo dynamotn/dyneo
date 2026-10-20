@@ -314,6 +314,158 @@ describe('tools.images', function()
     assert.is_true(most <= images.PARALLEL, ('%d at once'):format(most))
   end)
 
+  describe('signatures', function()
+    local restore_signers
+
+    before_each(
+      function()
+        restore_signers = h.stub(_G, 'DyNeo', {
+          image_signers = {
+            {
+              image = '^ghcr%.io/o/',
+              identity = '^https://github%.com/o/',
+              issuer = '^https://token%.actions%.githubusercontent%.com$',
+            },
+            { image = '^registry%.example/', key = '/keys/cosign.pub' },
+          },
+        })
+      end
+    )
+    after_each(function() restore_signers() end)
+
+    it('picks the signer of an image by its name, tag left out', function()
+      assert.equals(
+        '/keys/cosign.pub',
+        images.signer('registry.example/app:1@' .. DIGEST).key
+      )
+      assert.is_nil(images.signer('docker.io/ghcr.io/o/app:1'))
+      assert.is_nil(images.signer('nginx:1.27'))
+    end)
+
+    it('asks cosign for the signer expected, or any one', function()
+      assert.same({
+        'cosign',
+        'verify',
+        '--output',
+        'json',
+        '--certificate-identity-regexp',
+        '^https://github%.com/o/',
+        '--certificate-oidc-issuer-regexp',
+        '^https://token%.actions%.githubusercontent%.com$',
+        '--',
+        'ghcr.io/o/app:1',
+      }, images.verify_command('ghcr.io/o/app:1'))
+      assert.same(
+        { '--key', '/keys/cosign.pub', '--', 'registry.example/a:1' },
+        vim.list_slice(images.verify_command('registry.example/a:1'), 5)
+      )
+      assert.same(
+        { '--certificate-identity-regexp', '.*' },
+        vim.list_slice(images.verify_command('nginx:1.27'), 5, 6)
+      )
+    end)
+
+    it(
+      'says who signed each image, and fails one unsigned or signed by another',
+      function()
+        tool('cosign', {
+          'for arg; do image=$arg; done',
+          'case "$image" in',
+          [[  ghcr.io/o/app:1) echo '[{"optional":{"Subject":"https://github.com/o/app/.github/workflows/release.yml@refs/tags/v1","Issuer":"https://token.actions.githubusercontent.com"}}]';;]],
+          [[  ghcr.io/o/other:1) echo 'Error: no matching signatures: none of the expected identities matched' >&2; exit 1;;]],
+          [[  nginx:1.27) echo 'Error: no signatures found' >&2; exit 1;;]],
+          [[  *) echo 'Error: Get "https://rekor": dial tcp: timeout' >&2; exit 1;;]],
+          'esac',
+        })
+        local bufnr = h.buffer({
+          lines = {
+            'FROM ghcr.io/o/app:1',
+            'FROM ghcr.io/o/other:1',
+            'FROM nginx:1.27',
+            'FROM alpine:3',
+          },
+        })
+        images.verify(bufnr)
+        assert.is_true(vim.wait(5000, function() return #notes > 0 end, 10))
+        local by_line = {}
+        for _, diagnostic in ipairs(vim.diagnostic.get(bufnr)) do
+          by_line[diagnostic.lnum + 1] = diagnostic
+        end
+        assert.equals(vim.diagnostic.severity.INFO, by_line[1].severity)
+        assert.is_truthy(
+          by_line[1].message:find('signed by https://github.com/o/app', 1, true)
+        )
+        assert.equals(vim.diagnostic.severity.ERROR, by_line[2].severity)
+        assert.is_truthy(
+          by_line[2].message:find('not by the signer expected', 1, true)
+        )
+        assert.equals(vim.diagnostic.severity.WARN, by_line[3].severity)
+        assert.is_truthy(by_line[3].message:find('no signature', 1, true))
+        assert.equals(vim.diagnostic.severity.WARN, by_line[4].severity)
+        assert.is_truthy(
+          by_line[4].message:find('could not be checked', 1, true)
+        )
+        assert.equals(
+          '4 images: 1 verified, 1 signed by another, 1 unsigned, 1 not checked',
+          notes[#notes]
+        )
+      end
+    )
+
+    it('reads a short Docker Hub name as the registry writes it', function()
+      assert.equals('docker.io/library/nginx', images.repository('nginx:1.27'))
+      assert.equals('docker.io/o/app', images.repository('o/app:1@' .. DIGEST))
+      assert.equals(
+        'registry.example:5000/a',
+        images.repository('registry.example:5000/a:1')
+      )
+      assert.equals('localhost/a', images.repository('localhost/a:1'))
+      local restore = h.stub(_G, 'DyNeo', {
+        image_signers = { { image = '^docker%.io/o/', key = '/k.pub' } },
+      })
+      local signer = images.signer('o/app:1')
+      restore()
+      assert.equals('/k.pub', signer and signer.key)
+    end)
+
+    it('fails an image its signer never signed, not only a stranger', function()
+      local unsigned = { code = 1, stderr = 'Error: no signatures found' }
+      assert.equals('mismatch', (images.verdict('ghcr.io/o/app:1', unsigned)))
+      assert.equals('unsigned', (images.verdict('nginx:1', unsigned)))
+      local offline = { code = 1, stderr = 'Error: dial tcp: timeout' }
+      assert.equals('unchecked', (images.verdict('ghcr.io/o/app:1', offline)))
+    end)
+
+    it('keeps its findings apart from those of a scan', function()
+      tool('cosign', { 'echo "Error: no signatures found" >&2', 'exit 1' })
+      tool('trivy', {
+        [[echo '{"Results":[{"Vulnerabilities":[{"VulnerabilityID":"CVE-9","Severity":"HIGH"}]}]}']],
+      })
+      local bufnr = h.buffer({ lines = { 'FROM golang:1.23' } })
+      images.scan(bufnr)
+      assert.is_true(vim.wait(5000, function() return #notes > 1 end, 10))
+      images.verify(bufnr)
+      assert.is_true(vim.wait(5000, function() return #notes > 2 end, 10))
+      local sources = vim.tbl_map(
+        function(d) return d.source end,
+        vim.diagnostic.get(bufnr)
+      )
+      table.sort(sources)
+      assert.same({ 'cosign', 'image scan' }, sources)
+    end)
+
+    it('says when cosign is missing', function()
+      local executable = vim.fn.executable
+      local restore = h.stub(vim.fn, 'executable', function(name)
+        if name == 'cosign' then return 0 end
+        return executable(name)
+      end)
+      images.verify(h.buffer({ lines = { 'FROM golang:1.23' } }))
+      restore()
+      assert.same({ 'cosign is not installed' }, notes)
+    end)
+  end)
+
   it('splits a digest off an image', function()
     assert.same(
       { 'nginx:1.27', DIGEST },

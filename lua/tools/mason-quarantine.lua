@@ -69,14 +69,15 @@ end
 ---@return integer
 function M.window() return require('tools.lazy-quarantine').window() end
 
---- Seconds since the epoch of a UTC timestamp as the GitHub API writes them
+--- Seconds since the epoch of a UTC timestamp as the GitHub API writes them,
+--- and npm, PyPI, the Go proxy and the Terraform registry too
 ---
 --- `os.time` reads its fields as local time, so what it returns for a UTC
 --- timestamp is off by this machine's offset; the same conversion run on a
 --- known instant measures that offset back out.
 ---@param timestamp string? e.g. `2026-09-28T07:21:33Z`
 ---@return integer?
-local function epoch(timestamp)
+function M.epoch(timestamp)
   if type(timestamp) ~= 'string' then return nil end
   local year, month, day, hour, minute, second =
     timestamp:match('^(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)')
@@ -108,7 +109,7 @@ function M.quarantined(releases, now)
   now = now or os.time()
   return vim.tbl_filter(function(release)
     if release.draft or release.prerelease then return false end
-    local published = epoch(release.published_at)
+    local published = M.epoch(release.published_at)
     return published ~= nil and os.difftime(now, published) >= M.window()
   end, releases)
 end

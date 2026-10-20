@@ -79,7 +79,10 @@ below follow the sections of `:help dyneo`.
 - **Quarantine** — Mason and plugin releases wait a week; review what an
   update adds, flagged. `:DyQuarantine review`
 - **SBOM** — the editor as CycloneDX, checked against OSV, and the project's
-  lockfiles too. `:DySbom osv` · `:DySbom lock`
+  lockfiles too; licenses against a policy. `:DySbom osv` · `:DySbom lock` ·
+  `:DySbom license`
+- **Outdated dependencies** — npm, Go, PyPI, Terraform and Actions releases
+  out of quarantine shown on each manifest line, and bumped. `:DyOutdated`
 - **Scanner findings** — a SARIF report (semgrep, CodeQL, trivy…) in the
   quickfix list; semgrep on a project's own rules, offline. `:DySarif`
 - **Detection rules and binaries** — YARA grammar and server, Sigma schema,
@@ -98,10 +101,12 @@ below follow the sections of `:help dyneo`.
   run, apply, Helm and Kustomize render. `<localleader>k`
 - **Helm values** to templates and back, unused values marked.
   `:DyHelmValue` · `:DyHelmUnused`
-- **Container images** scanned for vulnerabilities and pinned to digests.
-  `:DyImageScan` · `:DyImagePin`
+- **Container images** scanned for vulnerabilities, pinned to digests, their
+  signatures checked. `:DyImageScan` · `:DyImagePin` · `:DyImageVerify`
 - **Policy checks** with checkov, kube-linter, conftest, actionlint and
-  zizmor.
+  zizmor; a Rego playground, and its tests' coverage. `:DyRego`
+- **Environments compared** key by key, `values-dev.yaml` against
+  `values-prod.yaml`. `:DyEnvDiff`
 - **Terraform plan** shown on the blocks it changes, with drift, the monthly
   cost of each block (infracost) and what depends on each replacement.
   `<localleader>p`

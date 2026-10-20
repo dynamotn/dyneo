@@ -18,6 +18,7 @@
 :DyEncryptedDiff	dyneo.txt	/*:DyEncryptedDiff*
 :DyEncryptedKeys	dyneo.txt	/*:DyEncryptedKeys*
 :DyEncryptedRotate	dyneo.txt	/*:DyEncryptedRotate*
+:DyEnvDiff	dyneo.txt	/*:DyEnvDiff*
 :DyFormat	dyneo.txt	/*:DyFormat*
 :DyFormatInfo	dyneo.txt	/*:DyFormatInfo*
 :DyHelmUnused	dyneo.txt	/*:DyHelmUnused*
@@ -26,6 +27,7 @@
 :DyHex	dyneo.txt	/*:DyHex*
 :DyImagePin	dyneo.txt	/*:DyImagePin*
 :DyImageScan	dyneo.txt	/*:DyImageScan*
+:DyImageVerify	dyneo.txt	/*:DyImageVerify*
 :DyInspect	dyneo.txt	/*:DyInspect*
 :DyJira	dyneo.txt	/*:DyJira*
 :DyKube	dyneo.txt	/*:DyKube*
@@ -34,9 +36,11 @@
 :DyNfr	dyneo.txt	/*:DyNfr*
 :DyOpenApiDiff	dyneo.txt	/*:DyOpenApiDiff*
 :DyOpenApiRequest	dyneo.txt	/*:DyOpenApiRequest*
+:DyOutdated	dyneo.txt	/*:DyOutdated*
 :DyProject	dyneo.txt	/*:DyProject*
 :DyQuarantine	dyneo.txt	/*:DyQuarantine*
 :DyQuery	dyneo.txt	/*:DyQuery*
+:DyRego	dyneo.txt	/*:DyRego*
 :DyRename	dyneo.txt	/*:DyRename*
 :DyRoot	dyneo.txt	/*:DyRoot*
 :DyRunbook	dyneo.txt	/*:DyRunbook*
@@ -61,6 +65,8 @@ DyNeo.dictionaries_path	dyneo.txt	/*DyNeo.dictionaries_path*
 DyNeo.enabled_languages	dyneo.txt	/*DyNeo.enabled_languages*
 DyNeo.enabled_plugins	dyneo.txt	/*DyNeo.enabled_plugins*
 DyNeo.firenvim_site_settings	dyneo.txt	/*DyNeo.firenvim_site_settings*
+DyNeo.image_signers	dyneo.txt	/*DyNeo.image_signers*
+DyNeo.license_policy	dyneo.txt	/*DyNeo.license_policy*
 DyNeo.obsidian	dyneo.txt	/*DyNeo.obsidian*
 DyNeo.plugin_channel	dyneo.txt	/*DyNeo.plugin_channel*
 DyNeo.quarantine_window	dyneo.txt	/*DyNeo.quarantine_window*
@@ -101,6 +107,7 @@ dyneo-detection	dyneo.txt	/*dyneo-detection*
 dyneo-development	dyneo.txt	/*dyneo-development*
 dyneo-diagram	dyneo.txt	/*dyneo-diagram*
 dyneo-encrypted	dyneo.txt	/*dyneo-encrypted*
+dyneo-envdiff	dyneo.txt	/*dyneo-envdiff*
 dyneo-features	dyneo.txt	/*dyneo-features*
 dyneo-findings	dyneo.txt	/*dyneo-findings*
 dyneo-globals	dyneo.txt	/*dyneo-globals*
@@ -125,11 +132,13 @@ dyneo-model	dyneo.txt	/*dyneo-model*
 dyneo-nfr	dyneo.txt	/*dyneo-nfr*
 dyneo-openapi	dyneo.txt	/*dyneo-openapi*
 dyneo-ops	dyneo.txt	/*dyneo-ops*
+dyneo-outdated	dyneo.txt	/*dyneo-outdated*
 dyneo-per-machine	dyneo.txt	/*dyneo-per-machine*
 dyneo-policy	dyneo.txt	/*dyneo-policy*
 dyneo-project	dyneo.txt	/*dyneo-project*
 dyneo-quarantine	dyneo.txt	/*dyneo-quarantine*
 dyneo-query	dyneo.txt	/*dyneo-query*
+dyneo-rego	dyneo.txt	/*dyneo-rego*
 dyneo-repl	dyneo.txt	/*dyneo-repl*
 dyneo-requirements	dyneo.txt	/*dyneo-requirements*
 dyneo-runbook	dyneo.txt	/*dyneo-runbook*

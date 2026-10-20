@@ -137,22 +137,75 @@ local function is_ignored(path)
     or name:find('^CHANGELOG') ~= nil
 end
 
---- Whether `text` is a comment and nothing else, which no rule is about
+--- The line comment of each kind of file, by extension or by name
 ---
---- Vimscript's `"` is left out: in Lua it opens a string, and a table of
---- strings is exactly where a command line hides.
+--- Only the file's own: in Lua `#x` is the length of `x` and starts an
+--- expression that runs, and in JavaScript `--x` decrements. A file of no
+--- kind listed has no comments skipped. Vimscript's `"` is left out too: in
+--- Lua it opens a string, and a table of strings is exactly where a command
+--- line hides.
+local COMMENTS = {
+  lua = '%-%-',
+  sql = '%-%-',
+  hs = '%-%-',
+  sh = '#',
+  bash = '#',
+  zsh = '#',
+  fish = '#',
+  py = '#',
+  rb = '#',
+  pl = '#',
+  yaml = '#',
+  yml = '#',
+  toml = '#',
+  nix = '#',
+  r = '#',
+  ps1 = '#',
+  mk = '#',
+  Makefile = '#',
+  Dockerfile = '#',
+  js = '//',
+  mjs = '//',
+  cjs = '//',
+  ts = '//',
+  jsx = '//',
+  tsx = '//',
+  c = '//',
+  h = '//',
+  cc = '//',
+  cpp = '//',
+  hpp = '//',
+  go = '//',
+  rs = '//',
+  java = '//',
+  kt = '//',
+  swift = '//',
+  cs = '//',
+  zig = '//',
+  dart = '//',
+  scala = '//',
+  jsonc = '//',
+  json5 = '//',
+}
+
+--- Whether `text`, a line of `path`, is a comment and nothing else, which
+--- no rule is about
 ---@param text string
+---@param path? string
 ---@return boolean
-local function is_comment(text)
-  -- A block comment closed on the line hides nothing: what follows it runs
-  local after = text:match('^%s*%-%-%[(=*)%[')
-  if after then
-    local close = text:find(']' .. after .. ']', 1, true)
-    return not close or vim.trim(text:sub(close + #after + 2)) == ''
+local function is_comment(text, path)
+  local name = vim.fs.basename(path or '')
+  local leader = COMMENTS[name] or COMMENTS[(name:match('%.([^.]+)$') or '')]
+  if not leader then return false end
+  if leader == '%-%-' then
+    -- A block comment closed on the line hides nothing: what follows it runs
+    local after = text:match('^%s*%-%-%[(=*)%[')
+    if after then
+      local close = text:find(']' .. after .. ']', 1, true)
+      return not close or vim.trim(text:sub(close + #after + 2)) == ''
+    end
   end
-  return text:find('^%s*%-%-') ~= nil
-    or text:find('^%s*#') ~= nil
-    or text:find('^%s*//') ~= nil
+  return text:find('^%s*' .. leader) ~= nil
 end
 
 ---@class DyReviewFinding
@@ -212,7 +265,7 @@ function M.scan(diff)
       line = tonumber(raw:match('^@@ %-%d+,?%d* %+(%d+)')) or 0
     elseif in_hunk and file and raw:sub(1, 1) == '+' then
       local text = raw:sub(2)
-      if not skip and not is_comment(text) then
+      if not skip and not is_comment(text, file) then
         for _, rule in ipairs(M.rules) do
           for _, pattern in ipairs(rule.patterns) do
             if text:find(pattern) then

@@ -41,6 +41,7 @@ CONTENTS                                                      *dyneo-contents*
        5.6 Detection rules ................................ |dyneo-detection|
        5.7 Binary files .......................................... |dyneo-hex|
        5.8 Debug launch files ............................ |dyneo-launch-json|
+       5.9 Outdated dependencies ............................ |dyneo-outdated|
     6. Infrastructure .......................................... |dyneo-infra|
        6.1 YAML and JSON schemas .............................. |dyneo-schema|
        6.2 Kubernetes ........................................... |dyneo-kube|
@@ -50,6 +51,8 @@ CONTENTS                                                      *dyneo-contents*
        6.6 Terraform plan ..................................... |dyneo-tfplan|
        6.7 Terraform state ................................... |dyneo-tfstate|
        6.8 Architecture diagrams ........................ |dyneo-architecture|
+       6.9 Comparing environments ............................ |dyneo-envdiff|
+       6.10 Rego playground ..................................... |dyneo-rego|
     7. Operations ................................................ |dyneo-ops|
        7.1 Runbooks .......................................... |dyneo-runbook|
        7.2 Logs ................................................. |dyneo-logs|
@@ -176,8 +179,26 @@ defaulted in `lua/config/globals.lua`.
 
                                                      *DyNeo.quarantine_window*
 `DyNeo.quarantine_window`      (default: one week, in seconds)
-        How long a release waits before Mason or lazy.nvim may install it;
-        `0` turns the wait off.  See |dyneo-quarantine|.
+        How long a release waits before Mason or lazy.nvim may install it,
+        and before |:DyOutdated| offers it; `0` turns the wait off.  See
+        |dyneo-quarantine|.
+
+                                                         *DyNeo.image_signers*
+`DyNeo.image_signers`          (default `{}`)
+        Who must have signed the images of a repository, for
+        |:DyImageVerify|: a list of `{ image = <Lua pattern>, key = <path> }`
+        or `{ image = ..., identity = <regex>, issuer = <regex> }` for a
+        keyless signature.  The first whose `image` matches the repository
+        of an image, tag and digest left out and a Docker Hub name written
+        in full (`nginx` is `docker.io/library/nginx`), is the one asked
+        for.  See |dyneo-images|.
+
+                                                        *DyNeo.license_policy*
+`DyNeo.license_policy`         (default `{ deny = {}, review = { 'AGPL-*',`
+                          `'SSPL-*', 'BUSL-*', 'Elastic-*' } }`)
+        SPDX ids `:DySbom license` makes an error (`deny`) or a warning
+        (`review`) of; a trailing `*` matches every version.  See
+        |dyneo-sbom|.
 
                                                      *DyNeo.enabled_languages*
 `DyNeo.enabled_languages`      (default: every supported language)
@@ -455,8 +476,16 @@ packages go to OSV in batches of a thousand, and each one with a known
 vulnerability gets a warning on its line of the lockfile, its advisories
 named, and a quickfix entry.  A package of the project itself is left out.
 
+`<leader>kc` (`:DySbom license`) reads the license of every plugin and Mason
+package -- from its license file, by its `SPDX-License-Identifier` or by what
+it says, else from Mason's registry -- and lists first the ones
+`DyNeo.license_policy` denies or flags and the ones not known; the SBOM
+carries the licenses too.  A plugin with no license file is unknown, not
+assumed free.
+
 The container images a file names are checked the same way, see
-|dyneo-images|: `<leader>ki` scans them, `<leader>kp` pins them.
+|dyneo-images|: `<leader>ki` scans them, `<leader>kp` pins them,
+`<leader>kv` checks who signed them.
 
 5.3 Files kept from AI                                        *dyneo-ai-guard*
 
@@ -594,6 +623,40 @@ The file comes with the repository, so it is read only once
 the file changes.  A refusal holds for the rest of the session; |:trust| it
 and restart to change your mind.
 
+5.9 Outdated dependencies                                     *dyneo-outdated*
+
+The quarantine (|dyneo-quarantine|) holds the editor's own updates back; the
+project's are up to its manifests.  `<leader>ku` (|:DyOutdated|) reads the
+dependencies of the manifest in the buffer and asks each one's registry what
+it released, and when:
+
+    `package.json`        npm, the registry ranges of each dependency table,
+                        asked of deps.dev (https://deps.dev): npm's own
+                        answer runs to megabytes a package
+    `go.mod`              the Go module proxy; a pseudo-version is left out
+    `requirements*.txt`   PyPI
+    `pyproject.toml`      PyPI: PEP 621 `dependencies`, optional ones and
+                        `[dependency-groups]`, and Poetry's tables
+    `*.tf`                the Terraform registry: `required_providers` and
+                        registry modules
+    a GitHub workflow     the releases of each action, through `gh` when it
+                        is installed
+
+At the end of each line goes the newest release out for longer than
+`DyNeo.quarantine_window`, the one to move to, and a newer one still inside
+the window as held, with its age.  A prerelease is never offered, nor a
+release npm deprecated or PyPI yanked, nor one whose date the registry does
+not give.  A release is written as precisely as the version it replaces:
+`~> 5.0` is offered `5.31`, `@v4` is offered `v5`, so a version newer only
+in a part the file does not write is no update.  Each line is filled in as
+its registry answers; one that fails says why on its line.  Only the names
+of the dependencies leave the machine; answers are kept for an hour.
+
+`<leader>kU` (`:DyOutdated bump`) writes the release shown into the line
+under the cursor, its operator kept.  An action pinned to a commit is shown
+but not bumped: move its tag comment, then pin it again with
+|:DyActionsPin|.  `:DyOutdated clear` takes the releases off the lines.
+
 ------------------------------------------------------------------------------
 6. INFRASTRUCTURE                                                *dyneo-infra*
 
@@ -670,6 +733,15 @@ through `crane` or `skopeo`: `nginx:1.27` becomes `nginx:1.27@sha256:…`, so
 a tag pushed again does not change what runs.  An image pinned already is
 left alone, and nothing is pinned if the file was edited while the registry
 answered.
+
+`<leader>kv` (|:DyImageVerify|) asks `cosign verify` who signed each image.
+One whose repository `DyNeo.image_signers` names must carry that signer's
+signature, its key or its keyless identity and issuer, and is an error
+otherwise, unsigned or signed by another.  Any other is checked for a
+keyless signature by anyone, against the transparency log, and the identity
+that signed it is read out to judge.  An image with no signature, or one
+that could not be checked -- offline, or rate limited -- is a warning, never
+a pass.  The findings are kept apart from those of a scan.
 
 6.5 Policy checks                                               *dyneo-policy*
 
@@ -768,6 +840,33 @@ declares, as D2 in a new buffer to preview (|dyneo-diagram|) or to keep:
 
 YAML is read through `yq`, a file at a time: a template of a chart (`{{ }}`)
 or a file yq cannot read is left out, and named, rather than ending it.
+
+6.9 Comparing environments                                     *dyneo-envdiff*
+
+`<leader>id` (|:DyEnvDiff|) compares the settings file of the buffer with
+another environment's -- `values-dev.yaml` with `values-prod.yaml` -- picked
+from the files of its extension beside it, the closest names first, unless
+one is given.  YAML, JSON and TOML go through `dyff between`, which compares
+them as documents: each path that differs with both values, and nothing of
+keys merely in another order.  Anything else, and everything without dyff,
+opens in a diff split.  The files are compared as they are on disk, and the
+comparison is held back from every AI, since it is made of their values.
+
+6.10 Rego playground                                              *dyneo-rego*
+
+`<leader>ir` (|:DyRego|) opens, beside a policy, a query -- `data.<package>`
+to start with -- and what `opa eval` answers for an input file, asked for
+unless given.  The answer follows each change of the policy, the query or
+the input a moment after the typing stops; `<CR>` in the query asks now.
+The policy is evaluated as it is in its buffer, from a private copy removed
+when the playground closes, with the other `.rego` files of its folder
+beside it; an input open in a buffer is read from the buffer.  The answer is
+held back from every AI.
+
+`<leader>iR` (`:DyRego test`) runs `opa test` over the policy's folder, as
+written on disk.  A failing test goes to the quickfix list; once every one
+passes, the lines no test reached are marked in the open policies and the
+coverage is said.  `:DyRego clear` removes the marks.
 
 ------------------------------------------------------------------------------
 7. OPERATIONS                                                      *dyneo-ops*
@@ -1600,8 +1699,12 @@ Supply chain and secrets (|dyneo-security|) ~
     `<leader>ks`       n      SBOM of the editor
     `<leader>ko`       n      Ask OSV about the plugins and packages
     `<leader>kl`       n      Ask OSV about the project's lockfiles
+    `<leader>kc`       n      Licenses of the plugins and packages
+    `<leader>ku`       n      Releases the dependencies may move to
+    `<leader>kU`       n      Bump the dependency on this line
     `<leader>ki`       n      Scan the images this file names
     `<leader>kp`       n      Pin the images to their digests
+    `<leader>kv`       n      Check who signed the images
     `<leader>ka`       n      Why this buffer is kept from AI
     `<leader>kA`       n      Let this buffer past the content check
     `<leader>kR`       n      Put it back under the check
@@ -1617,6 +1720,9 @@ Infrastructure and operations (|dyneo-infra|, |dyneo-ops|) ~
     `<leader>ip`       n      Read the logs of a pod
     `<leader>it`       n      The cron schedule of this line in words
     `<leader>iq`       n      Try a jq or yq expression on this buffer
+    `<leader>ir`       n      Try this Rego policy against an input
+    `<leader>iR`       n      Run the Rego tests, mark what they miss
+    `<leader>id`       n      Compare this file with another environment's
     `<leader>ic`       n      Switch the Kubernetes context
     `<leader>in`       n      Switch the Kubernetes namespace
 
@@ -1737,7 +1843,18 @@ Supply chain and secrets ~
                         vulnerabilities.
 :DySbom lock            Ask OSV about the packages of the project's
                         lockfiles, and warn on the line of each vulnerable
-                        one.  See |dyneo-sbom|.
+                        one.
+:DySbom license         The license of each plugin and package, the ones
+                        `DyNeo.license_policy` names first.  See
+                        |dyneo-sbom|.
+
+                                                                 *:DyOutdated*
+:DyOutdated             Show, on the line of each dependency of this
+                        manifest, the newest release out of quarantine and
+                        a newer one held.
+:DyOutdated bump        Write the release shown into the line under the
+                        cursor.
+:DyOutdated clear       Take them off.  See |dyneo-outdated|.
 
                                            *:DyAiGuardCheck* *:DyAiGuardAllow*
 :DyAiGuardCheck         Why this buffer is kept from the AI integrations.
@@ -1809,7 +1926,22 @@ Infrastructure ~
 :DyImageScan            Scan the images this file names for known
                         vulnerabilities.
                                                                  *:DyImagePin*
-:DyImagePin             Pin them to their digests.  See |dyneo-images|.
+:DyImagePin             Pin them to their digests.
+                                                              *:DyImageVerify*
+:DyImageVerify          Check who signed them, against
+                        `DyNeo.image_signers`.  See |dyneo-images|.
+
+                                                                  *:DyEnvDiff*
+:DyEnvDiff [{other}]    Compare this settings file with {other}, or one
+                        beside it asked for, key by key.  See
+                        |dyneo-envdiff|.
+
+                                                                     *:DyRego*
+:DyRego [{input}]       Try this policy against {input}, asked for unless
+                        given, as it is typed.
+:DyRego test            Run the tests of its folder, and mark the lines they
+                        leave uncovered.
+:DyRego clear           Remove the marks.  See |dyneo-rego|.
 
                                                                    *:DyTfPlan*
 :DyTfPlan               Plan the module of this buffer and show it on its

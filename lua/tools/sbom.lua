@@ -37,6 +37,8 @@ M.OSV_URL = 'https://api.osv.dev/v1/querybatch'
 ---@field source 'lazy.nvim'|'mason'|'lockfile'
 ---@field file? string The lockfile it was read from
 ---@field line? integer Where in it, 1-based
+---@field dir? string Where it is installed, for its license file
+---@field license? string SPDX id or expression, when known
 
 ---@param text string
 ---@return string
@@ -122,8 +124,9 @@ end
 --- The plugins of a lazy.nvim lockfile
 ---@param lockfile string
 ---@param urls table<string, string> Plugin name to the URL it was cloned from
+---@param dirs? table<string, string> Plugin name to where it is cloned
 ---@return DySbomComponent[]
-function M.plugins(lockfile, urls)
+function M.plugins(lockfile, urls, dirs)
   local components = {}
   for name, entry in pairs(read_json(lockfile) or {}) do
     if type(entry) == 'table' and type(entry.commit) == 'string' then
@@ -132,6 +135,7 @@ function M.plugins(lockfile, urls)
         version = entry.commit,
         purl = M.plugin_purl(name, urls[name], entry.commit),
         source = 'lazy.nvim',
+        dir = dirs and dirs[name],
       })
     end
   end
@@ -163,6 +167,7 @@ function M.mason(root)
           version = version,
           purl = purl,
           source = 'mason',
+          dir = vim.fs.joinpath(packages, name),
         })
       end
     end
@@ -178,11 +183,11 @@ function M.components()
 
   local ok_config, Config = pcall(require, 'lazy.core.config')
   if ok_config and Config.options and Config.options.lockfile then
-    local urls = {}
+    local urls, dirs = {}, {}
     for name, plugin in pairs(Config.plugins or {}) do
-      urls[name] = plugin.url
+      urls[name], dirs[name] = plugin.url, plugin.dir
     end
-    vim.list_extend(components, M.plugins(Config.options.lockfile, urls))
+    vim.list_extend(components, M.plugins(Config.options.lockfile, urls, dirs))
   end
 
   local ok_settings, settings = pcall(require, 'mason.settings')
@@ -195,6 +200,240 @@ function M.components()
     return a.name < b.name
   end)
   return components
+end
+
+--- What the text of a license says, in order: the first rule whose phrases
+--- are all in it names it. A GPL names its version, and the later version
+--- comes first, since "version 2" is in "version 2.1" too.
+local LICENSE_RULES = {
+  { 'AGPL-3.0', { 'gnu affero general public license' } },
+  {
+    'LGPL-3.0',
+    { 'gnu lesser general public license', 'version 3' },
+  },
+  {
+    'LGPL-2.1',
+    { 'gnu lesser general public license', 'version 2.1' },
+  },
+  -- The older name of the LGPL, whose text mentions the GPL too
+  { 'LGPL-2.0', { 'gnu library general public license' } },
+  { 'GPL-3.0', { 'gnu general public license', 'version 3' } },
+  { 'GPL-2.0', { 'gnu general public license', 'version 2' } },
+  { 'Apache-2.0', { 'apache license', 'version 2.0' } },
+  { 'MPL-2.0', { 'mozilla public license', '2.0' } },
+  { 'MIT', { 'permission is hereby granted, free of charge' } },
+  {
+    'BSD-3-Clause',
+    { 'redistribution and use in source and binary forms', 'neither the name' },
+  },
+  { 'BSD-2-Clause', { 'redistribution and use in source and binary forms' } },
+  {
+    'ISC',
+    {
+      'permission to use, copy, modify, and/or distribute this software',
+      'provided that the above copyright notice',
+    },
+  },
+  {
+    '0BSD',
+    { 'permission to use, copy, modify, and/or distribute this software' },
+  },
+  {
+    'Unlicense',
+    {
+      'this is free and unencumbered software released into the public domain',
+    },
+  },
+  { 'WTFPL', { 'do what the fuck you want to' } },
+  { 'CC0-1.0', { 'cc0 1.0' } },
+  {
+    'Zlib',
+    { 'altered source versions must be plainly marked as such' },
+  },
+  { 'Vim', { 'vim license' } },
+  { 'Vim', { 'same terms as vim' } },
+}
+
+--- The SPDX license `text` is, from a `SPDX-License-Identifier` line or else
+--- from what it says; nil when it says nothing known
+---@param text string
+---@return string?
+function M.detect_license(text)
+  local spdx = text:match('SPDX%-License%-Identifier:%s*([^\n]-)%s*%*?/?%s*\n')
+    or text:match('SPDX%-License%-Identifier:%s*([^\n]-)%s*$')
+  if spdx and spdx ~= '' then return spdx end
+  local plain = text:lower():gsub('%s+', ' ')
+  for _, rule in ipairs(LICENSE_RULES) do
+    local all = true
+    for _, phrase in ipairs(rule[2]) do
+      if not plain:find(phrase, 1, true) then
+        all = false
+        break
+      end
+    end
+    if all then return rule[1] end
+  end
+  return nil
+end
+
+--- Bytes of a license file read: the name and the phrases that tell it
+--- apart are at its top
+M.LICENSE_BYTES = 8192
+
+--- The license of what is installed in `dir`, from its license file
+---@param dir string
+---@return string?
+function M.license_of_dir(dir)
+  local names = {}
+  for name, kind in vim.fs.dir(dir) do
+    local upper = name:upper()
+    if
+      kind == 'file'
+      and (
+        upper:match('^LICEN[CS]E')
+        or upper:match('^COPYING')
+        or upper:match('^UNLICENSE')
+      )
+    then
+      table.insert(names, name)
+    end
+  end
+  -- `LICENSE` before `LICENSE-APACHE`, so one file decides, the same each time
+  table.sort(names)
+  for _, name in ipairs(names) do
+    local file = io.open(vim.fs.joinpath(dir, name), 'r')
+    if file then
+      local text = file:read(M.LICENSE_BYTES) or ''
+      file:close()
+      local license = M.detect_license(text)
+      if license then return license end
+    end
+  end
+  return nil
+end
+
+--- The licenses Mason's registry gives for package `name`, if it is loaded
+---@param name string
+---@return string[]?
+local function mason_licenses(name)
+  local ok, registry = pcall(require, 'mason-registry')
+  if not ok then return nil end
+  local found, package = pcall(registry.get_package, name)
+  local licenses = found
+    and package
+    and vim.tbl_get(package, 'spec', 'licenses')
+  return type(licenses) == 'table' and licenses or nil
+end
+
+--- `components` with the license of each: its license file, else -- for a
+--- Mason package -- what the registry says
+---@param components DySbomComponent[]
+---@param registry? fun(name: string): string[]? Mason's, unless given
+---@return DySbomComponent[]
+function M.with_licenses(components, registry)
+  registry = registry or mason_licenses
+  for _, component in ipairs(components) do
+    if not component.license and component.dir then
+      component.license = M.license_of_dir(component.dir)
+    end
+    if not component.license and component.source == 'mason' then
+      local licenses = registry(component.name)
+      if licenses and #licenses > 0 then
+        component.license = table.concat(licenses, ' AND ')
+      end
+    end
+  end
+  return components
+end
+
+--- Whether a license of `expression` is one of `ids`, a trailing `*` in one
+--- matching any version: `AGPL-*` matches `MIT OR AGPL-3.0`
+---@param expression string
+---@param ids string[]
+---@return boolean
+function M.license_matches(expression, ids)
+  for token in expression:gmatch('[%w%.%-%+]+') do
+    for _, id in ipairs(ids) do
+      local prefix = id:match('^(.-)%*$')
+      if
+        token == id
+        or (prefix and token:sub(1, #prefix) == prefix and #token > #prefix)
+      then
+        return true
+      end
+    end
+  end
+  return false
+end
+
+--- The report of the licenses of `components` under `policy`: the denied,
+--- those to review and the unknown first, then how many of each license
+---@param components DySbomComponent[]
+---@param policy DyLicensePolicy
+---@return string[] lines
+---@return { deny: integer, review: integer, unknown: integer, total: integer }
+function M.license_report(components, policy)
+  local groups = { deny = {}, review = {}, unknown = {} }
+  local tally = {}
+  for _, component in ipairs(components) do
+    local label = ('%s %s (%s)'):format(
+      component.name,
+      component.version:sub(1, 12),
+      component.source
+    )
+    local license = component.license
+    if not license then
+      table.insert(groups.unknown, '- ' .. label)
+    else
+      tally[license] = (tally[license] or 0) + 1
+      local item = ('- %s: %s'):format(label, license)
+      if M.license_matches(license, policy.deny or {}) then
+        table.insert(groups.deny, item)
+      elseif M.license_matches(license, policy.review or {}) then
+        table.insert(groups.review, item)
+      end
+    end
+  end
+  local lines = {
+    '# Licenses',
+    '',
+    ('%d plugins and packages: %d denied, %d to review, %d unknown.'):format(
+      #components,
+      #groups.deny,
+      #groups.review,
+      #groups.unknown
+    ),
+    'Denied and reviewed as `DyNeo.license_policy` says.',
+  }
+  for _, section in ipairs({
+    { 'deny', 'Denied' },
+    { 'review', 'To review' },
+    { 'unknown', 'Unknown' },
+  }) do
+    if #groups[section[1]] > 0 then
+      vim.list_extend(lines, { '', '## ' .. section[2], '' })
+      vim.list_extend(lines, groups[section[1]])
+    end
+  end
+  local names = vim.tbl_keys(tally)
+  table.sort(names, function(a, b)
+    if tally[a] ~= tally[b] then return tally[a] > tally[b] end
+    return a < b
+  end)
+  vim.list_extend(
+    lines,
+    { '', '## By license', '', '| License | Count |', '| --- | ---: |' }
+  )
+  for _, name in ipairs(names) do
+    table.insert(lines, ('| %s | %d |'):format(name, tally[name]))
+  end
+  return lines,
+    {
+      deny = #groups.deny,
+      review = #groups.review,
+      unknown = #groups.unknown,
+      total = #components,
+    }
 end
 
 --- A random version 4 UUID, for the serial number of a document
@@ -234,22 +473,25 @@ function M.bom(components, now)
         ['bom-ref'] = 'dyneo',
       },
     },
-    components = vim.tbl_map(
-      function(component)
-        return {
-          type = 'library',
-          ['bom-ref'] = component.purl
-            or (component.source .. ':' .. component.name),
-          name = component.name,
-          version = component.version,
-          purl = component.purl,
-          properties = {
-            { name = 'dyneo:installed-by', value = component.source },
-          },
-        }
-      end,
-      components
-    ),
+    components = vim.tbl_map(function(component)
+      return {
+        type = 'library',
+        ['bom-ref'] = component.purl
+          or (component.source .. ':' .. component.name),
+        name = component.name,
+        version = component.version,
+        purl = component.purl,
+        -- An id alone, an expression -- `MIT OR Apache-2.0` -- as one
+        licenses = component.license and {
+          component.license:find('%s') and {
+            expression = component.license,
+          } or { license = { id = component.license } },
+        } or nil,
+        properties = {
+          { name = 'dyneo:installed-by', value = component.source },
+        },
+      }
+    end, components),
   }
 end
 
@@ -769,8 +1011,8 @@ function M.ask_lockfiles(files, err)
   notify(
     ('Asking OSV about %d packages of %d lockfiles…'):format(#queries, #files)
   )
-  M.ask_osv(queries, asked, function(findings, err)
-    if not findings then return notify(err, vim.log.levels.ERROR) end
+  M.ask_osv(queries, asked, function(findings, osv_err)
+    if not findings then return notify(osv_err, vim.log.levels.ERROR) end
     local summary = ('%d of %d packages with known vulnerabilities'):format(
       #findings,
       #asked
@@ -780,14 +1022,41 @@ function M.ask_lockfiles(files, err)
   end)
 end
 
---- `:DySbom [{path}]`, `:DySbom osv`, `:DySbom lock`
+--- Show the license of every plugin and Mason package, the ones
+--- `DyNeo.license_policy` denies or flags, and those not known, first
+function M.license()
+  local components = M.with_licenses(M.components())
+  if #components == 0 then
+    return notify('Nothing installed to read the licenses of')
+  end
+  local policy = (rawget(_G, 'DyNeo') or {}).license_policy
+    or { deny = {}, review = {} }
+  local lines, counts = M.license_report(components, policy)
+  scratch(lines, 'markdown')
+  notify(
+    ('%d denied, %d to review, %d unknown of %d'):format(
+      counts.deny,
+      counts.review,
+      counts.unknown,
+      counts.total
+    ),
+    counts.deny > 0 and vim.log.levels.ERROR
+      or (counts.review + counts.unknown > 0 and vim.log.levels.WARN)
+      or nil
+  )
+end
+
+M.SUBCOMMANDS = { 'osv', 'lock', 'license' }
+
+--- `:DySbom [{path}]`, `:DySbom osv`, `:DySbom lock`, `:DySbom license`
 ---@param args { fargs: string[] }
 function M.command(args)
   local target = args.fargs[1]
   if target == 'osv' then return M.osv() end
   if target == 'lock' then return M.lock() end
+  if target == 'license' then return M.license() end
 
-  local components = M.components()
+  local components = M.with_licenses(M.components())
   local json = to_json(M.bom(components))
   if not target then return scratch(vim.split(json, '\n'), 'json') end
   local path = vim.fn.fnamemodify(vim.fn.expand(target), ':p')

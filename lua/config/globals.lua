@@ -65,6 +65,34 @@ end
 --- from nothing may need.
 DyNeo.quarantine_window = 7 * 24 * 60 * 60
 
+---@class DyImageSigner
+---@field image string Lua pattern the repository of an image matches, its
+--- tag and digest left out and a Docker Hub name in full (`nginx` is
+--- `docker.io/library/nginx`): `'^ghcr%.io/my%-org/'`
+---@field key? string The public key, or KMS URI, of a key-pair signature
+---@field identity? string Regular expression of the keyless identity, the
+--- workflow that signed: `'^https://github%.com/my%-org/'`
+---@field issuer? string Regular expression of its OIDC issuer
+
+---@type DyImageSigner[] Who must have signed the images of a repository,
+--- for `:DyImageVerify`; the first that matches an image is the one asked
+--- for. An image none of them names is checked for any keyless signature.
+DyNeo.image_signers = {}
+
+---@class DyLicensePolicy
+---@field deny string[] SPDX ids an error is made of; a trailing `*` matches
+--- every version: `'AGPL-*'`
+---@field review string[] SPDX ids a warning is made of
+
+---@type DyLicensePolicy The licenses `:DySbom license` flags. Copyleft is no
+--- concern for an editor nobody else receives, so by default only the
+--- licenses that limit how it may be used -- network copyleft, source
+--- available -- are named, as ones to look at.
+DyNeo.license_policy = {
+  deny = {},
+  review = { 'AGPL-*', 'SSPL-*', 'BUSL-*', 'Elastic-*' },
+}
+
 ---@alias DyAiTarget
 ---| 'avante' # Avante's sidebar, with whatever provider it is on
 ---| 'sidekick' # The AI CLI sidekick has open in its terminal

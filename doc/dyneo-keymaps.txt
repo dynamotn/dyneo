@@ -299,8 +299,10 @@ one of the same keys in those buffers.
 ==============================================================================
 <leader>i  infra
 
+`<leader>iR`           n      Rego Tests and Coverage
 `<leader>ia`           n      Architecture Diagram
 `<leader>ic`           n      Switch Kube Context
+`<leader>id`           n      Compare Environments
 `<leader>ie`           n      Certificate Expiry
 `<leader>ii`           n      Decode Certificate, Key or JWT
 `<leader>ij`           n      Journal
@@ -308,6 +310,7 @@ one of the same keys in those buffers.
 `<leader>in`           n      Switch Kube Namespace
 `<leader>ip`           n      Pod Logs
 `<leader>iq`           n      Query JSON/YAML (jq, yq)
+`<leader>ir`           n      Rego Playground
 `<leader>it`           n      Explain Cron Schedule
 `<leader>ix`           n      Certificate Chain of File
 
@@ -317,7 +320,9 @@ one of the same keys in those buffers.
 `<leader>kA`           n      Allow Buffer for AI
 `<leader>kL`           n      AI Handover Log
 `<leader>kR`           n      Recheck Buffer for AI
+`<leader>kU`           n      Bump Dependency on Line
 `<leader>ka`           n      Why Kept From AI
+`<leader>kc`           n      Licenses of the Editor
 `<leader>kf`           n      Findings of a SARIF Report
 `<leader>kh`           n      Hex Dump of the File
 `<leader>ki`           n      Scan Images
@@ -327,6 +332,8 @@ one of the same keys in those buffers.
 `<leader>kq`           n      Held Back Updates
 `<leader>kr`           n      Review Pending Updates
 `<leader>ks`           n      SBOM of the Editor
+`<leader>ku`           n      Outdated Dependencies
+`<leader>kv`           n      Verify Image Signatures
 
 ==============================================================================
 <leader>o  overseer

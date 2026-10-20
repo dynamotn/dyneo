@@ -24,7 +24,10 @@ describe('plugin/sbom', function()
   it('completes a subcommand or a file to write', function()
     h.write(dir .. '/out.json', { '{}' })
     assert.same(
-      vim.list_extend({ 'osv', 'lock' }, vim.fn.getcompletion('', 'file')),
+      vim.list_extend(
+        { 'osv', 'lock', 'license' },
+        vim.fn.getcompletion('', 'file')
+      ),
       vim.fn.getcompletion('DySbom ', 'cmdline')
     )
     assert.same({ 'osv' }, vim.fn.getcompletion('DySbom o', 'cmdline'))

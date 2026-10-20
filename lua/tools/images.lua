@@ -7,6 +7,13 @@
 --- and the worst of their ids. `:DyImagePin` pins each tag to the digest it
 --- points at now, `nginx:1.27@sha256:…`, through `crane` or `skopeo`, so a
 --- tag pushed again does not change what runs.
+---
+--- `:DyImageVerify` asks `cosign verify` who signed each one. An image whose
+--- repository one of `DyNeo.image_signers` names must carry that signer's
+--- signature -- its key, or its keyless identity and issuer -- and is an
+--- error otherwise; any other is checked against the transparency log with
+--- whatever identity signed it, and that identity read out. Unsigned, or not
+--- checked at all -- offline, rate limited -- is a warning, never a pass.
 local M = {}
 
 --- The most a scan report may take; trivy's JSON of a large image is big
@@ -16,6 +23,10 @@ M.MAX_REPORT = 64 * 1024 * 1024
 M.PARALLEL = 4
 
 local ns = vim.api.nvim_create_namespace('dy_images')
+
+--- Signatures go in a namespace of their own, so a check of them and a scan
+--- never wipe out what the other found
+local verify_ns = vim.api.nvim_create_namespace('dy_images_verify')
 
 --- Milliseconds a scan of one image may take: the first one downloads the
 --- vulnerability database
@@ -285,6 +296,180 @@ function M.digest_command(image)
     }
   end
   return nil
+end
+
+--- The repository of `image` written out in full, as a registry names it:
+--- its tag and digest left out, a registry's port kept, and Docker Hub's
+--- short names expanded -- `nginx` is `docker.io/library/nginx`, `o/app`
+--- `docker.io/o/app` -- so a signer written for one form matches the other
+---@param image string
+---@return string
+function M.repository(image)
+  local name = M.split_digest(image)
+  local last = name:match('[^/]*$')
+  if last:find(':', 1, true) then name = name:gsub(':[^:/]*$', '') end
+  local first = name:match('^([^/]+)/')
+  -- A first part with a dot or a port, or `localhost`, is a registry
+  if not first or not (first:find('[.:]') or first == 'localhost') then
+    name = 'docker.io/' .. (first and name or ('library/' .. name))
+  end
+  return (name:gsub('^index%.docker%.io/', 'docker.io/'))
+end
+
+--- The first of `DyNeo.image_signers` whose `image` pattern the repository
+--- of `image` matches
+---@param image string
+---@return DyImageSigner?
+function M.signer(image)
+  local repository = M.repository(image)
+  local signers = (rawget(_G, 'DyNeo') or {}).image_signers
+  for _, signer in ipairs(type(signers) == 'table' and signers or {}) do
+    if type(signer.image) == 'string' and repository:match(signer.image) then
+      return signer
+    end
+  end
+  return nil
+end
+
+--- The `cosign verify` of `image`: against the key or the keyless identity
+--- of its signer, or -- with none configured -- any keyless identity, the
+--- signature still checked against the transparency log and the identity
+--- read out of it
+---@param image string
+---@return string[]
+function M.verify_command(image)
+  local command = { 'cosign', 'verify', '--output', 'json' }
+  local signer = M.signer(image)
+  if signer and signer.key then
+    vim.list_extend(command, { '--key', signer.key })
+  else
+    vim.list_extend(command, {
+      '--certificate-identity-regexp',
+      signer and signer.identity or '.*',
+      '--certificate-oidc-issuer-regexp',
+      signer and signer.issuer or '.*',
+    })
+  end
+  return vim.list_extend(command, { '--', image })
+end
+
+--- Milliseconds `cosign verify` may take: it asks the registry, and the
+--- transparency log of a keyless signature
+M.VERIFY_TIMEOUT = 2 * 60 * 1000
+
+---@alias DyImageVerdict 'verified'|'mismatch'|'unsigned'|'unchecked'
+
+--- What `cosign verify` of `image` said: the verdict, and who signed it
+---@param image string
+---@param result DyRunResult
+---@return DyImageVerdict verdict
+---@return string detail
+function M.verdict(image, result)
+  local err = vim.trim(result.stderr or '')
+  if result.code == 0 and not result.cut then
+    local ok, signatures = pcall(
+      vim.json.decode,
+      result.stdout or '',
+      { luanil = { object = true, array = true } }
+    )
+    local first = ok and type(signatures) == 'table' and signatures[1]
+    local optional = type(first) == 'table' and first.optional or {}
+    if type(optional) ~= 'table' then optional = {} end
+    local subject = optional.Subject or optional.subject
+    if subject then
+      return 'verified',
+        ('signed by %s (%s)'):format(subject, optional.Issuer or 'no issuer')
+    end
+    return 'verified', 'signed with the key expected'
+  end
+  local unsigned = err:find('no signatures found', 1, true)
+  local other = err:find('no matching signatures', 1, true)
+  -- An image a signer is configured for must carry its signature: none at
+  -- all is as wrong as another's
+  if (unsigned or other) and M.signer(image) then
+    return 'mismatch',
+      unsigned and 'no signature, but one by the signer expected is required'
+        or 'signed, but not by the signer expected'
+  end
+  if unsigned or other then return 'unsigned', 'no signature' end
+  return 'unchecked',
+    'could not be checked: ' .. require('util.system').failure(result, 'cosign')
+end
+
+local VERDICT_SEVERITY = {
+  verified = vim.diagnostic.severity.INFO,
+  mismatch = vim.diagnostic.severity.ERROR,
+  unsigned = vim.diagnostic.severity.WARN,
+  unchecked = vim.diagnostic.severity.WARN,
+}
+
+--- Check the signature of every image of the buffer with `cosign verify`,
+--- and say on each line who signed it -- or that nobody did, someone else
+--- did, or it could not be checked
+---@param bufnr? integer
+function M.verify(bufnr)
+  bufnr = (bufnr == nil or bufnr == 0) and vim.api.nvim_get_current_buf()
+    or bufnr
+  local refs = M.images(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
+  if #refs == 0 then return notify('No image named in this buffer') end
+  if vim.fn.executable('cosign') ~= 1 then
+    return notify('cosign is not installed', vim.log.levels.ERROR)
+  end
+  local order, seen = {}, {}
+  for _, ref in ipairs(refs) do
+    if not seen[ref.image] then
+      seen[ref.image] = true
+      table.insert(order, ref.image)
+    end
+  end
+  vim.diagnostic.reset(verify_ns, bufnr)
+  ---@type table<string, { verdict: DyImageVerdict, detail: string }>
+  local found = {}
+  require('util.system').each(order, M.PARALLEL, function(image, done)
+    require('util.system').run(
+      M.verify_command(image),
+      { timeout = M.VERIFY_TIMEOUT },
+      function(result)
+        local verdict, detail = M.verdict(image, result)
+        found[image] = { verdict = verdict, detail = detail }
+        done()
+      end
+    )
+  end, function()
+    if not vim.api.nvim_buf_is_valid(bufnr) then return end
+    local diagnostics = {}
+    for _, ref in
+      ipairs(M.images(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)))
+    do
+      local result = found[ref.image]
+      if result then
+        table.insert(diagnostics, {
+          lnum = ref.line - 1,
+          col = 0,
+          severity = VERDICT_SEVERITY[result.verdict],
+          message = ('%s: %s'):format(ref.image, result.detail),
+          source = 'cosign',
+        })
+      end
+    end
+    vim.diagnostic.set(verify_ns, bufnr, diagnostics)
+    local counts = { verified = 0, mismatch = 0, unsigned = 0, unchecked = 0 }
+    for _, result in pairs(found) do
+      counts[result.verdict] = counts[result.verdict] + 1
+    end
+    notify(
+      ('%d images: %d verified, %d signed by another, %d unsigned, %d not checked'):format(
+        #order,
+        counts.verified,
+        counts.mismatch,
+        counts.unsigned,
+        counts.unchecked
+      ),
+      (counts.mismatch > 0 and vim.log.levels.ERROR)
+        or ((counts.unsigned + counts.unchecked) > 0 and vim.log.levels.WARN)
+        or nil
+    )
+  end)
 end
 
 --- Pin every image of the buffer to the digest its tag points at
