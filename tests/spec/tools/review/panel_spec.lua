@@ -230,6 +230,28 @@ describe('tools.review.panel', function()
         assert.equals(' CI: 1 pass · could not ask jenkins', lines[2])
       end)
 
+      it('says a run is keyed by name, and what waits for trust', function()
+        local lines = panel.render(session({
+          ci = {
+            runs = { run('running', 'name') },
+            errors = {},
+            waiting = { 'argo: after you trust the PR' },
+          },
+        }))
+        assert.equals(
+          ' CI: 1 running (by name) · argo: after you trust the PR',
+          lines[2]
+        )
+        lines = panel.render(session({
+          ci = {
+            runs = {},
+            errors = {},
+            waiting = { 'argo: after you trust the PR' },
+          },
+        }))
+        assert.equals(' CI: no runs · argo: after you trust the PR', lines[2])
+      end)
+
       it('says when a head has no run', function()
         local lines = panel.render(session({ ci = { runs = {}, errors = {} } }))
         assert.equals(' CI: no runs', lines[2])

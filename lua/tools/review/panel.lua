@@ -124,10 +124,10 @@ end
 function M.ci_line(session)
   local ci = session.ci
   if not ci then return session.ci_loading and ' CI: asking…' or nil end
-  local counts_of, by_branch = {}, false
+  local counts_of, keyed = {}, {}
   for _, run in ipairs(ci.runs) do
     counts_of[run.state] = (counts_of[run.state] or 0) + 1
-    by_branch = by_branch or run.by == 'branch'
+    if run.by ~= 'commit' then keyed[run.by] = true end
   end
   local parts = {}
   for _, state in ipairs(require('tools.review.ci').STATES) do
@@ -136,16 +136,23 @@ function M.ci_line(session)
     end
   end
   local line = table.concat(parts, ' · ')
-  if by_branch then line = line .. ' (by branch)' end
+  local by = vim.tbl_filter(function(key) return keyed[key] end, {
+    'branch',
+    'name',
+  })
+  if #by > 0 then line = line .. ' (by ' .. table.concat(by, ', ') .. ')' end
+  local pieces = { line ~= '' and line or nil }
   if #ci.errors > 0 then
     local names = vim.tbl_map(
       function(err) return err:match('^[^:]+') end,
       ci.errors
     )
-    local failed = 'could not ask ' .. table.concat(names, ', ')
-    line = line == '' and failed or (line .. ' · ' .. failed)
+    pieces[#pieces + 1] = 'could not ask ' .. table.concat(names, ', ')
   end
-  return ' CI: ' .. (line == '' and 'no runs' or line)
+  if #pieces == 0 then pieces[1] = 'no runs' end
+  -- Sources held back until the code may be trusted: not a failure
+  vim.list_extend(pieces, ci.waiting or {})
+  return ' CI: ' .. table.concat(pieces, ' · ')
 end
 
 --- The panel's lines, and what each line stands for

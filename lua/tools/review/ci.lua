@@ -2,10 +2,11 @@
 ---
 --- Reads and links, nothing more: logs stay with the CI tools. Forge runs are
 --- keyed by the head commit; Jenkins and Argo know no commit, so they are
---- asked for the head branch and marked `by = 'branch'`. Jenkins and Argo are
---- asked only when their target resolves: it reads the clone's config and the
---- kube context and runs no project code, so a held worktree is no reason to
---- skip them.
+--- asked for the head branch (Argo for the workflow's name) and marked so.
+--- Both are asked only when their target resolves. Jenkins' reads the clone's
+--- config, so a held worktree is no reason to skip it; Argo's names come from
+--- a file of the pull request and name what the reviewer's cluster is asked,
+--- so it waits for trust.
 local M = {}
 
 local forge = require('util.forge')
@@ -13,6 +14,12 @@ local system = require('util.system')
 
 --- Sources asked at once
 M.CONCURRENCY = 3
+
+--- Milliseconds a source has to answer, a little over the longest CLI call
+M.SOURCE_TIMEOUT = forge.TIMEOUT + 5000
+
+--- What the header says of a source held back until the code is trusted
+M.WAIT_FOR_TRUST = 'after you trust the PR'
 
 --- Workflow files of the pull request looked at for an Argo workflow
 M.ARGO_CANDIDATES = 20
@@ -28,13 +35,14 @@ M.STATES = { 'pass', 'fail', 'running', 'pending', 'skipped', 'attention' }
 ---@field name string
 ---@field state 'pass'|'fail'|'running'|'pending'|'skipped'|'attention'
 ---@field url? string
----@field by 'commit'|'branch' What the status is keyed on
+---@field by 'commit'|'branch'|'name' What the status is keyed on: the head, the head branch, or the workflow's name
 
 ---@class DyReviewCi
 ---@field runs DyReviewCiRun[]
 ---@field errors string[] `<source>: <reason>`, one per source that gave no answer
+---@field waiting? string[] `<source>: <reason>`, sources not asked yet
 
----@alias DyReviewCiSource fun(done: fun(runs?: DyReviewCiRun[], err?: string))
+---@alias DyReviewCiSource fun(done: fun(runs?: DyReviewCiRun[], err?: string, waiting?: string))
 
 --- The bucket of a status and conclusion
 ---@param status? string
@@ -173,8 +181,9 @@ end
 --- pipeline as one when it names none
 ---@param provider 'jenkins'|'argo'
 ---@param pipeline DyCiPipeline
+---@param by 'branch'|'name'
 ---@return DyReviewCiRun[]
-local function from_pipeline(provider, pipeline)
+local function from_pipeline(provider, pipeline, by)
   local runs = {}
   for _, job in ipairs(pipeline.jobs or {}) do
     runs[#runs + 1] = {
@@ -182,7 +191,7 @@ local function from_pipeline(provider, pipeline)
       name = tostring(job.name),
       state = bucket(job.status, job.conclusion),
       url = pipeline.url,
-      by = 'branch',
+      by = by,
     }
   end
   if #runs == 0 then
@@ -191,7 +200,7 @@ local function from_pipeline(provider, pipeline)
       name = tostring(pipeline.id),
       state = bucket(pipeline.status),
       url = pipeline.url,
-      by = 'branch',
+      by = by,
     }
   end
   return runs
@@ -211,7 +220,7 @@ local function jenkins(s)
       end
       ci.fetch(target, function(pipeline, e)
         if not pipeline then return done(nil, e or 'no answer') end
-        done(from_pipeline('jenkins', pipeline))
+        done(from_pipeline('jenkins', pipeline, 'branch'))
       end)
     end)
   end
@@ -247,12 +256,16 @@ local function argo(s)
   return function(done)
     local lines = M.argo_lines(s)
     if not lines then return done({}) end
+    -- The names come from the pull request, and the cluster is the
+    -- reviewer's own: asked once the reviewer has trusted the author
+    if not s.trusted then return done({}, nil, M.WAIT_FOR_TRUST) end
     local ci = require('tools.ci_argo')
     ci.target(s.worktree, lines, function(target, err)
       if not target then return done(nil, err or 'no workflow target') end
       ci.fetch(target, function(pipeline, e)
+        if e and e:find('^No run of') then return done({}) end
         if not pipeline then return done(nil, e or 'no answer') end
-        done(from_pipeline('argo', pipeline))
+        done(from_pipeline('argo', pipeline, 'name'))
       end)
     end)
   end
@@ -277,30 +290,46 @@ end
 --- A source that fails adds `<source>: <reason>` to `errors` and the others
 --- still answer; a source that gave runs and a reason (a cut list) does both.
 ---@param s DyReviewSession
----@param cb fun(runs: DyReviewCiRun[], errors: string[])
+---@param cb fun(runs: DyReviewCiRun[], errors: string[], waiting: string[])
 function M.status(s, cb)
   local sources = M.sources(s)
   local answers = {}
   system.each(sources, M.CONCURRENCY, function(source, done)
     local called = false
-    local function finish(runs, err)
+    local timer = vim.uv.new_timer()
+    local function finish(runs, err, waiting)
+      -- A late answer, after the deadline, is not heard
       if called then return end
       called = true
-      answers[source.name] = { runs = runs, err = err }
+      if timer then
+        timer:stop()
+        timer:close()
+      end
+      answers[source.name] = { runs = runs, err = err, waiting = waiting }
       done()
+    end
+    if timer then
+      timer:start(
+        M.SOURCE_TIMEOUT,
+        0,
+        vim.schedule_wrap(function() finish(nil, 'timed out') end)
+      )
     end
     local ok, raised = pcall(source.ask, finish)
     if not ok then finish(nil, tostring(raised)) end
   end, function()
-    local runs, errors = {}, {}
+    local runs, errors, waiting = {}, {}, {}
     for _, source in ipairs(sources) do
       local answer = answers[source.name]
       vim.list_extend(runs, answer.runs or {})
       if answer.err then
         errors[#errors + 1] = ('%s: %s'):format(source.name, answer.err)
       end
+      if answer.waiting then
+        waiting[#waiting + 1] = ('%s: %s'):format(source.name, answer.waiting)
+      end
     end
-    cb(runs, errors)
+    cb(runs, errors, waiting)
   end)
 end
 
@@ -312,11 +341,11 @@ function M.load(s)
   s.ci_loading = true
   local panel = require('tools.review.panel')
   panel.refresh(s)
-  M.status(s, function(runs, errors)
+  M.status(s, function(runs, errors, waiting)
     s.ci_loading = nil
     -- The review may have closed while the CLIs answered
     if require('tools.review.session').current() ~= s then return end
-    s.ci = { runs = runs, errors = errors }
+    s.ci = { runs = runs, errors = errors, waiting = waiting }
     panel.refresh(s)
   end)
 end
@@ -329,7 +358,7 @@ function M.label(run)
     run.state,
     run.name,
     run.provider,
-    run.by == 'branch' and ', by branch' or ''
+    run.by ~= 'commit' and ', by ' .. run.by or ''
   )
 end
 

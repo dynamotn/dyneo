@@ -92,13 +92,14 @@ describe('tools.review.ci', function()
 
   ---@return DyReviewCiRun[] runs
   ---@return string[] errors
+  ---@return string[] waiting
   local function status(s)
-    local done, runs, errors = false, nil, nil
-    ci.status(s, function(r, e)
-      done, runs, errors = true, r, e
+    local done, runs, errors, waiting = false, nil, nil, nil
+    ci.status(s, function(r, e, w)
+      done, runs, errors, waiting = true, r, e, w
     end)
     assert.is_true(vim.wait(10000, function() return done end, 5))
-    return runs, errors
+    return runs, errors, waiting
   end
 
   it('asks GitHub for the checks of the head commit', function()
@@ -358,6 +359,7 @@ describe('tools.review.ci', function()
       )
       fake('gh', { { 'check-runs', { total_count = 0, check_runs = {} } } })
       local s = session('github', {
+        trusted = true,
         files = {
           { path = 'other.yaml', blob = 'b0' },
           { path = 'ci/wf.yaml', blob = 'b1' },
@@ -367,7 +369,70 @@ describe('tools.review.ci', function()
       assert.same(workflow, vim.list_slice(lines, 1, 4))
       assert.equals('argo', runs[1].provider)
       assert.equals('running', runs[1].state)
-      assert.equals('branch', runs[1].by)
+      assert.equals('name', runs[1].by)
+    end)
+
+    local WORKFLOW = {
+      'apiVersion: argoproj.io/v1alpha1',
+      'kind: Workflow',
+      'metadata:',
+      '  name: nightly',
+    }
+
+    local function with_workflow(extra)
+      h.write(dir .. '/tree/wf.yaml', WORKFLOW)
+      fake('gh', { { 'check-runs', { total_count = 0, check_runs = {} } } })
+      return session(
+        'github',
+        vim.tbl_extend('force', {
+          files = { { path = 'wf.yaml', blob = 'b' } },
+        }, extra or {})
+      )
+    end
+
+    it('hold Argo back while the code is not trusted, and say so', function()
+      local called = false
+      restore[#restore + 1] = h.stub(
+        require('tools.ci_argo'),
+        'target',
+        function() called = true end
+      )
+      local runs, errors, waiting = status(with_workflow())
+      assert.is_false(called)
+      assert.same({}, runs)
+      assert.same({}, errors)
+      assert.same({ 'argo: after you trust the PR' }, waiting)
+    end)
+
+    it('stop waiting for a source at its deadline', function()
+      restore[#restore + 1] = h.stub(ci, 'SOURCE_TIMEOUT', 50)
+      local late
+      restore[#restore + 1] = h.stub(
+        require('tools.ci_argo'),
+        'target',
+        function(_, _, cb) late = cb end
+      )
+      local runs, errors = status(with_workflow({ trusted = true }))
+      assert.same({}, runs)
+      assert.same({ 'argo: timed out' }, errors)
+      -- A reply after the deadline changes nothing and raises nothing
+      late({ kind = 'Workflow', name = 'nightly' })
+    end)
+
+    it('take no run of the workflow for no runs, not a failure', function()
+      restore[#restore + 1] = h.stub(
+        require('tools.ci_argo'),
+        'target',
+        function(_, _, cb) cb({ kind = 'Workflow', name = 'nightly' }) end
+      )
+      restore[#restore + 1] = h.stub(
+        require('tools.ci_argo'),
+        'fetch',
+        function(_, cb) cb(nil, 'No run of nightly in kind/default') end
+      )
+      local runs, errors = status(with_workflow({ trusted = true }))
+      assert.same({}, runs)
+      assert.same({}, errors)
     end)
 
     it('leave Argo alone when no workflow changes', function()
