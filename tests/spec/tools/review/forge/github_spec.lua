@@ -476,6 +476,10 @@ exit 1
   describe('submit', function()
     local pull = { id = '7', head_sha = 'a7a7a7', base_sha = 'b7b7b7' }
     local REVIEWS = 'repos_o_r_pulls_7_reviews_per_page_100_page_1'
+    local COMMENTS =
+      'repos_o_r_pulls_7_reviews_302_comments_per_page_100_page_1'
+    local CHANGED =
+      'the pending review changed on GitHub; open the pull request again'
 
     --- A draft with `fields` over a plain one on the new side
     ---@param fields table
@@ -492,16 +496,26 @@ exit 1
       }, fields)
     end
 
-    --- Submit `drafts` with `verdict` and hand back the error and every
+    --- A draft imported from forge comment `n`
+    ---@param n integer
+    ---@return DyReviewDraft
+    local function imported(n)
+      return draft({
+        id = vim.fn.sha256('github:' .. n):sub(1, 12),
+        origin = 'forge',
+      })
+    end
+
+    --- Submit `drafts` with `review` and hand back the error and every
     --- `progress` report, as `{ draft id, forge id }`
-    local function submit(drafts, verdict)
+    local function submit(drafts, review)
       local reports = {}
       local err = wait(function(cb)
         github.submit(
           remote,
           pull,
           drafts,
-          verdict,
+          review,
           function(d, forge_id) table.insert(reports, { d.id, forge_id }) end,
           cb
         )
@@ -509,186 +523,250 @@ exit 1
       return err, reports
     end
 
-    local mix = {
-      draft({ id = 'line', path = 'a.lua', line = 3, body = 'One line.' }),
-      draft({
-        id = 'range',
-        path = 'a.lua',
-        start_line = 5,
-        line = 8,
-        body = 'A range.',
-        suggestion = { 'x = 1', 'y = 2' },
-      }),
-      draft({
-        id = 'old',
-        path = 'b.lua',
-        side = 'old',
-        line = 2,
-        body = 'Was.',
-      }),
-      draft({
-        id = 'file',
-        path = 'c.lua',
-        line = 40,
-        body = 'Outside.',
-        file_level = true,
-      }),
-      draft({ id = 'reply', reply_to = 'PRRT_1', body = 'Agreed.' }),
-      draft({ id = 'resolve', reply_to = 'PRRT_2', body = '', resolve = true }),
-      draft({ id = 'done', posted = 'X', body = 'Sent before.' }),
-    }
+    --- The GraphQL inputs of every call, in order
+    local function inputs()
+      return vim.tbl_map(
+        function(call) return call.body and call.body.variables.input end,
+        calls()
+      )
+    end
 
-    it('posts one review, then replies and resolutions', function()
+    --- Answer every write of a submit that succeeds
+    local function writes_succeed()
+      answer('graphql_DyReviewPullId', 'pull-id.json')
+      answer('graphql_DyReviewCreate', 'create-review.json')
+      answer('graphql_DyReviewResolve', 'resolve.json')
+      answer('graphql_DyReviewAddThread', 'add-thread.json')
+      answer('graphql_DyReviewReply', 'reply.json')
+      answer('graphql_DyReviewSubmit', 'submit-review.json')
+    end
+
+    it('fills one new pending review, then submits it last', function()
       answer('user', 'user.json')
       answer(REVIEWS, {})
-      answer('repos_o_r_pulls_7_reviews', 'review-posted.json')
-      answer('graphql_DyReviewThreadRoots', 'thread-nodes.json')
-      answer('repos_o_r_pulls_7_comments_701_replies', 'reply.json')
-      answer('graphql_DyReviewResolve', 'resolve.json')
-      local err, reports = submit(mix, 'request_changes')
+      writes_succeed()
+      local err, reports = submit({
+        draft({ id = 'line', path = 'a.lua', line = 3, body = 'One line.' }),
+        draft({
+          id = 'range',
+          path = 'a.lua',
+          start_line = 5,
+          line = 8,
+          body = 'A range.',
+          suggestion = { 'x = 1', 'y = 2' },
+        }),
+        draft({
+          id = 'old',
+          path = 'b.lua',
+          side = 'old',
+          line = 2,
+          body = 'Was.',
+        }),
+        draft({
+          id = 'file',
+          path = 'c.lua',
+          line = 40,
+          body = 'Outside.',
+          file_level = true,
+        }),
+        draft({ id = 'reply', reply_to = 'PRRT_1', body = 'Agreed.' }),
+        draft({
+          id = 'resolve',
+          reply_to = 'PRRT_2',
+          body = '',
+          resolve = true,
+        }),
+        draft({ id = 'done', posted = '111/5', body = 'Sent before.' }),
+      }, { verdict = 'request_changes', body = 'Summary.' })
       assert.is_nil(err)
-      local list = calls()
       assert.same({
         'user',
         REVIEWS,
-        'repos_o_r_pulls_7_reviews',
-        'graphql_DyReviewThreadRoots',
-        'repos_o_r_pulls_7_comments_701_replies',
+        'graphql_DyReviewPullId',
+        'graphql_DyReviewCreate',
         'graphql_DyReviewResolve',
+        'graphql_DyReviewAddThread',
+        'graphql_DyReviewAddThread',
+        'graphql_DyReviewAddThread',
+        'graphql_DyReviewAddThread',
+        'graphql_DyReviewReply',
+        'graphql_DyReviewSubmit',
       }, keys())
+      local list = inputs()
+      assert.same(
+        { owner = 'o', name = 'r', number = 7 },
+        calls()[3].body.variables
+      )
+      assert.same({ pullRequestId = 'PR_7', commitOID = 'a7a7a7' }, list[4])
+      assert.same({ threadId = 'PRRT_2' }, list[5])
+      local review = 'PRR_900'
       assert.same({
-        'api',
-        '--hostname',
-        'github.com',
-        '--method',
-        'POST',
-        '--input',
-        '-',
-        'repos/o/r/pulls/7/reviews',
-      }, list[3].args)
+        pullRequestReviewId = review,
+        path = 'a.lua',
+        body = 'One line.',
+        line = 3,
+        side = 'RIGHT',
+        subjectType = 'LINE',
+      }, list[6])
       assert.same({
-        commit_id = 'a7a7a7',
+        pullRequestReviewId = review,
+        path = 'a.lua',
+        body = 'A range.\n\n```suggestion\nx = 1\ny = 2\n```',
+        startLine = 5,
+        startSide = 'RIGHT',
+        line = 8,
+        side = 'RIGHT',
+        subjectType = 'LINE',
+      }, list[7])
+      assert.same({
+        pullRequestReviewId = review,
+        path = 'b.lua',
+        body = 'Was.',
+        line = 2,
+        side = 'LEFT',
+        subjectType = 'LINE',
+      }, list[8])
+      assert.same({
+        pullRequestReviewId = review,
+        path = 'c.lua',
+        body = 'L40: Outside.',
+        subjectType = 'FILE',
+      }, list[9])
+      assert.same({
+        pullRequestReviewId = review,
+        pullRequestReviewThreadId = 'PRRT_1',
+        body = 'Agreed.',
+      }, list[10])
+      assert.same({
+        pullRequestReviewId = review,
         event = 'REQUEST_CHANGES',
-        comments = {
-          { path = 'a.lua', body = 'One line.', line = 3, side = 'RIGHT' },
-          {
-            path = 'a.lua',
-            body = 'A range.\n\n```suggestion\nx = 1\ny = 2\n```',
-            start_line = 5,
-            start_side = 'RIGHT',
-            line = 8,
-            side = 'RIGHT',
-          },
-          { path = 'b.lua', body = 'Was.', line = 2, side = 'LEFT' },
-          { path = 'c.lua', body = 'L40: Outside.', subject_type = 'file' },
-        },
-      }, list[3].body)
-      assert.same({ 'PRRT_1' }, list[4].body.variables.ids)
-      assert.same({ body = 'Agreed.' }, list[5].body)
-      assert.same({ input = { threadId = 'PRRT_2' } }, list[6].body.variables)
+        body = 'Summary.',
+      }, list[11])
       assert.same({
-        { 'line', '900' },
-        { 'range', '900' },
-        { 'old', '900' },
-        { 'file', '900' },
-        { 'reply', '801' },
         { 'resolve', 'PRRT_2' },
+        { 'line', '900/601' },
+        { 'range', '900/601' },
+        { 'old', '900/601' },
+        { 'file', '900/601' },
+        { 'reply', '900/801' },
       }, reports)
     end)
 
     it('adds to my pending review and submits it', function()
       answer('user', 'user.json')
       answer(REVIEWS, 'reviews.json')
-      answer('graphql_DyReviewAddThread', 'add-thread.json')
-      answer('graphql_DyReviewSubmit', 'submit-review.json')
+      answer(COMMENTS, 'review-comments.json')
+      writes_succeed()
       local err, reports = submit({
-        draft({ id = 'forge', origin = 'forge', body = 'Imported.' }),
-        draft({ id = 'range', start_line = 2, line = 4, body = 'New.' }),
-        draft({ id = 'file', line = 9, file_level = true, body = 'F.' }),
-      }, 'approve')
+        imported(501),
+        imported(502),
+        imported(503),
+        draft({ id = 'new', line = 4, body = 'New.' }),
+      }, { verdict = 'approve' })
       assert.is_nil(err)
-      local list = calls()
       assert.same({
         'user',
         REVIEWS,
-        'graphql_DyReviewAddThread',
+        COMMENTS,
         'graphql_DyReviewAddThread',
         'graphql_DyReviewSubmit',
       }, keys())
-      assert.same({
-        input = {
-          pullRequestReviewId = 'PRR_302',
-          path = 'a.lua',
-          body = 'New.',
-          line = 4,
-          side = 'RIGHT',
-          startLine = 2,
-          startSide = 'RIGHT',
-          subjectType = 'LINE',
-        },
-      }, list[3].body.variables)
-      assert.same({
-        input = {
-          pullRequestReviewId = 'PRR_302',
-          path = 'a.lua',
-          body = 'L9: F.',
-          subjectType = 'FILE',
-        },
-      }, list[4].body.variables)
+      local list = inputs()
+      assert.equals('PRR_302', list[4].pullRequestReviewId)
       assert.same(
-        { input = { pullRequestReviewId = 'PRR_302', event = 'APPROVE' } },
-        list[5].body.variables
+        { pullRequestReviewId = 'PRR_302', event = 'APPROVE' },
+        list[5]
       )
       assert.same({
-        { 'range', 'PRRT_NEW' },
-        { 'file', 'PRRT_NEW' },
-        { 'forge', 'PRR_302' },
+        { 'new', '302/601' },
+        { imported(501).id, '302/501' },
+        { imported(502).id, '302/502' },
+        { imported(503).id, '302/503' },
       }, reports)
+    end)
+
+    it('refuses a pending review holding a comment never imported', function()
+      answer('user', 'user.json')
+      answer(REVIEWS, 'reviews.json')
+      answer(COMMENTS, 'review-comments.json')
+      writes_succeed()
+      local err, reports = submit(
+        { imported(501), imported(502), draft({ id = 'new' }) },
+        { verdict = 'comment' }
+      )
+      assert.equals(CHANGED, err)
+      assert.same({}, reports)
+      assert.same({ 'user', REVIEWS, COMMENTS }, keys())
+    end)
+
+    it('refuses a pending review missing a comment sent into it', function()
+      answer('user', 'user.json')
+      answer(REVIEWS, 'reviews.json')
+      answer(COMMENTS, 'review-comments.json')
+      writes_succeed()
+      local err, reports = submit({
+        imported(501),
+        imported(502),
+        imported(503),
+        draft({ id = 'gone', posted = '302/999' }),
+      }, { verdict = 'comment' })
+      assert.equals(CHANGED, err)
+      assert.same({}, reports)
+      assert.same({ 'user', REVIEWS, COMMENTS }, keys())
+    end)
+
+    it('submits the pending review when everything is in it', function()
+      answer('user', 'user.json')
+      answer(REVIEWS, 'reviews.json')
+      answer(COMMENTS, 'review-comments.json')
+      writes_succeed()
+      local err, reports = submit({
+        draft({ id = 'a', posted = '302/501' }),
+        draft({ id = 'b', posted = '302/502' }),
+        draft({ id = 'c', posted = '302/503' }),
+        -- Published long ago in another review
+        draft({ id = 'old', posted = '111/5' }),
+      }, { verdict = 'comment', body = '' })
+      assert.is_nil(err)
+      assert.same(
+        { 'user', REVIEWS, COMMENTS, 'graphql_DyReviewSubmit' },
+        keys()
+      )
+      assert.same(
+        { pullRequestReviewId = 'PRR_302', event = 'COMMENT', body = '' },
+        inputs()[4]
+      )
+      assert.same({}, reports)
     end)
 
     it('refuses drafts whose pending review is gone', function()
       answer('user', 'user.json')
       answer(REVIEWS, {})
-      local err, reports =
-        submit({ draft({ id = 'forge', origin = 'forge' }) }, 'comment')
+      writes_succeed()
+      local err, reports = submit({ imported(501) }, { verdict = 'comment' })
       assert.is_string(err)
       assert.same({}, reports)
       assert.same({ 'user', REVIEWS }, keys())
     end)
 
     it('refuses a verdict GitHub does not have, asking nothing', function()
-      local err = submit({ draft({}) }, 'reject')
+      local err = submit({ draft({}) }, { verdict = 'reject' })
       assert.is_string(err)
       assert.same({}, calls())
     end)
 
-    it('stops at the first failure, keeping what was posted', function()
+    it('stops at the first failure, keeping what went in', function()
       answer('user', 'user.json')
       answer(REVIEWS, {})
-      answer('repos_o_r_pulls_7_reviews', 'review-posted.json')
-      answer('graphql_DyReviewThreadRoots', 'thread-nodes.json')
-      answer('repos_o_r_pulls_7_comments_701_replies', { code = 1 })
+      writes_succeed()
+      answer('graphql_DyReviewReply', { code = 1 })
       local err, reports = submit({
         draft({ id = 'line' }),
         draft({ id = 'reply', reply_to = 'PRRT_1' }),
-        draft({ id = 'resolve', reply_to = 'PRRT_2', resolve = true }),
-      }, 'comment')
+      }, { verdict = 'approve' })
       assert.is_string(err)
-      assert.same({ { 'line', '900' } }, reports)
-      assert.equals('repos_o_r_pulls_7_comments_701_replies', keys()[#calls()])
-    end)
-
-    it('sends no empty comment review', function()
-      answer('user', 'user.json')
-      answer(REVIEWS, {})
-      answer('graphql_DyReviewResolve', 'resolve.json')
-      local err, reports = submit(
-        { draft({ id = 'r', reply_to = 'PRRT_2', body = '', resolve = true }) },
-        'comment'
-      )
-      assert.is_nil(err)
-      assert.same({ 'user', REVIEWS, 'graphql_DyReviewResolve' }, keys())
-      assert.same({ { 'r', 'PRRT_2' } }, reports)
+      assert.same({ { 'line', '900/601' } }, reports)
+      assert.equals('graphql_DyReviewReply', keys()[#calls()])
     end)
   end)
 

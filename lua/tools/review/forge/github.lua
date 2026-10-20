@@ -49,7 +49,7 @@ end
 ---@return string?
 local function repo_path(remote)
   local owner, name = repo(remote)
-  if not owner then return nil end
+  if not (owner and name) then return nil end
   return ('repos/%s/%s'):format(forge.encode(owner), forge.encode(name))
 end
 
@@ -466,6 +466,33 @@ local function to_draft(comment)
   return draft
 end
 
+--- Every comment of pending review `review` of `pull`
+---@param remote DyForgeRemote
+---@param pull DyReviewPull
+---@param review table
+---@param on_done fun(comments?: table[], err?: string)
+local function review_comments(remote, pull, review, on_done)
+  local path = ('%s/pulls/%s/reviews/%d/comments?per_page=%d'):format(
+    repo_path(remote),
+    pull.id,
+    review.id,
+    M.PER_PAGE
+  )
+  pages(remote, path, function(rows, err, capped)
+    if not rows then return on_done(nil, err) end
+    -- Half the review would hide what it holds
+    if capped then
+      return on_done(nil, 'More pending comments than can be read on GitHub')
+    end
+    for _, comment in ipairs(rows) do
+      if type(comment) ~= 'table' or not int(comment.id) then
+        return on_done(nil, 'GitHub answered with a malformed comment')
+      end
+    end
+    on_done(rows)
+  end)
+end
+
 --- The comments of my pending review of `pull`, as drafts from the forge
 ---@param remote DyForgeRemote
 ---@param pull DyReviewPull
@@ -477,26 +504,9 @@ function M.pending(remote, pull, cb)
   pending_review(remote, pull, function(review, err)
     if err then return cb(nil, err) end
     if not review then return cb({}) end
-    local path = ('%s/pulls/%s/reviews/%d/comments?per_page=%d'):format(
-      repo_path(remote),
-      pull.id,
-      review.id,
-      M.PER_PAGE
-    )
-    pages(remote, path, function(rows, list_err, capped)
-      if not rows then return cb(nil, list_err) end
-      -- Half an import would submit what was never shown
-      if capped then
-        return cb(nil, 'More pending comments than can be read on GitHub')
-      end
-      local drafts = {}
-      for _, comment in ipairs(rows) do
-        if type(comment) ~= 'table' or not int(comment.id) then
-          return cb(nil, 'GitHub answered with a malformed comment')
-        end
-        drafts[#drafts + 1] = to_draft(comment)
-      end
-      cb(drafts)
+    review_comments(remote, pull, review, function(comments, list_err)
+      if not comments then return cb(nil, list_err) end
+      cb(vim.tbl_map(to_draft, comments))
     end)
   end)
 end
@@ -524,23 +534,6 @@ local function range_start(draft)
   end
 end
 
---- A draft as a comment of the REST review
----@param draft DyReviewDraft
----@return table
-local function rest_comment(draft)
-  local comment = { path = draft.path, body = body_of(draft) }
-  if draft.file_level then
-    comment.subject_type = 'file'
-    return comment
-  end
-  comment.line, comment.side = draft.line, SIDES[draft.side]
-  local start = range_start(draft)
-  if start then
-    comment.start_line, comment.start_side = start, comment.side
-  end
-  return comment
-end
-
 --- A draft as the input of `addPullRequestReviewThread`
 ---@param review_id string
 ---@param draft DyReviewDraft
@@ -564,14 +557,14 @@ local function thread_input(review_id, draft)
   return input
 end
 
-local ADD_THREAD = [[
-mutation DyReviewAddThread($input: AddPullRequestReviewThreadInput!) {
-  addPullRequestReviewThread(input: $input) { thread { id } }
+local PULL_ID = [[
+query DyReviewPullId($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) { pullRequest(number: $number) { id } }
 }]]
 
-local SUBMIT_REVIEW = [[
-mutation DyReviewSubmit($input: SubmitPullRequestReviewInput!) {
-  submitPullRequestReview(input: $input) { pullRequestReview { id } }
+local CREATE_REVIEW = [[
+mutation DyReviewCreate($input: AddPullRequestReviewInput!) {
+  addPullRequestReview(input: $input) { pullRequestReview { id databaseId } }
 }]]
 
 local RESOLVE = [[
@@ -579,11 +572,21 @@ mutation DyReviewResolve($input: ResolveReviewThreadInput!) {
   resolveReviewThread(input: $input) { thread { id isResolved } }
 }]]
 
-local THREAD_ROOTS = [[
-query DyReviewThreadRoots($ids: [ID!]!) {
-  nodes(ids: $ids) {
-    ... on PullRequestReviewThread { id comments(first: 1) { nodes { databaseId } } }
+local ADD_THREAD = [[
+mutation DyReviewAddThread($input: AddPullRequestReviewThreadInput!) {
+  addPullRequestReviewThread(input: $input) {
+    thread { id comments(first: 1) { nodes { databaseId } } }
   }
+}]]
+
+local ADD_REPLY = [[
+mutation DyReviewReply($input: AddPullRequestReviewThreadReplyInput!) {
+  addPullRequestReviewThreadReply(input: $input) { comment { id databaseId } }
+}]]
+
+local SUBMIT_REVIEW = [[
+mutation DyReviewSubmit($input: SubmitPullRequestReviewInput!) {
+  submitPullRequestReview(input: $input) { pullRequestReview { id } }
 }]]
 
 --- Run `worker` on each of `items` in turn, stopping at the first error
@@ -602,26 +605,139 @@ local function in_turn(items, worker, on_done)
   step(1)
 end
 
---- Add each new draft to pending review `review`, then submit it with
---- `event`: everything already in it, the imported drafts among them, goes
---- with it
----@param remote DyForgeRemote
+--- The forge id of comment `comment` of pending review `review`: the review
+--- is in it, so a later submit tells what that review should hold
+---@param review integer
+---@param comment integer
+---@return string
+local function posted_id(review, comment)
+  return ('%d/%d'):format(review, comment)
+end
+
+--- The review and comment of a forge id `posted_id` made, nil for another
+---@param posted any
+---@return integer? review
+---@return integer? comment
+local function parse_posted(posted)
+  if type(posted) ~= 'string' then return nil end
+  local review, comment = posted:match('^(%d+)/(%d+)$')
+  return tonumber(review), tonumber(comment)
+end
+
+--- Why pending review `review` is not what the drafts say it holds, nil when
+--- it is
+---
+--- It holds the imported drafts not yet sent and every draft sent into it
+--- before; a comment more or one less was made or removed on GitHub since,
+--- and submitting would publish what no one confirmed.
 ---@param review table
----@param new DyReviewDraft[]
----@param imported DyReviewDraft[]
----@param event string
+---@param comments table[]
+---@param drafts DyReviewDraft[]
+---@return string? err
+---@return table<string, integer> comment_of Comment id by imported draft id
+local function changed(review, comments, drafts)
+  local imported, sent, comment_of = {}, {}, {}
+  for _, draft in ipairs(drafts) do
+    local in_review, comment = parse_posted(draft.posted)
+    if comment and in_review == review.id then
+      sent[comment] = true
+    elseif not draft.posted and draft.origin == 'forge' then
+      imported[draft.id] = true
+    end
+  end
+  local held = 0
+  for _, comment in ipairs(comments) do
+    local id = forge_draft_id(comment.id)
+    if imported[id] then
+      comment_of[id] = comment.id
+    elseif not sent[comment.id] then
+      return 'the pending review changed on GitHub; open the pull request again',
+        comment_of
+    end
+    held = held + 1
+  end
+  local expected = vim.tbl_count(imported) + vim.tbl_count(sent)
+  if held ~= expected then
+    return 'the pending review changed on GitHub; open the pull request again',
+      comment_of
+  end
+  return nil, comment_of
+end
+
+--- Hand `on_done` a new pending review of `pull`, on the head GitHub knows
+---@param remote DyForgeRemote
+---@param pull DyReviewPull
+---@param on_done fun(review?: { id: integer, node_id: string }, err?: string)
+local function create_review(remote, pull, on_done)
+  local owner, name = repo(remote)
+  graphql(
+    remote,
+    PULL_ID,
+    { owner = owner, name = name, number = number(pull) },
+    function(data, err)
+      if not data then return on_done(nil, err) end
+      local pr = type(data.repository) == 'table'
+        and data.repository.pullRequest
+      local pull_id = type(pr) == 'table' and text(pr.id)
+      if not pull_id then
+        return on_done(nil, 'GitHub answered with no pull request')
+      end
+      graphql(
+        remote,
+        CREATE_REVIEW,
+        { input = { pullRequestId = pull_id, commitOID = pull.head_sha } },
+        function(created, create_err)
+          if not created then return on_done(nil, create_err) end
+          local review = type(created.addPullRequestReview) == 'table'
+            and created.addPullRequestReview.pullRequestReview
+          if
+            type(review) ~= 'table'
+            or not text(review.id)
+            or not int(review.databaseId)
+          then
+            return on_done(nil, 'GitHub started no review')
+          end
+          on_done({ id = review.databaseId, node_id = review.id })
+        end
+      )
+    end
+  )
+end
+
+--- Fill pending review `review` and submit it: resolutions, then new
+--- threads, then replies, each draft reported once it is in the review, and
+--- the verdict last
+---@param remote DyForgeRemote
+---@param review { id: integer, node_id: string }
+---@param groups { resolves: DyReviewDraft[], new: DyReviewDraft[], replies: DyReviewDraft[], imported: DyReviewDraft[] }
+---@param comment_of table<string, integer>
+---@param verdict { event: string, body?: string }
 ---@param progress fun(draft: DyReviewDraft, forge_id: string)
 ---@param on_done fun(err?: string)
-local function submit_pending(
+local function fill_and_submit(
   remote,
   review,
-  new,
-  imported,
-  event,
+  groups,
+  comment_of,
+  verdict,
   progress,
   on_done
 )
-  in_turn(new, function(draft, next)
+  --- A thread is resolved before its reply goes in: resolving again does
+  --- nothing, while a reply sent twice shows twice
+  local function resolve(draft, next)
+    graphql(
+      remote,
+      RESOLVE,
+      { input = { threadId = draft.reply_to } },
+      function(data, err)
+        if not data then return next(err) end
+        if body_of(draft) == '' then progress(draft, draft.reply_to) end
+        next()
+      end
+    )
+  end
+  local function add_thread(draft, next)
     graphql(
       remote,
       ADD_THREAD,
@@ -630,193 +746,131 @@ local function submit_pending(
         if not data then return next(err) end
         local added = type(data.addPullRequestReviewThread) == 'table'
           and data.addPullRequestReviewThread.thread
-        local id = type(added) == 'table' and text(added.id)
+        local comments = type(added) == 'table'
+          and type(added.comments) == 'table'
+          and added.comments.nodes
+        local first = type(comments) == 'table' and comments[1]
+        local id = type(first) == 'table' and int(first.databaseId)
         if not id then return next('GitHub added no review thread') end
-        progress(draft, id)
+        progress(draft, posted_id(review.id, id))
         next()
       end
     )
-  end, function(err)
-    if err then return on_done(err) end
-    graphql(
-      remote,
-      SUBMIT_REVIEW,
-      { input = { pullRequestReviewId = review.node_id, event = event } },
-      function(data, submit_err)
-        if not data then return on_done(submit_err) end
-        for _, draft in ipairs(imported) do
-          progress(draft, review.node_id)
-        end
-        on_done(nil)
-      end
-    )
-  end)
-end
-
---- Post one review of `new` with `event` on the head GitHub knows
----@param remote DyForgeRemote
----@param pull DyReviewPull
----@param new DyReviewDraft[]
----@param event string
----@param progress fun(draft: DyReviewDraft, forge_id: string)
----@param on_done fun(err?: string)
-local function post_review(remote, pull, new, event, progress, on_done)
-  -- A comment verdict with nothing in it is no review, and GitHub refuses it
-  if #new == 0 and event == 'COMMENT' then return on_done(nil) end
-  local body = {
-    commit_id = pull.head_sha,
-    event = event,
-    comments = vim.tbl_map(rest_comment, new),
-  }
-  forge.write(
-    remote,
-    'POST',
-    ('%s/pulls/%s/reviews'):format(repo_path(remote), pull.id),
-    body,
-    function(data, err)
+  end
+  local function add_reply(draft, next)
+    local input = {
+      pullRequestReviewId = review.node_id,
+      pullRequestReviewThreadId = draft.reply_to,
+      body = body_of(draft),
+    }
+    graphql(remote, ADD_REPLY, { input = input }, function(data, err)
+      if not data then return next(err) end
+      local reply = type(data.addPullRequestReviewThreadReply) == 'table'
+        and data.addPullRequestReviewThreadReply.comment
+      local id = type(reply) == 'table' and int(reply.databaseId)
+      if not id then return next('GitHub added no reply') end
+      progress(draft, posted_id(review.id, id))
+      next()
+    end)
+  end
+  local function submit()
+    local input = {
+      pullRequestReviewId = review.node_id,
+      event = verdict.event,
+      body = verdict.body,
+    }
+    graphql(remote, SUBMIT_REVIEW, { input = input }, function(data, err)
       if not data then return on_done(err) end
-      local id = tostring(type(data) == 'table' and data.id or 'review')
-      for _, draft in ipairs(new) do
-        progress(draft, id)
+      for _, draft in ipairs(groups.imported) do
+        progress(draft, posted_id(review.id, comment_of[draft.id]))
       end
       on_done(nil)
-    end
-  )
-end
-
---- Send replies and resolutions, after the review: a reply goes to the
---- first comment of its thread, a resolution to the thread. A thread is
---- resolved before the reply is sent, since resolving again does nothing,
---- while a reply sent twice shows twice.
----@param remote DyForgeRemote
----@param pull DyReviewPull
----@param drafts DyReviewDraft[]
----@param progress fun(draft: DyReviewDraft, forge_id: string)
----@param on_done fun(err?: string)
-local function send_replies(remote, pull, drafts, progress, on_done)
-  if #drafts == 0 then return on_done(nil) end
-  local ids, seen = {}, {}
-  for _, draft in ipairs(drafts) do
-    if body_of(draft) ~= '' and not seen[draft.reply_to] then
-      seen[draft.reply_to] = true
-      table.insert(ids, draft.reply_to)
-    end
+    end)
   end
-  local function send(roots)
-    in_turn(drafts, function(draft, next)
-      local function reply()
-        local text_body = body_of(draft)
-        if text_body == '' then
-          progress(draft, draft.reply_to)
-          return next()
-        end
-        local root = roots[draft.reply_to]
-        if not root then
-          return next('GitHub has no comment to reply to in a thread')
-        end
-        forge.write(
-          remote,
-          'POST',
-          ('%s/pulls/%s/comments/%d/replies'):format(
-            repo_path(remote),
-            pull.id,
-            root
-          ),
-          { body = text_body },
-          function(data, err)
-            if not data then return next(err) end
-            progress(draft, tostring(data.id or draft.reply_to))
-            next()
-          end
-        )
-      end
-      if not draft.resolve then return reply() end
-      graphql(
-        remote,
-        RESOLVE,
-        { input = { threadId = draft.reply_to } },
-        function(data, err)
-          if not data then return next(err) end
-          reply()
-        end
-      )
-    end, on_done)
-  end
-  if #ids == 0 then return send({}) end
-  graphql(remote, THREAD_ROOTS, { ids = ids }, function(data, err)
-    if not data then return on_done(err) end
-    local roots = {}
-    for _, node in ipairs(type(data.nodes) == 'table' and data.nodes or {}) do
-      local comments = type(node) == 'table'
-        and type(node.comments) == 'table'
-        and node.comments.nodes
-      local first = type(comments) == 'table' and comments[1]
-      local id = type(first) == 'table' and int(first.databaseId)
-      if id then roots[node.id] = id end
-    end
-    send(roots)
+  in_turn(groups.resolves, resolve, function(resolve_err)
+    if resolve_err then return on_done(resolve_err) end
+    in_turn(groups.new, add_thread, function(thread_err)
+      if thread_err then return on_done(thread_err) end
+      in_turn(groups.replies, add_reply, function(reply_err)
+        if reply_err then return on_done(reply_err) end
+        submit()
+      end)
+    end)
   end)
 end
 
---- Send `drafts` with `verdict`
+--- Send `drafts` with `review`'s verdict and text
 ---
---- With a pending review of mine on GitHub, the new comments are added to it
---- and it is submitted; otherwise one review carries them all. Replies and
---- resolutions follow. Each draft is reported through `progress` as soon as
---- its call succeeds, so a submit cut short and run again never sends it
---- twice; a draft already `posted` is never sent. A failed call stops the
---- submit there and is never tried again here: a call that timed out may
---- still have reached GitHub.
+--- Everything goes through one pending review: mine on GitHub when there is
+--- one, a new one otherwise. Threads are resolved, new threads and replies
+--- added to it, and it is submitted with the verdict last. A pending review
+--- holding more or less than the drafts say is refused before any write,
+--- since submitting it publishes all it holds. Each draft is reported
+--- through `progress` as soon as it is in the review, so a submit cut short
+--- and run again never adds it twice, and a run with nothing left to add
+--- still submits the review; a draft already `posted` is never sent. A
+--- failed call stops the submit there and is never tried again here: one
+--- that timed out may still have reached GitHub.
 ---@param remote DyForgeRemote
 ---@param pull DyReviewPull
 ---@param drafts DyReviewDraft[]
----@param verdict string
+---@param review { verdict: string, body?: string }
 ---@param progress fun(draft: DyReviewDraft, forge_id: string)
 ---@param cb fun(err?: string)
-function M.submit(remote, pull, drafts, verdict, progress, cb)
+function M.submit(remote, pull, drafts, review, progress, cb)
+  local verdict = type(review) == 'table' and review.verdict
   local event = EVENTS[verdict]
   if not event then return cb('GitHub has no verdict ' .. tostring(verdict)) end
   local bad = bad_remote(remote)
   if bad then return cb(bad) end
   if not number(pull) then return cb('Not a pull request number') end
-  local new, imported, replies = {}, {}, {}
+  local groups = { resolves = {}, new = {}, replies = {}, imported = {} }
   for _, draft in ipairs(drafts) do
     if not draft.posted then
       if draft.origin == 'forge' then
-        table.insert(imported, draft)
+        table.insert(groups.imported, draft)
       elseif draft.reply_to then
-        table.insert(replies, draft)
+        if draft.resolve then table.insert(groups.resolves, draft) end
+        if body_of(draft) ~= '' then table.insert(groups.replies, draft) end
       else
-        table.insert(new, draft)
+        table.insert(groups.new, draft)
       end
     end
   end
-  pending_review(remote, pull, function(review, err)
+  local verdict_input = { event = event, body = review.body }
+  local function fill(pending, comment_of)
+    fill_and_submit(
+      remote,
+      pending,
+      groups,
+      comment_of,
+      verdict_input,
+      progress,
+      cb
+    )
+  end
+  pending_review(remote, pull, function(pending, err)
     if err then return cb(err) end
-    local function after(review_err)
-      if review_err then return cb(review_err) end
-      send_replies(remote, pull, replies, progress, cb)
+    if not pending then
+      -- Submitted or deleted on GitHub since they were imported: sending
+      -- them again could show them twice
+      if #groups.imported > 0 then
+        return cb(
+          'The pending review on GitHub these drafts came from is gone; '
+            .. 'open the pull request again'
+        )
+      end
+      return create_review(remote, pull, function(created, create_err)
+        if not created then return cb(create_err) end
+        fill(created, {})
+      end)
     end
-    if review then
-      return submit_pending(
-        remote,
-        review,
-        new,
-        imported,
-        event,
-        progress,
-        after
-      )
-    end
-    -- Submitted or deleted on GitHub since they were imported: sending them
-    -- again could show them twice
-    if #imported > 0 then
-      return cb(
-        'The pending review on GitHub these drafts came from is gone; '
-          .. 'open the pull request again'
-      )
-    end
-    post_review(remote, pull, new, event, progress, after)
+    review_comments(remote, pull, pending, function(comments, list_err)
+      if not comments then return cb(list_err) end
+      local why, comment_of = changed(pending, comments, drafts)
+      if why then return cb(why) end
+      fill({ id = pending.id, node_id = pending.node_id }, comment_of)
+    end)
   end)
 end
 
