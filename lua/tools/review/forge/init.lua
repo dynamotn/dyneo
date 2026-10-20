@@ -40,7 +40,7 @@ local M = {}
 ---@field get fun(remote: DyForgeRemote, id: string, cb: fun(pull?: DyReviewPull, err?: string))
 ---@field threads fun(remote: DyForgeRemote, pull: DyReviewPull, cb: fun(threads?: DyReviewThread[], err?: string, capped?: boolean))
 ---@field pending fun(remote: DyForgeRemote, pull: DyReviewPull, cb: fun(drafts?: DyReviewDraft[], err?: string))
----@field submit fun(remote: DyForgeRemote, pull: DyReviewPull, drafts: DyReviewDraft[], review: { verdict: string, body?: string }, progress: fun(draft: DyReviewDraft, forge_id: string), cb: fun(err?: string, info?: { lost?: string[] }))
+---@field submit fun(remote: DyForgeRemote, pull: DyReviewPull, drafts: DyReviewDraft[], review: { verdict: string, body?: string }, progress: fun(draft: DyReviewDraft, forge_id: string), cb: fun(err?: string, info?: { lost?: string[], already?: integer, skipped?: string }))
 ---@field suggestion fun(lines: string[]): string?
 
 --- The module of each forge kind's adapter

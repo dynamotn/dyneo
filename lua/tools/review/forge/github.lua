@@ -406,10 +406,10 @@ local function forge_draft_id(id)
 end
 
 --- My pending review of `pull`, nil without an error when there is none,
---- and every review of `pull` GitHub listed
+--- every review of `pull` GitHub listed, and my login
 ---@param remote DyForgeRemote
 ---@param pull DyReviewPull
----@param on_done fun(review?: table, err?: string, reviews?: table[])
+---@param on_done fun(review?: table, err?: string, reviews?: table[], me?: string)
 local function pending_review(remote, pull, on_done)
   login(remote, function(me, err)
     if not me then return on_done(nil, err) end
@@ -434,10 +434,10 @@ local function pending_review(remote, pull, on_done)
           if not (int(review.id) and text(review.node_id)) then
             return on_done(nil, 'GitHub answered with a malformed review')
           end
-          return on_done(review, nil, rows)
+          return on_done(review, nil, rows, me)
         end
       end
-      on_done(nil, nil, rows)
+      on_done(nil, nil, rows, me)
     end)
   end)
 end
@@ -810,31 +810,68 @@ local function fill_and_submit(
   end)
 end
 
---- The drafts sent into a review GitHub no longer lists, and whether any
---- went into a review that is out (no longer pending)
+--- The state a review is left in by each event
+local SUBMITTED_AS = {
+  APPROVE = 'APPROVED',
+  REQUEST_CHANGES = 'CHANGES_REQUESTED',
+  COMMENT = 'COMMENTED',
+}
+
+--- The drafts sent into a review GitHub no longer lists, and the review
+--- the most recently sent draft went into
 ---@param drafts DyReviewDraft[]
 ---@param pending? table The pending review, whose drafts are checked apart
 ---@param reviews table[] Every review of the pull request
 ---@return string[] lost Their local ids
----@return boolean out
+---@return integer? last
 local function sent_before(drafts, pending, reviews)
-  local states = {}
+  local listed = {}
   for _, row in ipairs(reviews) do
-    if type(row) == 'table' and int(row.id) then states[row.id] = row.state end
+    if type(row) == 'table' and int(row.id) then listed[row.id] = true end
   end
-  local lost, out = {}, false
+  local lost, last, newest = {}, nil, -1
   for _, draft in ipairs(drafts) do
     local review, comment = parse_posted(draft.posted)
-    if comment and not (pending and review == pending.id) then
-      local state = states[review]
-      if state == nil then
+    if comment then
+      if comment > newest then
+        last, newest = review, comment
+      end
+      if not (pending and review == pending.id) and not listed[review] then
         table.insert(lost, draft.id)
-      elseif state ~= 'PENDING' then
-        out = true
       end
     end
   end
-  return lost, out
+  return lost, last
+end
+
+--- Whether review `last` is the one asked for again: my newest review out
+--- on GitHub, left with `event` and `body`. A submit that timed out after it
+--- reached GitHub reads that way; any other verdict or text is a new one.
+---@param reviews table[]
+---@param me string
+---@param last? integer
+---@param event string
+---@param body? string
+---@return boolean
+local function already_out(reviews, me, last, event, body)
+  if not last then return false end
+  local newest
+  for _, row in ipairs(reviews) do
+    if
+      type(row) == 'table'
+      and int(row.id)
+      and row.state ~= 'PENDING'
+      and type(row.user) == 'table'
+      and text(row.user.login, ''):lower() == me
+      and (not newest or row.id > newest.id)
+    then
+      newest = row
+    end
+  end
+  return newest ~= nil
+    and newest.id == last
+    and newest.state == SUBMITTED_AS[event]
+    and text(newest.body, '') == (body or '')
 end
 
 --- Send `drafts` with `review`'s verdict and text
@@ -850,16 +887,16 @@ end
 --- Refused before any write: a pending review holding more or less than the
 --- drafts say, since submitting it publishes all it holds; and drafts sent
 --- into a pending review since deleted, named in `info.lost`, which only
---- the caller may send again. No review is made when the one the drafts
---- went into is already out and there is nothing new, nor for a comment
---- verdict with nothing in it, which GitHub refuses: the threads are only
---- resolved.
+--- the caller may send again. With nothing new, the threads are only
+--- resolved when the review asked for is already out (`info.already`, its
+--- id) or would be an empty comment GitHub refuses (`info.skipped`); any
+--- other verdict goes out on its own.
 ---@param remote DyForgeRemote
 ---@param pull DyReviewPull
 ---@param drafts DyReviewDraft[]
 ---@param review { verdict: string, body?: string }
 ---@param progress fun(draft: DyReviewDraft, forge_id: string)
----@param cb fun(err?: string, info?: { lost?: string[] })
+---@param cb fun(err?: string, info?: { lost?: string[], already?: integer, skipped?: string })
 function M.submit(remote, pull, drafts, review, progress, cb)
   local verdict = type(review) == 'table' and review.verdict
   local event = EVENTS[verdict]
@@ -880,7 +917,9 @@ function M.submit(remote, pull, drafts, review, progress, cb)
       end
     end
   end
-  local nothing_new = #groups.new == 0 and #groups.replies == 0
+  local nothing_new = #groups.new == 0
+    and #groups.replies == 0
+    and #groups.imported == 0
   local empty_comment = event == 'COMMENT'
     and (review.body == nil or review.body == '')
   local verdict_input = { event = event, body = review.body }
@@ -895,12 +934,18 @@ function M.submit(remote, pull, drafts, review, progress, cb)
       cb
     )
   end
-  local function resolve_only()
-    resolve_all(remote, groups.resolves, progress, function(err) cb(err) end)
+  ---@param info table
+  local function resolve_only(info)
+    resolve_all(remote, groups.resolves, progress, function(err)
+      if err then return cb(err) end
+      cb(nil, info)
+    end)
   end
-  pending_review(remote, pull, function(pending, err, reviews)
+  local SKIPPED = { skipped = 'empty comment review' }
+  pending_review(remote, pull, function(pending, err, reviews, me)
     if err then return cb(err) end
-    local lost, out = sent_before(drafts, pending, reviews or {})
+    reviews = reviews or {}
+    local lost, last = sent_before(drafts, pending, reviews)
     if #lost > 0 then
       return cb(
         ('%d drafts went into a pending review that was deleted on GitHub'):format(
@@ -918,8 +963,14 @@ function M.submit(remote, pull, drafts, review, progress, cb)
             .. 'open the pull request again'
         )
       end
-      -- The review is out, its verdict with it, or would hold nothing
-      if nothing_new and (out or empty_comment) then return resolve_only() end
+      if
+        nothing_new
+        and me
+        and already_out(reviews, me, last, event, review.body)
+      then
+        return resolve_only({ already = last })
+      end
+      if nothing_new and empty_comment then return resolve_only(SKIPPED) end
       return create_review(remote, pull, function(created, create_err)
         if not created then return cb(create_err) end
         fill(created, {})
@@ -930,7 +981,7 @@ function M.submit(remote, pull, drafts, review, progress, cb)
       local why, comment_of = changed(pending, comments, drafts)
       if why then return cb(why) end
       if nothing_new and #comments == 0 and empty_comment then
-        return resolve_only()
+        return resolve_only(SKIPPED)
       end
       fill({ id = pending.id, node_id = pending.node_id }, comment_of)
     end)

@@ -761,11 +761,12 @@ exit 1
       answer('user', 'user.json')
       answer(REVIEWS, {})
       writes_succeed()
-      local err, reports = submit(
+      local err, reports, info = submit(
         { draft({ id = 'r', reply_to = 'PRRT_2', body = '', resolve = true }) },
         { verdict = 'comment' }
       )
       assert.is_nil(err)
+      assert.same({ skipped = 'empty comment review' }, info)
       assert.same({ 'user', REVIEWS, 'graphql_DyReviewResolve' }, keys())
       assert.same({ { 'r', 'PRRT_2' } }, reports)
     end)
@@ -793,17 +794,98 @@ exit 1
       assert.same({ 'user', REVIEWS }, keys())
     end)
 
-    it('sends nothing again once the review went out', function()
+    --- My review `id`, out with `state` and `body`
+    local function out_review(id, state, body)
+      return {
+        id = id,
+        node_id = 'PRR_' .. id,
+        state = state,
+        body = body,
+        user = { login = 'me' },
+      }
+    end
+
+    it('sends nothing again when a timed-out submit went out', function()
       answer('user', 'user.json')
-      answer(REVIEWS, { SUBMITTED })
+      answer(REVIEWS, { out_review(301, 'APPROVED', 'LGTM') })
       writes_succeed()
-      local err, reports = submit({
+      local err, reports, info = submit({
         draft({ id = 'a', posted = '301/1' }),
         draft({ id = 'b', posted = '301/2' }),
+        draft({ id = 'r', reply_to = 'PRRT_2', body = '', resolve = true }),
       }, { verdict = 'approve', body = 'LGTM' })
       assert.is_nil(err)
+      assert.same({ already = 301 }, info)
+      assert.same({ { 'r', 'PRRT_2' } }, reports)
+      assert.same({ 'user', REVIEWS, 'graphql_DyReviewResolve' }, keys())
+    end)
+
+    --- Submit `review` with nothing new after review rows `rows`, and
+    --- assert it was sent as a verdict-only review
+    local function sent_after(rows, review)
+      answer('user', 'user.json')
+      answer(REVIEWS, rows)
+      writes_succeed()
+      local err, reports, info =
+        submit({ draft({ id = 'a', posted = '301/1' }) }, review)
+      assert.is_nil(err)
+      assert.is_nil(info)
       assert.same({}, reports)
-      assert.same({ 'user', REVIEWS }, keys())
+      assert.same({
+        'user',
+        REVIEWS,
+        'graphql_DyReviewPullId',
+        'graphql_DyReviewCreate',
+        'graphql_DyReviewSubmit',
+      }, keys())
+      return inputs()[5]
+    end
+
+    it('sends a later verdict with nothing new', function()
+      local input = sent_after(
+        { SUBMITTED },
+        { verdict = 'approve', body = 'LGTM' }
+      )
+      assert.same(
+        { pullRequestReviewId = 'PRR_900', event = 'APPROVE', body = 'LGTM' },
+        input
+      )
+    end)
+
+    it('sends the same verdict again with another text', function()
+      local input = sent_after(
+        { out_review(301, 'APPROVED', 'LGTM') },
+        { verdict = 'approve', body = 'Ship it' }
+      )
+      assert.equals('Ship it', input.body)
+    end)
+
+    it(
+      'sends a verdict matching only an older review',
+      function()
+        sent_after({
+          out_review(301, 'APPROVED', 'LGTM'),
+          out_review(305, 'COMMENTED', ''),
+        }, { verdict = 'approve', body = 'LGTM' })
+      end
+    )
+
+    it('only resolves when an empty pending review would go out', function()
+      answer('user', 'user.json')
+      answer(REVIEWS, 'reviews.json')
+      answer(COMMENTS, {})
+      writes_succeed()
+      local err, reports, info = submit(
+        { draft({ id = 'r', reply_to = 'PRRT_2', body = '', resolve = true }) },
+        { verdict = 'comment', body = '' }
+      )
+      assert.is_nil(err)
+      assert.same({ skipped = 'empty comment review' }, info)
+      assert.same({ { 'r', 'PRRT_2' } }, reports)
+      assert.same(
+        { 'user', REVIEWS, COMMENTS, 'graphql_DyReviewResolve' },
+        keys()
+      )
     end)
 
     it('sends new drafts in a new review after one went out', function()
