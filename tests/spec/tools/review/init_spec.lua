@@ -1,7 +1,7 @@
 local h = require('helpers')
 
 describe('tools.review', function()
-  local review, git, forge, untrusted, diff, panel, store, plugin
+  local review, git, forge, untrusted, diff, panel, store, plugin, session
   local root, cleanup, calls, notes, restore, adapter, on_buffer, maps
 
   local remote =
@@ -50,6 +50,9 @@ describe('tools.review', function()
       'tools.review.diff',
       'tools.review.store',
       'tools.review.drafts',
+      'tools.review.session',
+      'tools.review.actions',
+      'tools.review.pickers',
       'util.untrusted'
     )
     review = require('tools.review')
@@ -63,7 +66,8 @@ describe('tools.review', function()
     root, cleanup = h.tmpdir()
     calls, notes, restore, maps = {}, {}, {}, {}
 
-    stub(review, 'repo_root', function(cb) cb(root) end)
+    session = require('tools.review.session')
+    stub(session, 'repo_root', function(cb) cb(root) end)
     stub(git, 'fetch', function(_, _, _, cb)
       rec('fetch')
       cb(true)
