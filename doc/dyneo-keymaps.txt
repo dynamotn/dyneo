@@ -263,11 +263,15 @@ one of the same keys in those buffers.
 
 `<leader>gB`           nx     Git Browse (open)
 `<leader>gD`           n      Git Diff (origin)
+`<leader>gF`           n      Function History
+`<leader>gF`           x      Selection History
 `<leader>gG`           n      Lazygit (cwd)
 `<leader>gH`           n      File History (CodeDiff)
 `<leader>gH`           x      Line History (CodeDiff)
 `<leader>gL`           n      Git Log (cwd)
+`<leader>gO`           n      Code Owners
 `<leader>gS`           n      Git Stash
+`<leader>gU`           n      Files Nobody Owns
 `<leader>gY`           nx     Git Browse (copy)
 `<leader>gb`           n      Git Blame Line
 `<leader>gd`           n      Git Diff (hunks)

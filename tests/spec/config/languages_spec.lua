@@ -386,6 +386,31 @@ describe('config.languages callbacks', function()
     )
   end)
 
+  it('lints a Postgres migration with squawk, and nothing else', function()
+    local squawk = entry(languages.sql.linters, 'squawk')
+    local cases = {
+      { '/app/db/migrations/0001_init.sql', 'sql', true },
+      { '/app/db/migrate/20260101_add.sql', 'sql', true },
+      { '/app/queries/report.sql', 'sql', false },
+      { '/app/db/migrations/0001_init.sql', 'mysql', false },
+      -- A file merely named so is no migration folder, nor a folder whose
+      -- name only starts so
+      { '/app/migrations.sql', 'sql', false },
+      { '/src/migrator/reports/q.sql', 'sql', false },
+      { '/data_migration/queries/x.sql', 'sql', false },
+      -- Flyway's
+      { '/app/src/main/resources/db/migration/V1__init.sql', 'sql', true },
+    }
+    for index, case in ipairs(cases) do
+      vim.api.nvim_set_current_buf(buffer(dir .. '/x' .. index, {}, case[2]))
+      assert.equals(
+        case[3],
+        squawk.opts.condition({ filename = case[1] }),
+        case[1] .. ' ' .. case[2]
+      )
+    end
+  end)
+
   it('runs the Markdown formatters only where they have work', function()
     local toc = entry(languages.markdown.formatters, 'markdown-toc')
     local lint = entry(languages.markdown.formatters, 'markdownlint-cli2')

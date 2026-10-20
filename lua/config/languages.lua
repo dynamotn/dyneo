@@ -1286,7 +1286,34 @@ return {
   sql = {
     filetypes = { 'sql', 'mysql', 'plsql' },
     parser = 'sql',
-    linters = { 'sqlfluff' },
+    linters = {
+      'sqlfluff',
+      -- What a Postgres migration does to a live table -- a lock held for
+      -- a rewrite, a `NOT NULL` column added without a default, an index
+      -- built without `CONCURRENTLY` -- in a folder of migrations only: it
+      -- reads every statement as Postgres, and a query is no migration
+      {
+        'squawk',
+        opts = {
+          condition = function(ctx)
+            if vim.bo.filetype ~= 'sql' then return false end
+            -- A folder named so, not one whose name merely starts so:
+            -- `migrator/`, `data_migration/`
+            local dir = vim.fs.dirname(ctx.filename or '')
+            for part in dir:gmatch('[^/]+') do
+              if
+                part == 'migrations'
+                or part == 'migration'
+                or part == 'migrate'
+              then
+                return true
+              end
+            end
+            return false
+          end,
+        },
+      },
+    },
     formatters = {
       {
         'sqlfluff',

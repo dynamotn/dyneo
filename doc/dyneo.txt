@@ -83,6 +83,8 @@ CONTENTS                                                      *dyneo-contents*
        9.11 Dependency rules .................................... |dyneo-deps|
        9.12 Threat models ..................................... |dyneo-threat|
        9.13 Postmortems ................................... |dyneo-postmortem|
+       9.14 Function history ................................. |dyneo-history|
+       9.15 Code owners ....................................... |dyneo-owners|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -1278,6 +1280,12 @@ formats them: with the project's `.sqlfluff` when there is one, otherwise
 in the dialect of the filetype -- `mysql`, `oracle` for `plsql`, and `ansi`
 for the rest.
 
+A `sql` file in a folder of migrations (`migrations/`, `migration/`,
+`migrate/`) is linted by `squawk` as well, for what a Postgres migration
+does to a live table: a lock held while a table is rewritten, a `NOT NULL`
+column added without a default, an index built without `CONCURRENTLY`.  A
+query elsewhere is no migration, and is left to sqlfluff.
+
 Inside a dbt project, a folder holding `dbt_project.yml`, `<leader>oo` offers
 `dbt compile`, `dbt run`, `dbt test` and `dbt show` for the model of the
 buffer, named after its file, run from the project root when `dbt` is on
@@ -1744,6 +1752,37 @@ incident expect few.
 the project, as |:DyWar| reads a review: its action items still open, in
 the quickfix list.
 
+9.14 Function history                                          *dyneo-history*
+
+`<leader>gF` (|:DyHistory|) shows the commits that changed the definition
+under the cursor -- the function, method, class or Terraform block that
+tree-sitter finds around it -- with what each changed, through `git log
+-L`, the last 30; in Visual mode, the lines selected.  A file reached
+through a link, as a chezmoi home links into its source, is followed to the
+repository that tracks it.  The lines are those of the file as written,
+followed back to where they were at `HEAD` past what is not committed yet;
+lines added since have no history, and neither has a file git does not
+track.  An unsaved buffer is said to be.
+
+9.15 Code owners                                                *dyneo-owners*
+
+`<leader>gO` (|:DyOwners|) says who owns the file of the buffer, and which
+line of CODEOWNERS makes them so; the statusline shows the owners too, or
+`unowned`, in a repository that has a CODEOWNERS.  `<leader>gU`
+(`:DyOwners unowned`) lists every file git tracks that nobody owns in the
+quickfix list, the first 2000, without stalling the editor on a large
+repository.
+
+The file is `.github/CODEOWNERS`, `CODEOWNERS`, `docs/CODEOWNERS` or
+`.gitlab/CODEOWNERS`, the first found, read with GitHub's rules: patterns
+as gitignore writes them, the last line that matches wins, and a line with
+no owners leaves its files unowned.  `docs/*` owns the files right in
+`docs`, not those of its folders.  GitLab's file -- `.gitlab/CODEOWNERS`, or
+one with sections -- is read with GitLab's rules: a path not starting with
+`/` matches at any depth, and each `[Section]` (or `^[Optional]`, in any
+case) has its last match and its default owners, the owners of every
+section summed.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -2188,6 +2227,16 @@ Project ~
                         Write a postmortem as a decision record, its timeline
                         gathered from git and the cluster.  See
                         |dyneo-postmortem|.
+
+                                                                  *:DyHistory*
+:[range]DyHistory       The commits that changed the definition under the
+                        cursor, or the lines of [range].  See
+                        |dyneo-history|.
+
+                                                                   *:DyOwners*
+:DyOwners               Who CODEOWNERS says owns the file of the buffer.
+:DyOwners unowned       Every file git tracks that nobody owns, in the
+                        quickfix list.  See |dyneo-owners|.
 
                                                                        *:DyC4*
 :DyC4 [{view}]          Draw {view} of the LikeC4 workspace of the buffer,

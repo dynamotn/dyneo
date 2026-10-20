@@ -25,6 +25,7 @@
 :DyHelmUsages	dyneo.txt	/*:DyHelmUsages*
 :DyHelmValue	dyneo.txt	/*:DyHelmValue*
 :DyHex	dyneo.txt	/*:DyHex*
+:DyHistory	dyneo.txt	/*:DyHistory*
 :DyImagePin	dyneo.txt	/*:DyImagePin*
 :DyImageScan	dyneo.txt	/*:DyImageScan*
 :DyImageVerify	dyneo.txt	/*:DyImageVerify*
@@ -37,6 +38,7 @@
 :DyOpenApiDiff	dyneo.txt	/*:DyOpenApiDiff*
 :DyOpenApiRequest	dyneo.txt	/*:DyOpenApiRequest*
 :DyOutdated	dyneo.txt	/*:DyOutdated*
+:DyOwners	dyneo.txt	/*:DyOwners*
 :DyPostmortem	dyneo.txt	/*:DyPostmortem*
 :DyProject	dyneo.txt	/*:DyProject*
 :DyPromQL	dyneo.txt	/*:DyPromQL*
@@ -117,6 +119,7 @@ dyneo-findings	dyneo.txt	/*dyneo-findings*
 dyneo-globals	dyneo.txt	/*dyneo-globals*
 dyneo-helm	dyneo.txt	/*dyneo-helm*
 dyneo-hex	dyneo.txt	/*dyneo-hex*
+dyneo-history	dyneo.txt	/*dyneo-history*
 dyneo-images	dyneo.txt	/*dyneo-images*
 dyneo-infra	dyneo.txt	/*dyneo-infra*
 dyneo-inspect	dyneo.txt	/*dyneo-inspect*
@@ -137,6 +140,7 @@ dyneo-nfr	dyneo.txt	/*dyneo-nfr*
 dyneo-openapi	dyneo.txt	/*dyneo-openapi*
 dyneo-ops	dyneo.txt	/*dyneo-ops*
 dyneo-outdated	dyneo.txt	/*dyneo-outdated*
+dyneo-owners	dyneo.txt	/*dyneo-owners*
 dyneo-per-machine	dyneo.txt	/*dyneo-per-machine*
 dyneo-policy	dyneo.txt	/*dyneo-policy*
 dyneo-postmortem	dyneo.txt	/*dyneo-postmortem*

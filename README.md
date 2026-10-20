@@ -151,7 +151,8 @@ below follow the sections of `:help dyneo`.
 - **Data files** — Parquet, CSV and JSON summed up and queried with SQL
   through DuckDB; a Parquet file opens as its summary. `:DyData`
 - **Databases** — connections browsed and queried with dadbod, tables and
-  columns completed, SQL linted and formatted by sqlfluff. `<leader>Db`
+  columns completed, SQL linted and formatted by sqlfluff; Postgres
+  migrations checked by squawk. `<leader>Db`
 - **dbt** — the model of the buffer compiled, run, tested or previewed from
   its project root. `<leader>oo`
 - **Model files** — a `.safetensors` or `.gguf` file opens as its header:
@@ -170,6 +171,9 @@ below follow the sections of `:help dyneo`.
 - **Whole-project diagnostics** — every file handed to the server, off the
   main loop. `<leader>xw`
 - **Decision records**, written, listed and superseded. `<leader>pr`
+- **Code history & owners** — the commits that changed the function under
+  the cursor; who CODEOWNERS says owns the file, on the statusline, and the
+  files nobody owns. `:DyHistory` · `:DyOwners`
 - **Forges & trackers** — GitHub (Octo), GitLab merge requests, CI checks,
   Jira issues to branches and worklogs. `<leader>ph` `pl` `pc` `pj`
 - **Previews** — D2 diagrams inline on kitty-graphics terminals, Markdown,

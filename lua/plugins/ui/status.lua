@@ -46,7 +46,15 @@ return {
         },
         sections = {
           lualine_a = { 'mode' },
-          lualine_b = { 'branch' },
+          lualine_b = {
+            'branch',
+            -- Who CODEOWNERS says owns the file: nothing where the
+            -- repository has none. Read from a cache, not on each redraw
+            {
+              function() return require('tools.owners').statusline() end,
+              icon = '󰀎',
+            },
+          },
 
           lualine_c = {
             Lualine.root_dir(),
