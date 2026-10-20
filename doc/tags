@@ -37,7 +37,9 @@
 :DyOpenApiDiff	dyneo.txt	/*:DyOpenApiDiff*
 :DyOpenApiRequest	dyneo.txt	/*:DyOpenApiRequest*
 :DyOutdated	dyneo.txt	/*:DyOutdated*
+:DyPostmortem	dyneo.txt	/*:DyPostmortem*
 :DyProject	dyneo.txt	/*:DyProject*
+:DyPromQL	dyneo.txt	/*:DyPromQL*
 :DyQuarantine	dyneo.txt	/*:DyQuarantine*
 :DyQuery	dyneo.txt	/*:DyQuery*
 :DyRego	dyneo.txt	/*:DyRego*
@@ -69,6 +71,7 @@ DyNeo.image_signers	dyneo.txt	/*DyNeo.image_signers*
 DyNeo.license_policy	dyneo.txt	/*DyNeo.license_policy*
 DyNeo.obsidian	dyneo.txt	/*DyNeo.obsidian*
 DyNeo.plugin_channel	dyneo.txt	/*DyNeo.plugin_channel*
+DyNeo.prometheus	dyneo.txt	/*DyNeo.prometheus*
 DyNeo.quarantine_window	dyneo.txt	/*DyNeo.quarantine_window*
 DyNeo.test_strategy	dyneo.txt	/*DyNeo.test_strategy*
 DyNeo.used_full_plugins	dyneo.txt	/*DyNeo.used_full_plugins*
@@ -87,6 +90,7 @@ dyneo-architecture	dyneo.txt	/*dyneo-architecture*
 dyneo-asyncapi	dyneo.txt	/*dyneo-asyncapi*
 dyneo-breaking	dyneo.txt	/*dyneo-breaking*
 dyneo-cert-file	dyneo.txt	/*dyneo-cert-file*
+dyneo-cert-host	dyneo.txt	/*dyneo-cert-host*
 dyneo-channels	dyneo.txt	/*dyneo-channels*
 dyneo-ci	dyneo.txt	/*dyneo-ci*
 dyneo-ci-airflow	dyneo.txt	/*dyneo-ci-airflow*
@@ -135,7 +139,9 @@ dyneo-ops	dyneo.txt	/*dyneo-ops*
 dyneo-outdated	dyneo.txt	/*dyneo-outdated*
 dyneo-per-machine	dyneo.txt	/*dyneo-per-machine*
 dyneo-policy	dyneo.txt	/*dyneo-policy*
+dyneo-postmortem	dyneo.txt	/*dyneo-postmortem*
 dyneo-project	dyneo.txt	/*dyneo-project*
+dyneo-promql	dyneo.txt	/*dyneo-promql*
 dyneo-quarantine	dyneo.txt	/*dyneo-quarantine*
 dyneo-query	dyneo.txt	/*dyneo-query*
 dyneo-rego	dyneo.txt	/*dyneo-rego*
@@ -145,6 +151,7 @@ dyneo-runbook	dyneo.txt	/*dyneo-runbook*
 dyneo-sbom	dyneo.txt	/*dyneo-sbom*
 dyneo-schema	dyneo.txt	/*dyneo-schema*
 dyneo-security	dyneo.txt	/*dyneo-security*
+dyneo-slo	dyneo.txt	/*dyneo-slo*
 dyneo-spell	dyneo.txt	/*dyneo-spell*
 dyneo-sql	dyneo.txt	/*dyneo-sql*
 dyneo-statusline	dyneo.txt	/*dyneo-statusline*

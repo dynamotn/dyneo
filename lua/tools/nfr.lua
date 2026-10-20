@@ -321,9 +321,173 @@ function M.report(spec)
   return lines
 end
 
---- `:DyNfr {term}...`, asking for the terms when none are given
+--- The alerts of a service level objective: the multiwindow, multi-burn-rate
+--- ones of the Google SRE workbook, each firing once `budget` of the error
+--- budget of the window is spent within its `long` window, and still being
+--- spent over its `short` one, which lets it stop soon after the burn does
+M.SLO_ALERTS = {
+  { severity = 'page', long = 3600, short = 300, budget = 0.02 },
+  { severity = 'page', long = 6 * 3600, short = 1800, budget = 0.05 },
+  { severity = 'ticket', long = 86400, short = 2 * 3600, budget = 0.10 },
+  { severity = 'ticket', long = 3 * 86400, short = 6 * 3600, budget = 0.10 },
+}
+
+--- The service level window when none is given
+M.SLO_WINDOW = 30 * 86400
+
+--- A span as Prometheus writes a range: `5m`, `6h`, `3d`
+---@param seconds number
+---@return string
+local function prom_span(seconds)
+  for _, unit in ipairs({ { 'd', 86400 }, { 'h', 3600 }, { 'm', 60 } }) do
+    if seconds % unit[2] == 0 then
+      return ('%d%s'):format(seconds / unit[2], unit[1])
+    end
+  end
+  return ('%ds'):format(seconds)
+end
+
+---@class DyNfrSlo
+---@field objective number A fraction, `0.999`
+---@field window number Seconds the objective is held over
+---@field window_text string As it was written, `30d`
+
+--- The terms of `:DyNfr slo`, read: an objective and `window=`
+---@param terms string[]
+---@return DyNfrSlo? slo
+---@return string? err
+function M.parse_slo(terms)
+  local slo = { window = M.SLO_WINDOW, window_text = '30d' }
+  for _, term in ipairs(terms) do
+    local window = term:match('^window=(.+)$')
+    if window then
+      local number, unit = window:match('^(%d+)([hdw])$')
+      if not number or tonumber(number) <= 0 then
+        return nil, 'Not a window (h, d or w): ' .. term
+      end
+      slo.window, slo.window_text = tonumber(number) * SPANS[unit], window
+    elseif slo.objective then
+      return nil, 'One objective only: ' .. term
+    else
+      slo.objective = percent(term)
+      if not slo.objective or slo.objective >= 1 then
+        return nil, 'Not an objective below 100%: ' .. term
+      end
+    end
+  end
+  if not slo.objective then return nil, 'Give an objective: :DyNfr slo 99.9' end
+  return slo
+end
+
+--- What `slo` allows, its burn-rate alerts, and Prometheus rules for them
+---@param slo DyNfrSlo
+---@return string[]
+function M.slo_report(slo)
+  local allowed = 1 - slo.objective
+  local lines = {
+    ('# SLO %s over %s'):format(as_percent(slo.objective), slo.window_text),
+    '',
+    ('Error budget: %s of the requests, or %s down in the window.'):format(
+      as_percent(allowed),
+      M.duration(allowed * slo.window)
+    ),
+    '',
+    '| Severity | Long | Short | Burn rate | Error ratio above | Budget spent | Budget gone in |',
+    '| --- | --- | --- | ---: | ---: | ---: | --- |',
+  }
+  local alerts, dropped = {}, {}
+  for _, alert in ipairs(M.SLO_ALERTS) do
+    -- The workbook's rates are for 30 days; the same share of the budget
+    -- in the same time is a rate in proportion to the window
+    local burn = alert.budget * slo.window / alert.long
+    -- A long window past the SLO window would read history it never holds,
+    -- and a rate below 1 never spends the budget at all
+    if alert.long >= slo.window or burn < 1 - 1e-9 then
+      table.insert(
+        dropped,
+        ('the %s over %s'):format(alert.severity, prom_span(alert.long))
+      )
+    else
+      local threshold = burn * allowed
+      table.insert(
+        alerts,
+        { alert = alert, burn = burn, threshold = threshold }
+      )
+      table.insert(
+        lines,
+        ('| %s | %s | %s | %s | %s | %d%% | %s |'):format(
+          alert.severity,
+          prom_span(alert.long),
+          prom_span(alert.short),
+          plain(burn),
+          as_percent(threshold),
+          alert.budget * 100,
+          M.duration(slo.window / burn)
+        )
+      )
+    end
+  end
+  if #dropped > 0 then
+    vim.list_extend(lines, {
+      '',
+      ('Left out, as it would burn under 1x over a %s window: %s.'):format(
+        slo.window_text,
+        table.concat(dropped, ', ')
+      ),
+    })
+  end
+  if #alerts == 0 then
+    vim.list_extend(lines, {
+      '',
+      'No alert holds for a window this short: alert on the error ratio itself.',
+    })
+    return lines
+  end
+  vim.list_extend(lines, {
+    '',
+    'Each alert fires while the error ratio is above its line over both its',
+    'windows. `slo:sli_error:ratio_rate<window>` is the ratio of failed',
+    'requests over a window, a recording rule of your own:',
+    '',
+    '```yaml',
+    'groups:',
+    '  - name: slo-alerts',
+    '    rules:',
+  })
+  for _, item in ipairs(alerts) do
+    local long, short = prom_span(item.alert.long), prom_span(item.alert.short)
+    local threshold = ('%.6g'):format(item.threshold)
+    vim.list_extend(lines, {
+      ('      - alert: ErrorBudgetBurn%s'):format(long),
+      '        expr: |',
+      ('          slo:sli_error:ratio_rate%s > %s'):format(long, threshold),
+      ('          and slo:sli_error:ratio_rate%s > %s'):format(
+        short,
+        threshold
+      ),
+      '        labels:',
+      ('          severity: %s'):format(item.alert.severity),
+      '        annotations:',
+      ('          summary: Error budget burning %sx over %s'):format(
+        plain(item.burn),
+        long
+      ),
+    })
+  end
+  table.insert(lines, '```')
+  return lines
+end
+
+--- `:DyNfr {term}...`, asking for the terms when none are given;
+--- `:DyNfr slo {objective} [window=30d]`
 ---@param args { fargs: string[] }
 function M.command(args)
+  if args.fargs[1] == 'slo' then
+    local slo, err = M.parse_slo(vim.list_slice(args.fargs, 2))
+    if not slo then return notify(err, vim.log.levels.ERROR) end
+    require('util.scratch').open(M.slo_report(slo), { filetype = 'markdown' })
+    return
+  end
   local function run(terms)
     local spec, err = M.parse(terms)
     if not spec then return notify(err, vim.log.levels.ERROR) end

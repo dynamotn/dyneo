@@ -125,8 +125,13 @@ below follow the sections of `:help dyneo`.
   request or jq. `:DyLog`
 - **Certificates & tokens** — the certificate, key or JWT under the cursor
   decoded, held back from AI; expired or expiring certificates flagged;
-  PEM, DER and PKCS#7 files read as their chain, checked. `:DyInspect` ·
-  `:DyCert`
+  PEM, DER and PKCS#7 files read as their chain, checked, and the chain a
+  host serves. `:DyInspect` · `:DyCert` · `:DyCert host`
+- **PromQL** — the expression of the rule or panel under the cursor run on
+  the clone's Prometheus, a sparkline of its hour; rules checked and tested
+  with promtool. `:DyPromQL`
+- **Postmortems** — blameless, as a decision record, the timeline gathered
+  from git and the cluster; open action items listed. `:DyPostmortem new`
 - **CI** — the last pipeline on the jobs of the file that defines them,
   GitLab, GitHub, Azure DevOps, Jenkins and Argo Workflows, and the tasks
   of Airflow, Prefect and Dagster pipelines; GitLab's and Jenkins' lint,
@@ -187,7 +192,8 @@ below follow the sections of `:help dyneo`.
   revision, through buf and graphql-inspector. `:DyBreaking`
 - **Service levels and capacity** — the availability of a chain of
   components, its downtime and error budget; the bandwidth, storage and
-  instances a load takes. `:DyNfr 99.9 2x99.95 rps=200 size=2KB capacity=250`
+  instances a load takes; an SLO's burn-rate alerts as Prometheus rules.
+  `:DyNfr 99.9 2x99.95 rps=200 size=2KB capacity=250` · `:DyNfr slo 99.9`
 - **Network ranges** — the IPv4 range under the cursor read out; the subnets
   of a Terraform module that collide. `:DyCidr` · `:DyCidr overlaps`
 - **Decision matrix** — options scored against weighted criteria, totals

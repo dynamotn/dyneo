@@ -75,16 +75,13 @@ function M.pems(lines)
       -- `LS0tLS1CRUdJTi` is the base64 of `-----BEGIN`
       for blob in line:gmatch('(LS0tLS1CRUdJTi[%w%+/=]+)') do
         local decoded = M.base64(blob)
-        local label = decoded
-          and decoded:match('%-%-%-%-%-BEGIN ([%u ]+)%-%-%-%-%-')
-        if label then
-          table.insert(found, {
-            kind = 'pem',
-            label = label,
-            text = decoded,
-            first = number,
-            last = number,
-          })
+        -- A bundle -- the leaf and its chain, as cert-manager writes
+        -- `tls.crt` -- is each of its blocks, all on this line
+        for _, block in
+          ipairs(decoded and M.pems(vim.split(decoded, '\r?\n')) or {})
+        do
+          block.first, block.last = number, number
+          table.insert(found, block)
         end
       end
     end

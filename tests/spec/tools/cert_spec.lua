@@ -111,14 +111,17 @@ describe('tools.cert', function()
   it('tells the form of a certificate file from its bytes', function()
     assert.equals('pem', cert.kind('a.crt', '-----BEGIN CERTIFICATE-----\n'))
     assert.equals('pem', cert.kind('s.yaml', 'tls.crt: LS0tLS1CRUdJTiBD'))
-    assert.equals('der', cert.kind('a.cer', '\48\130\1\10'))
-    assert.equals('pkcs7', cert.kind('a.P7B', '\48\130\1\10'))
+    assert.equals('der', cert.kind('a.cer', '\48\3abc'))
+    assert.equals('pkcs7', cert.kind('a.P7B', '\48\3abc'))
+    -- A SEQUENCE whose length is not the file's is no DER file
+    assert.is_nil(cert.kind('a.cer', '\48\130\1\10'))
+    assert.is_nil(cert.kind('a.cer', '0 fingerprint'))
     assert.equals('pkcs12', cert.kind('a.pfx', '\48\130\1\10'))
     assert.is_nil(cert.kind('a.crt', 'hello'))
   end)
 
   it('unwraps DER written as bare base64, and nothing else', function()
-    local der = '\48\130\1\10abc'
+    local der = '\48\3abc'
     local text = vim.base64.encode(der)
     assert.equals(der, cert.unwrap(text))
     -- Wrapped at 64 columns with CRLF, as Windows exports it
@@ -171,7 +174,7 @@ describe('tools.cert', function()
   end)
 
   it('says when openssl is not installed', function()
-    vim.fn.writefile({ '\48\130\1\10' }, dir .. '/a.der', 'b')
+    vim.fn.writefile({ '\48\3abc' }, dir .. '/a.der', 'b')
     vim.fn.mkdir(dir .. '/empty', 'p')
     vim.env.PATH = dir .. '/empty'
     local text = built(cert, { path = dir .. '/a.der' })
@@ -294,6 +297,174 @@ describe('tools.cert', function()
         '-----BEGIN CERTIFICATE-----',
         vim.api.nvim_buf_get_lines(bufnr, 0, 1, false)[1]
       )
+    end)
+
+    --- An `openssl` whose `s_client` answers with the chain of this spec, as
+    --- `leaf.test` would serve it, and is the real one otherwise
+    local function served(handshake)
+      local real = vim.fn.exepath('openssl')
+      h.write(dir .. '/bin/openssl', {
+        '#!/bin/sh',
+        'if [ "$1" = s_client ]; then',
+        '  echo "$*" > "' .. dir .. '/s_client"',
+        '  echo CONNECTED',
+        '  cat "' .. dir .. '/leaf.pem" "' .. dir .. '/ca.pem"',
+        "  printf '%s\\n' '" .. handshake .. "'",
+        '  exit 0',
+        'fi',
+        'exec "' .. real .. '" "$@"',
+      })
+      vim.fn.setfperm(dir .. '/bin/openssl', 'rwxr-xr-x')
+      vim.env.PATH = dir .. '/bin:' .. path
+    end
+
+    it('reads the chain a host serves, and what its handshake said', function()
+      if not ready then return pending('openssl is not installed') end
+      served(
+        'New, TLSv1.3, Cipher is TLS_AES_256_GCM_SHA384\nVerify return code: 62 (hostname mismatch)'
+      )
+      local lines
+      cert.from_host('leaf.test', 8443, function(out) lines = out end)
+      assert.is_true(vim.wait(10000, function() return lines ~= nil end, 10))
+      local text = table.concat(lines, '\n')
+      assert.is_truthy(text:find('# leaf.test:8443', 1, true))
+      assert.is_truthy(
+        text:find('2 certificates, as the host serves them', 1, true)
+      )
+      assert.is_truthy(
+        text:find('each certificate is issued by the next', 1, true)
+      )
+      assert.is_truthy(
+        text:find('- Handshake: TLSv1.3, TLS_AES_256_GCM_SHA384', 1, true)
+      )
+      assert.is_truthy(
+        text:find(
+          '- Host name and chain: **fails**: hostname mismatch (62)',
+          1,
+          true
+        )
+      )
+      -- Before the certificates themselves
+      assert.is_truthy(text:find('Handshake.*## Certificate 1 of 2'))
+      assert.equals(
+        's_client -connect leaf.test:8443 -servername leaf.test -verify_hostname leaf.test -showcerts',
+        vim.fn.readfile(dir .. '/s_client')[1]
+      )
+    end)
+
+    it('checks an address against the IP names, sending no SNI', function()
+      if not ready then return pending('openssl is not installed') end
+      served('Verify return code: 0 (ok)')
+      local lines
+      cert.from_host('10.0.0.1', 443, function(out) lines = out end)
+      assert.is_true(vim.wait(10000, function() return lines ~= nil end, 10))
+      assert.equals(
+        's_client -connect 10.0.0.1:443 -verify_ip 10.0.0.1 -showcerts',
+        vim.fn.readfile(dir .. '/s_client')[1]
+      )
+    end)
+
+    it('reads a .crt of text that starts with 0 as no certificate', function()
+      h.write(dir .. '/notes.crt', { '0 fingerprint of the old key' })
+      assert.is_nil(
+        cert.kind(dir .. '/notes.crt', '0 fingerprint of the old key\n')
+      )
+      vim.cmd.source(h.root .. '/plugin/cert.lua')
+      vim.cmd.edit(vim.fn.fnameescape(dir .. '/notes.crt'))
+      assert.equals('', vim.bo.buftype)
+    end)
+
+    it('reports a file openssl cannot read in one line per line', function()
+      if not ready then return pending('openssl is not installed') end
+      -- A SEQUENCE of the right length that is no certificate
+      local bytes = '\48\3\2\1\0'
+      local file = assert(io.open(dir .. '/bad.der', 'wb'))
+      file:write(bytes)
+      file:close()
+      local text = built(cert, { path = dir .. '/bad.der' })
+      assert.is_falsy(text:find('\n\n\n', 1, true))
+      vim.cmd.source(h.root .. '/plugin/cert.lua')
+      vim.cmd.edit(vim.fn.fnameescape(dir .. '/bad.der'))
+      local bufnr = vim.api.nvim_get_current_buf()
+      assert.is_true(
+        vim.wait(
+          10000,
+          function()
+            return not vim.api
+              .nvim_buf_get_lines(bufnr, 0, 1, false)[1]
+              :find('^Reading')
+          end,
+          10
+        )
+      )
+    end)
+
+    it('says why a host served no certificate', function()
+      if not ready then return pending('openssl is not installed') end
+      h.write(dir .. '/bin/openssl', {
+        '#!/bin/sh',
+        'echo "connect:errno=111" >&2',
+        'exit 1',
+      })
+      vim.fn.setfperm(dir .. '/bin/openssl', 'rwxr-xr-x')
+      vim.env.PATH = dir .. '/bin:' .. path
+      local lines
+      cert.from_host('down.test', 443, function(out) lines = out end)
+      assert.is_true(vim.wait(10000, function() return lines ~= nil end, 10))
+      assert.same({
+        '# down.test:443',
+        '',
+        'No certificate served: connect:errno=111',
+      }, lines)
+    end)
+  end)
+
+  describe('hosts', function()
+    it('reads a host and its port, nothing that reads as an option', function()
+      assert.same({ 'example.com', 443 }, { cert.parse_host('example.com') })
+      assert.same(
+        { 'example.com', 8443 },
+        { cert.parse_host('https://user@example.com:8443/x?y') }
+      )
+      assert.same({ 'a.example', 80 }, { cert.parse_host('http://a.example/') })
+      assert.same({ 'a.example', 443 }, { cert.parse_host('"a.example",') })
+      assert.is_nil(cert.parse_host('-connect'))
+      assert.is_nil(cert.parse_host('localhost'))
+      assert.is_nil(cert.parse_host('a..b'))
+      assert.is_nil(cert.parse_host('a.example:99999'))
+    end)
+
+    it(
+      'reads what a handshake said',
+      function()
+        assert.same(
+          {
+            protocol = 'TLSv1.2',
+            cipher = 'ECDHE-RSA-AES128-GCM-SHA256',
+            verify = 'OK, the chain and the host name',
+          },
+          cert.handshake(table.concat({
+            'New, TLSv1.2, Cipher is ECDHE-RSA-AES128-GCM-SHA256',
+            'Verify return code: 0 (ok)',
+          }, '\n'))
+        )
+      end
+    )
+
+    it('says when the cursor is on no host', function()
+      local notes = {}
+      local restore = h.stub(
+        vim,
+        'notify',
+        function(msg) table.insert(notes, msg) end
+      )
+      h.buffer({ lines = { 'nothing here' } })
+      vim.api.nvim_set_current_buf(h.buffer({ lines = { 'nothing here' } }))
+      local done = false
+      cert.host(nil, function() done = true end)
+      restore()
+      assert.is_true(done)
+      assert.same({ 'No host name under the cursor' }, notes)
     end)
   end)
 end)

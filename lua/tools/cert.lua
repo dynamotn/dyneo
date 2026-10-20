@@ -49,11 +49,40 @@ function M.kind(path, bytes)
   if bytes:find('-----BEGIN ', 1, true) then return 'pem' end
   -- `LS0tLS1CRUdJTi` is the base64 of `-----BEGIN`
   if bytes:find('LS0tLS1CRUdJTi', 1, true) then return 'pem' end
-  -- Every DER structure here is a SEQUENCE
-  if bytes:byte(1) == 0x30 then
+  -- Every DER structure here is a SEQUENCE whose length is the rest of the
+  -- file: a text file that merely starts with `0` is none
+  if bytes:byte(1) == 0x30 and M.der_sized(bytes) then
     return (ext == 'p7b' or ext == 'p7c') and 'pkcs7' or 'der'
   end
   return nil
+end
+
+--- Whether the DER SEQUENCE `bytes` starts with says it is as long as
+--- `bytes` is
+---@param bytes string
+---@return boolean
+function M.der_sized(bytes)
+  local first = bytes:byte(2)
+  if not first then return false end
+  local length, header = first, 2
+  if first >= 0x80 then
+    local count = first - 0x80
+    -- Indefinite (0x80) is BER, and more than 4 bytes of length no file here
+    if count < 1 or count > 4 or #bytes < 2 + count then return false end
+    length = 0
+    for index = 3, 2 + count do
+      length = length * 256 + bytes:byte(index)
+    end
+    header = 2 + count
+  end
+  return header + length == #bytes
+end
+
+--- The first line of an error, for a report made of lines
+---@param err? string
+---@return string
+local function first_line(err)
+  return vim.split(vim.trim(err or '?'), '\n', { plain = true })[1] or '?'
 end
 
 --- The DER inside `bytes` when they are bare base64 of it, with no PEM
@@ -365,7 +394,7 @@ function M.report(name, form, pems, on_done)
       function(lines, err)
         -- `tools.inspect` titles it `# CERTIFICATE`: the report has its own
         local detail = lines and vim.list_slice(lines, 3)
-          or { 'Could not read it: ' .. (err or '?') }
+          or { 'Could not read it: ' .. first_line(err) }
         details[index] = detail
         certs[index] = M.fields(detail)
         inspect.expiry(pem, function(state, ends)
@@ -391,11 +420,13 @@ function M.build(source, on_done)
       return on_done({
         '# ' .. name,
         '',
-        err or 'No certificate in this file',
+        err and first_line(err) or 'No certificate in this file',
       })
     end
     M.report(name, assert(form), pems, function(lines)
-      if err then vim.list_extend(lines, { '', 'Not all read: ' .. err }) end
+      if err then
+        vim.list_extend(lines, { '', 'Not all read: ' .. first_line(err) })
+      end
       on_done(lines)
     end)
   end)
@@ -425,13 +456,168 @@ function M.read(bufnr)
   M.build({ path = path }, function(lines) scratch.set(bufnr, lines) end)
 end
 
---- `:DyCert [file]`: the certificates of `file`, or else of the buffer
+--- Milliseconds a TLS handshake with a host may take
+M.HANDSHAKE_TIMEOUT = 10 * 1000
+
+--- The host and port of `text`: `example.com`, `example.com:8443`,
+--- `https://example.com/path`; nil for anything else, so nothing that reads
+--- as an option reaches openssl
+---@param text string
+---@return string? host
+---@return integer? port
+function M.parse_host(text)
+  text = vim.trim(text):gsub('^["\']', ''):gsub('["\',]$', '')
+  local scheme = text:match('^(%a[%w+.-]*)://')
+  text = text:gsub('^%a[%w+.-]*://', ''):gsub('^[^@/]*@', '')
+  local host, port = text:match('^([%w][%w%-%.]*):(%d+)')
+  host = host or text:match('^([%w][%w%-%.]*)')
+  if not host or not host:find('.', 1, true) or host:find('%.%.') then
+    return nil
+  end
+  port = tonumber(port) or (scheme == 'http' and 80 or 443)
+  if port < 1 or port > 65535 then return nil end
+  return host:gsub('%.$', ''), port
+end
+
+--- The host the cursor is on: a URL, or a word that reads as a host name,
+--- as an Ingress or a config writes it
+---@return string? host
+---@return integer? port
+local function host_under_cursor()
+  local word = vim.fn.expand('<cWORD>')
+  -- `host: example.com` with the cursor on the key
+  if word:match(':$') then
+    word = vim.api.nvim_get_current_line():match(':%s*(%S+)') or word
+  end
+  return M.parse_host(word)
+end
+
+---@class DyCertHandshake
+---@field protocol? string `TLSv1.3`
+---@field cipher? string
+---@field verify? string What openssl said of the chain and the host name
+
+--- What `openssl s_client` said of the handshake, besides the certificates
+---@param text string
+---@return DyCertHandshake
+function M.handshake(text)
+  local protocol, cipher = text:match('New, (TLSv[%d.]+), Cipher is (%S+)')
+  protocol = protocol or text:match('Protocol%s*:%s*(%S+)')
+  cipher = cipher or text:match('Cipher%s*:%s*(%S+)')
+  local code, reason = text:match('Verify return code: (%d+) %(([^)]*)%)')
+  return {
+    protocol = protocol,
+    cipher = cipher,
+    verify = code
+      and (
+        code == '0' and 'OK, the chain and the host name'
+        or ('**fails**: %s (%s)'):format(reason, code)
+      ),
+  }
+end
+
+--- Hand `on_done` the report on what `host` serves on `port`: its chain as
+--- `M.report` reads a file's, and what the handshake said, the host name
+--- checked against the leaf
+---@param host string
+---@param port integer
+---@param on_done fun(lines: string[])
+function M.from_host(host, port, on_done)
+  local name = ('%s:%d'):format(host, port)
+  local command = { 'openssl', 's_client', '-connect', name }
+  if host:match('^%d+%.%d+%.%d+%.%d+$') then
+    -- An address is checked against the IP names of the leaf, and is no
+    -- name to ask for by SNI
+    vim.list_extend(command, { '-verify_ip', host })
+  else
+    vim.list_extend(command, { '-servername', host, '-verify_hostname', host })
+  end
+  table.insert(command, '-showcerts')
+  require('util.system').run(command, {
+    -- An empty input ends the session once the handshake is done
+    stdin = '',
+    timeout = M.HANDSHAKE_TIMEOUT,
+    max_bytes = M.MAX_BYTES,
+  }, function(result)
+    local text = result.stdout or ''
+    local pems = pem_certificates(text)
+    if #pems == 0 then
+      local why = result.missing and result.stderr
+        or result.timed_out and 'no answer in time'
+        or vim.split(vim.trim(result.stderr or ''), '\n')[1]
+      -- `405482A3037A0000:error:10080002:BIO routines:...:Name or service
+      -- not known`: the reason is the last of it
+      if why and why:match('^%x+:error:') then why = why:match(':([^:]+)$') end
+      return on_done({
+        '# ' .. name,
+        '',
+        'No certificate served: '
+          .. ((why ~= '' and why) or 'the handshake failed'),
+      })
+    end
+    local said = M.handshake(text)
+    M.report(name, 'as the host serves them', pems, function(lines)
+      local extra = {
+        '- Handshake: '
+          .. (said.protocol or '?')
+          .. (said.cipher and (', ' .. said.cipher) or ''),
+        '- Host name and chain: ' .. (said.verify or 'not said by openssl'),
+      }
+      -- After the order and trust of the chain, before each certificate
+      local at = #lines + 1
+      for index, line in ipairs(lines) do
+        if line:match('^## Certificate 1 of') then
+          at = index - 1
+          break
+        end
+      end
+      for offset, line in ipairs(extra) do
+        table.insert(lines, at + offset - 1, line)
+      end
+      on_done(lines)
+    end)
+  end)
+end
+
+--- `:DyCert host [{host}[:{port}]]`: the chain the host under the cursor,
+--- or the one given, serves
+---@param target? string
+---@param on_done? fun() For the specs
+function M.host(target, on_done)
+  local host, port
+  if target and target ~= '' then
+    host, port = M.parse_host(target)
+  else
+    host, port = host_under_cursor()
+  end
+  if not host then
+    notify(
+      'No host name '
+        .. (target and target ~= '' and ('in ' .. target) or 'under the cursor'),
+      vim.log.levels.WARN
+    )
+    if on_done then on_done() end
+    return
+  end
+  notify(('Asking %s:%d for its certificates…'):format(host, port))
+  M.from_host(host, assert(port), function(lines)
+    require('util.scratch').open(lines, { filetype = 'markdown' })
+    if on_done then on_done() end
+  end)
+end
+
+M.SUBCOMMANDS = { 'host' }
+
+--- `:DyCert [file]`: the certificates of `file`, or else of the buffer;
+--- `:DyCert host [{host}]`: those a host serves
 ---@param args { fargs: string[] }
 function M.command(args)
+  if args.fargs[1] == 'host' then return M.host(args.fargs[2]) end
   local source
   if args.fargs[1] then
-    source =
-      { path = vim.fs.normalize(vim.fn.fnamemodify(args.fargs[1], ':p')) }
+    -- All of them: a file name may hold a space, escaped or not
+    local file = table.concat(args.fargs, ' ')
+    source = { path = vim.fs.normalize(vim.fn.fnamemodify(file, ':p')) }
   else
     local bufnr = vim.api.nvim_get_current_buf()
     local name = vim.api.nvim_buf_get_name(bufnr)

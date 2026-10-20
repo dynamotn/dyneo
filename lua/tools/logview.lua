@@ -313,8 +313,13 @@ end
 function M.reload(bufnr)
   local view = views[bufnr]
   if not view then return end
+  -- A later reload takes over: what an earlier one reads is dropped
+  view.loads = (view.loads or 0) + 1
+  local load = view.loads
   view.load(function(lines, err, cut)
-    if not vim.api.nvim_buf_is_valid(bufnr) then return end
+    if not vim.api.nvim_buf_is_valid(bufnr) or view.loads ~= load then
+      return
+    end
     if not lines then return notify(err or 'failed', vim.log.levels.ERROR) end
     if cut then
       notify(
@@ -402,11 +407,16 @@ function M.jq(bufnr, expr)
     return notify('No JSON record to run jq on', vim.log.levels.WARN)
   end
   local system = require('util.system')
+  -- The indices jq answers with are of these records: once a reload has
+  -- replaced them, they point at others
+  local records = view.records
   system.run({ 'jq', '-c', ('.i as $i | .r | select(%s) | $i'):format(expr) }, {
     stdin = table.concat(lines, '\n') .. '\n',
     timeout = M.TIMEOUT,
   }, function(result)
-    if not vim.api.nvim_buf_is_valid(bufnr) then return end
+    if not vim.api.nvim_buf_is_valid(bufnr) or view.records ~= records then
+      return
+    end
     if result.code ~= 0 then
       return notify(
         'jq failed: ' .. system.failure(result, 'jq'),

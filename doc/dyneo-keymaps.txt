@@ -299,14 +299,17 @@ one of the same keys in those buffers.
 ==============================================================================
 <leader>i  infra
 
+`<leader>iM`           n      Check Prometheus Rules
 `<leader>iR`           n      Rego Tests and Coverage
 `<leader>ia`           n      Architecture Diagram
 `<leader>ic`           n      Switch Kube Context
 `<leader>id`           n      Compare Environments
 `<leader>ie`           n      Certificate Expiry
+`<leader>ih`           n      Certificates a Host Serves
 `<leader>ii`           n      Decode Certificate, Key or JWT
 `<leader>ij`           n      Journal
 `<leader>il`           n      Read File as Log
+`<leader>im`           nx     Run PromQL Under Cursor
 `<leader>in`           n      Switch Kube Namespace
 `<leader>ip`           n      Pod Logs
 `<leader>iq`           n      Query JSON/YAML (jq, yq)
@@ -359,6 +362,7 @@ one of the same keys in those buffers.
 `<leader>pAc`          n      Explain IPv4 Range
 `<leader>pAd`          n      Check Dependency Rules
 `<leader>pAn`          n      Service Levels (NFR)
+`<leader>pAs`          n      SLO Burn-Rate Alerts
 `<leader>pAt`          n      Threat Model Open Questions
 `<leader>pAw`          n      Well-Architected Open Questions
 
@@ -417,8 +421,10 @@ one of the same keys in those buffers.
 ==============================================================================
 <leader>pr  decision records
 
+`<leader>prP`          n      Postmortem Open Actions
 `<leader>prS`          n      Supersede This Decision
 `<leader>prn`          n      New Decision
+`<leader>prp`          n      New Postmortem
 `<leader>prr`          n      Decision Records
 `<leader>prs`          n      Set Status
 

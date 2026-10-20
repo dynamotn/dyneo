@@ -217,3 +217,93 @@ describe('tools.nfr', function()
     assert.same({ 'Not an availability: nope', vim.log.levels.ERROR }, notes[2])
   end)
 end)
+
+describe('tools.nfr slo', function()
+  local nfr
+
+  before_each(function()
+    h.unload('tools.nfr', 'util.scratch')
+    nfr = require('tools.nfr')
+  end)
+  after_each(function()
+    vim.cmd('silent! tabonly!')
+    vim.cmd('silent! %bwipeout!')
+  end)
+
+  it('reads an objective and its window', function()
+    local slo = assert(nfr.parse_slo({ '99.9', 'window=7d' }))
+    assert.is_true(math.abs(slo.objective - 0.999) < 1e-12)
+    assert.equals(7 * 86400, slo.window)
+    assert.equals(30 * 86400, assert(nfr.parse_slo({ '99.5%' })).window)
+    for _, terms in ipairs({
+      {},
+      { '100' },
+      { '99.9', '99' },
+      { '99.9', 'window=2m' },
+      { 'window=30d' },
+    }) do
+      assert.is_nil(nfr.parse_slo(terms), table.concat(terms, ' '))
+    end
+  end)
+
+  it("gives the workbook's burn rates for thirty days", function()
+    local text =
+      table.concat(nfr.slo_report(assert(nfr.parse_slo({ '99.9' }))), '\n')
+    assert.is_truthy(text:find('# SLO 99.9% over 30d', 1, true))
+    assert.is_truthy(
+      text:find('Error budget: 0.1% of the requests, or 43m 12s', 1, true)
+    )
+    for _, row in ipairs({
+      '| page | 1h | 5m | 14.4 | 1.44% | 2% | 2d 2h |',
+      '| page | 6h | 30m | 6 | 0.6% | 5% | 5d |',
+      '| ticket | 1d | 2h | 3 | 0.3% | 10% | 10d |',
+      '| ticket | 3d | 6h | 1 | 0.1% | 10% | 30d |',
+      'slo:sli_error:ratio_rate1h > 0.0144\n',
+      'and slo:sli_error:ratio_rate5m > 0.0144',
+    }) do
+      assert.is_truthy(text:find(row, 1, true), row)
+    end
+  end)
+
+  it('scales the rates to a shorter window, and drops those below 1', function()
+    local lines = nfr.slo_report(assert(nfr.parse_slo({ '99', 'window=7d' })))
+    local rows = vim.tbl_filter(
+      function(line) return line:match('^| page') or line:match('^| ticket') end,
+      lines
+    )
+    assert.same({
+      '| page | 1h | 5m | 3.36 | 3.36% | 2% | 2d 2h |',
+      '| page | 6h | 30m | 1.4 | 1.4% | 5% | 5d |',
+    }, rows)
+    assert.is_truthy(
+      vim.tbl_contains(
+        lines,
+        'Left out, as it would burn under 1x over a 7d window: the ticket over 1d, the ticket over 3d.'
+      )
+    )
+    -- A window too short for any: no empty rules
+    local short = table.concat(
+      nfr.slo_report(assert(nfr.parse_slo({ '99', 'window=12h' }))),
+      '\n'
+    )
+    assert.is_truthy(short:find('No alert holds', 1, true))
+    assert.is_falsy(short:find('```yaml', 1, true))
+  end)
+
+  it(':DyNfr slo opens the report, and says what it cannot read', function()
+    local notes = {}
+    local restore = h.stub(
+      vim,
+      'notify',
+      function(msg) table.insert(notes, msg) end
+    )
+    nfr.command({ fargs = { 'slo', '99.95' } })
+    nfr.command({ fargs = { 'slo', 'nope' } })
+    restore()
+    assert.equals(
+      '# SLO 99.95% over 30d',
+      vim.api.nvim_buf_get_lines(0, 0, 1, false)[1]
+    )
+    assert.same({ 'Not an objective below 100%: nope' }, notes)
+  end)
+end)

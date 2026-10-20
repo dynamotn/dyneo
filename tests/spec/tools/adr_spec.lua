@@ -73,6 +73,27 @@ describe('tools.adr', function()
     clean()
   end)
 
+  it('refuses a default folder that links outside the project', function()
+    local elsewhere, clean = h.tmpdir()
+    vim.fn.mkdir(dir .. '/docs', 'p')
+    vim.uv.fs_symlink(elsewhere, dir .. '/docs/adr')
+    local found, err = adr.dir(dir)
+    clean()
+    assert.is_nil(found)
+    assert.equals('`docs/adr` points outside the project', err)
+  end)
+
+  it('writes no record over a link put at its name', function()
+    local records = dir .. '/docs/adr'
+    vim.fn.mkdir(records, 'p')
+    h.write(dir .. '/target', { 'kept' })
+    vim.uv.fs_symlink(dir .. '/target', records .. '/0001-record-decisions.md')
+    local record, err = adr.create(records, 'Record decisions')
+    assert.is_nil(record)
+    assert.is_truthy(err:find('is there already', 1, true))
+    assert.same({ 'kept' }, vim.fn.readfile(dir .. '/target'))
+  end)
+
   it(
     'numbers new records after the last one, and lists them in order',
     function()

@@ -63,6 +63,7 @@ CONTENTS                                                      *dyneo-contents*
        7.7 Querying JSON and YAML .............................. |dyneo-query|
        7.8 AsyncAPI documents ............................... |dyneo-asyncapi|
        7.9 Protobuf and GraphQL contracts ................... |dyneo-breaking|
+       7.10 PromQL ............................................ |dyneo-promql|
     8. Data and machine learning ................................ |dyneo-data|
        8.1 Data files ..................................... |dyneo-data-files|
        8.2 SQL and databases ..................................... |dyneo-sql|
@@ -81,6 +82,7 @@ CONTENTS                                                      *dyneo-contents*
        9.10 Well-Architected review .............................. |dyneo-war|
        9.11 Dependency rules .................................... |dyneo-deps|
        9.12 Threat models ..................................... |dyneo-threat|
+       9.13 Postmortems ................................... |dyneo-postmortem|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -182,6 +184,12 @@ defaulted in `lua/config/globals.lua`.
         How long a release waits before Mason or lazy.nvim may install it,
         and before |:DyOutdated| offers it; `0` turns the wait off.  See
         |dyneo-quarantine|.
+
+                                                            *DyNeo.prometheus*
+`DyNeo.prometheus.url`         (default unset)
+        The Prometheus server |:DyPromQL| asks when the clone names none
+        with `git config dyneo.prometheusUrl <url>`.  Credentials come from
+        `~/.netrc`.  See |dyneo-promql|.
 
                                                          *DyNeo.image_signers*
 `DyNeo.image_signers`          (default `{}`)
@@ -961,6 +969,16 @@ base64, opens as that report rather than its bytes, in a buffer that is
 never written back; one holding PEM text stays text to edit.  A PKCS#12 bundle (`.p12`, `.pfx`)
 is not opened: it is password protected and holds a private key.
 
+                                                             *dyneo-cert-host*
+`<leader>ih` (`:DyCert host [{host}[:{port}]]`) asks a server for the chain
+it serves, through `openssl s_client`, and reads it out the same way: the
+host under the cursor -- a URL, or a host name as an Ingress or a config
+writes it -- unless one is given, on port 443 unless one is.  Besides the
+chain, it says which TLS version and cipher the handshake agreed on and
+whether the leaf is valid for the host name -- an IPv4 address is checked
+against its IP names instead, and sent no SNI.  Nothing is sent but the
+handshake, and only to a name that reads as a host, never as an option.
+
 7.4 CI pipelines                                                    *dyneo-ci*
 
 In a `.gitlab-ci.yml`, a GitHub Actions workflow or an `azure-pipelines.yml`,
@@ -1165,6 +1183,25 @@ A revision is a name, a hash or a `~`/`^` path; anything else is refused,
 since buf reads options from it.  A run that fails is reported as such,
 never as nothing breaking.
 
+7.10 PromQL                                                     *dyneo-promql*
+
+`<leader>im` (|:DyPromQL|) runs the PromQL expression under the cursor: the
+`expr:` of the alerting or recording rule the cursor is in, inline or as a
+block, the `"expr"` of a Grafana panel, or the paragraph of a `.promql`
+file; in Visual mode, the lines selected.  It asks the Prometheus server
+for its value now and over the last hour, and lists each series -- the
+first 50 -- with its labels, its value and a sparkline of the hour.
+Prometheus's own error is said when it refuses the expression.
+
+The server is the one the clone names, `git config dyneo.prometheusUrl
+<url>`, else `DyNeo.prometheus.url`; never one a file of the repository
+names.  `curl` reads credentials from `~/.netrc`, which hands each only to
+its own host.
+
+`<leader>iM` (`:DyPromQL test`) runs `promtool test rules` on a rule test
+(a file with `rule_files:`), or `promtool check rules` on a rule file
+(`groups:`), from the file's folder; a failure opens what promtool said.
+
 ------------------------------------------------------------------------------
 8. DATA AND MACHINE LEARNING                                      *dyneo-data*
 
@@ -1331,8 +1368,10 @@ found for the buffer.
 |:DyAdr| keeps the architecture decisions of a project as adr-tools does: one
 Markdown file per decision, numbered `0001-<title>.md` and on, in the
 directory a `.adr-dir` file at the root names, else `docs/adr`, `doc/adr`,
-`docs/decisions` or `adr` when one exists, else `docs/adr`.  A `.adr-dir`
-naming a directory outside the project is refused.  A record has a
+`docs/decisions` or `adr` when one exists, else `docs/adr`.  A directory
+outside the project -- named by `.adr-dir`, or reached through a link --
+is refused, and so is a record whose name something already holds.  A
+record has a
 title, a date, a status -- proposed, accepted, deprecated, superseded -- and
 its context, decision and consequences.  A decision that replaces another
 links both ways: the old one says what superseded it, the new one what it
@@ -1342,8 +1381,10 @@ supersedes.
     `<leader>prn`      Write a new record
     `<leader>prs`      Set the status of the record open
     `<leader>prS`      Write a record replacing the one open
+    `<leader>prp`      Write a postmortem (|dyneo-postmortem|)
+    `<leader>prP`      The action items a postmortem leaves open
 
-9.3 Spelling                                                     *dyneo-spell*
+9.3 Spelling                                                    *dyneo-spell*
 
 |:DySpell|, or `<leader>zm`, rebuilds a spell file with |:mkspell| from the
 word lists under |DyNeo.dictionaries_path| and `spell/`: Vietnamese,
@@ -1572,6 +1613,21 @@ second, as links are sold), over a month and at peak, the storage that keeps
 every request that long, and the instances the peak takes -- and one more,
 so that losing one is survived.
 
+                                                                   *dyneo-slo*
+`<leader>pAs` (`:DyNfr slo {objective} [window=30d]`) turns a service level
+objective into its alerts.  It reads out the error budget of the window (in
+`h`, `d` or `w`), then the multiwindow, multi-burn-rate alerts of the Google
+SRE workbook: a page when 2% of the budget burns in an hour or 5% in six,
+a ticket when 10% burns in a day or in three, each also still burning over
+its short window so it stops soon after the burn does.  For each, the burn
+rate, the error ratio it fires above and how soon the budget would be gone;
+the rates are scaled to the window, and an alert whose rate falls below 1
+is left out, and named.  Then the Prometheus rules of those alerts, on
+recording rules `slo:sli_error:ratio_rate<window>` of your own: >vim
+
+    :DyNfr slo 99.9 window=28d
+<
+
 9.8 Network ranges                                                *dyneo-cidr*
 
 `<leader>pAc` (|:DyCidr|) reads out the IPv4 range under the cursor: its
@@ -1670,6 +1726,24 @@ hold, and the ones still open in the quickfix list.  Only a record whose
 `# N.` heading reads `Threat model: {scope}` is a model; another record
 that mentions one is not.
 
+9.13 Postmortems                                            *dyneo-postmortem*
+
+`<leader>prp` (`:DyPostmortem new [{title}]`) asks when the incident
+started and ended -- `YYYY-MM-DD HH:MM`, or `HH:MM` today, local time; the
+end defaults to now -- and writes a blameless postmortem as a decision
+record (|dyneo-adr|): summary, impact, timeline, root cause, contributing
+factors, what went well and what went wrong, and the action items as a
+checklist.  The timeline is filled in, in UTC, from what this machine sees
+of the window: the commits of the project, and the events of the current
+Kubernetes context (|dyneo-kube|), warnings first past 200 of them.  A
+source that cannot be read is named under the timeline, never left out
+silently.  Events live an hour in a cluster by default, so for an older
+incident expect few.
+
+`<leader>prP` (|:DyPostmortem|) reads the postmortem open, or the latest of
+the project, as |:DyWar| reads a review: its action items still open, in
+the quickfix list.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -1723,6 +1797,9 @@ Infrastructure and operations (|dyneo-infra|, |dyneo-ops|) ~
     `<leader>ir`       n      Try this Rego policy against an input
     `<leader>iR`       n      Run the Rego tests, mark what they miss
     `<leader>id`       n      Compare this file with another environment's
+    `<leader>ih`       n      The chain the host under the cursor serves
+    `<leader>im`       nx     Run the PromQL under the cursor, or selected
+    `<leader>iM`       n      Check or test the Prometheus rules of the buffer
     `<leader>ic`       n      Switch the Kubernetes context
     `<leader>in`       n      Switch the Kubernetes namespace
 
@@ -1993,6 +2070,10 @@ Operations ~
                                                                      *:DyCert*
 :DyCert [{file}]        Show and check every certificate of {file}, or of
                         the buffer.  See |dyneo-cert-file|.
+:DyCert host [{host}[:{port}]]
+                        The same of the chain the host under the cursor, or
+                        {host}, serves, with its handshake.  See
+                        |dyneo-cert-host|.
 
                                                                  *:DyCiStatus*
 :DyCiStatus             Show the last pipeline on the jobs of this
@@ -2028,6 +2109,12 @@ Operations ~
 :DyBreaking [{rev}]     The breaking changes of this Protobuf or GraphQL
                         schema since {rev}, `HEAD` unless given.  See
                         |dyneo-breaking|.
+
+                                                                   *:DyPromQL*
+:[range]DyPromQL        Run the PromQL expression under the cursor, or the
+                        lines of [range], on the clone's Prometheus.
+:DyPromQL test          Check the rule file, or run the rule test, of the
+                        buffer with promtool.  See |dyneo-promql|.
 
                                                                      *:DyCron*
 :DyCron                 The schedule on the cursor line in words, with its
@@ -2065,6 +2152,9 @@ Project ~
 :DyNfr [{term}...]      Availability, downtime, error budget and requests in
                         flight of a chain of components; bandwidth, storage
                         and instances of a load.  See |dyneo-nfr|.
+:DyNfr slo {objective} [window={span}]
+                        The error budget and burn-rate alerts of an
+                        objective, as Prometheus rules.  See |dyneo-slo|.
 
                                                                      *:DyCidr*
 :DyCidr                 What the IPv4 range under the cursor holds.
@@ -2090,6 +2180,14 @@ Project ~
                         questions in the quickfix list.
 :DyThreat new [{scope}] Write a new STRIDE model of {scope} as a decision
                         record.  See |dyneo-threat|.
+
+                                                               *:DyPostmortem*
+:DyPostmortem           The action items the latest postmortem leaves open,
+                        in the quickfix list.
+:DyPostmortem new [{title}]
+                        Write a postmortem as a decision record, its timeline
+                        gathered from git and the cluster.  See
+                        |dyneo-postmortem|.
 
                                                                        *:DyC4*
 :DyC4 [{view}]          Draw {view} of the LikeC4 workspace of the buffer,

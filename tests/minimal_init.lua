@@ -77,6 +77,18 @@ for _, name in
 do
   vim.env[name] = nil
 end
+-- So does who is committing: a commit hook hands down the author of the
+-- commit underway, which beats the `user.name` a spec gives its own
+for _, name in ipairs({
+  'GIT_AUTHOR_NAME',
+  'GIT_AUTHOR_EMAIL',
+  'GIT_AUTHOR_DATE',
+  'GIT_COMMITTER_NAME',
+  'GIT_COMMITTER_EMAIL',
+  'GIT_COMMITTER_DATE',
+}) do
+  vim.env[name] = nil
+end
 
 -- The machine's git configuration reaches every repository a spec creates: an
 -- `init.templatedir` copies its hooks into one, and the next commit there

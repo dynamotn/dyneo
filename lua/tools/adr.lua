@@ -159,11 +159,28 @@ function M.dir(base)
       return dir
     end
   end
+  -- A cloned repository may hold `docs/adr` as a link elsewhere just as
+  -- well: each folder is held to the project the way `.adr-dir` is
+  local function inside(path)
+    return require('util.root').contains(
+      resolved(vim.fs.normalize(base)),
+      resolved(path)
+    )
+  end
   for _, dir in ipairs(M.DIRS) do
     local path = vim.fs.joinpath(base, dir)
-    if vim.fn.isdirectory(path) == 1 then return path end
+    if vim.fn.isdirectory(path) == 1 then
+      if not inside(path) then
+        return nil, ('`%s` points outside the project'):format(dir)
+      end
+      return path
+    end
   end
-  return vim.fs.joinpath(base, M.DIRS[1])
+  local path = vim.fs.joinpath(base, M.DIRS[1])
+  if not inside(path) then
+    return nil, ('`%s` points outside the project'):format(M.DIRS[1])
+  end
+  return path
 end
 
 --- Every record of `dir`, by number
@@ -183,16 +200,22 @@ function M.list(dir)
   return records
 end
 
---- A new record titled `title` in `dir`, written and returned
+--- A new record titled `title` in `dir`, written and returned; nil and why
+--- when something is already at its name -- a link put there would have
+--- the record written wherever it points
 ---@param dir string
 ---@param title string
 ---@param status? string
----@return DyAdr
+---@return DyAdr? record
+---@return string? err
 function M.create(dir, title, status)
   local records = M.list(dir)
   local number = #records > 0 and records[#records].number + 1 or 1
   local file =
     vim.fs.joinpath(dir, ('%04d-%s.md'):format(number, M.slug(title)))
+  if vim.uv.fs_lstat(file) then
+    return nil, ('%s is there already, and is no record'):format(file)
+  end
   vim.fn.mkdir(dir, 'p')
   vim.fn.writefile(
     M.template(number, title, os.date('%Y-%m-%d') --[[@as string]], status),
@@ -233,7 +256,8 @@ function M.new(title)
   with_title(title, function(text)
     local dir, err = M.dir(root())
     if not dir then return notify(err, vim.log.levels.ERROR) end
-    local record = M.create(dir, text)
+    local record, why = M.create(dir, text)
+    if not record then return notify(why, vim.log.levels.ERROR) end
     vim.cmd.edit(vim.fn.fnameescape(record.file))
     notify(('Recorded %d. %s'):format(record.number, record.title))
   end)
@@ -277,7 +301,8 @@ function M.supersede(title)
   if not old then return end
   local bufnr = vim.api.nvim_get_current_buf()
   with_title(title, function(text)
-    local new = M.create(vim.fs.dirname(old.file), text, 'Accepted')
+    local new, why = M.create(vim.fs.dirname(old.file), text, 'Accepted')
+    if not new then return notify(why, vim.log.levels.ERROR) end
     vim.api.nvim_buf_set_lines(
       bufnr,
       0,

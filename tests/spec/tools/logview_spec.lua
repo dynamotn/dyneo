@@ -197,6 +197,32 @@ describe('tools.logview', function()
       assert.is_truthy(notes[#notes]:find('^jq failed'))
     end)
 
+    it('drops what jq selected of records a reload replaced', function()
+      if vim.fn.executable('jq') ~= 1 then
+        assert(not vim.env.CI, 'no jq on CI')
+        return pending('jq is not installed')
+      end
+      logview.command({ fargs = { file } })
+      local bufnr = vim.api.nvim_get_current_buf()
+      local jq_runs = 0
+      local run = require('util.system').run
+      local restore = h.stub(
+        require('util.system'),
+        'run',
+        function(cmd, opts, cb)
+          if cmd[1] == 'jq' then jq_runs = jq_runs + 1 end
+          return run(cmd, opts, cb)
+        end
+      )
+      logview.jq(bufnr, '.request_id == "r1"')
+      logview.reload(bufnr)
+      -- Long enough for jq to answer, and for its answer to be dropped
+      vim.wait(1000, function() return false end, 20)
+      restore()
+      assert.equals(1, jq_runs)
+      assert.equals(5, #lines())
+    end)
+
     it('reads only the end of a file past the size cap', function()
       h.write(file, { 'first record', 'second record', 'third record' })
       local restore = h.stub(logview, 'MAX_BYTES', 20)

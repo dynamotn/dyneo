@@ -135,6 +135,15 @@ DyNeo.ai = {
 --- of its own host.
 DyNeo.jenkins = { url = nil }
 
+---@class DyPrometheus
+---@field url? string The Prometheus server `:DyPromQL` asks,
+--- `https://prometheus.example.com`, when the clone names none
+
+---@type DyPrometheus The Prometheus server of `:DyPromQL`. A clone names its
+--- own with `git config dyneo.prometheusUrl <url>`, which wins; credentials
+--- come from `~/.netrc`, never from here.
+DyNeo.prometheus = { url = nil }
+
 ---@class DyPipelines
 ---@field airflow_url? string The Airflow webserver a DAG's runs are asked of,
 --- `https://airflow.example.com`, when its clone names none

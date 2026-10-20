@@ -105,6 +105,27 @@ describe('tools.inspect', function()
       )
     end)
 
+    it(
+      'reads each block of a base64 bundle, as cert-manager writes one',
+      function()
+        local bundle = vim.base64.encode(table.concat({
+          '-----BEGIN CERTIFICATE-----',
+          'LEAF',
+          '-----END CERTIFICATE-----',
+          '-----BEGIN CERTIFICATE-----',
+          'CA',
+          '-----END CERTIFICATE-----',
+          '',
+        }, '\n'))
+        local found = inspect.pems({ 'data:', '  tls.crt: ' .. bundle })
+        assert.same({
+          '-----BEGIN CERTIFICATE-----\nLEAF\n-----END CERTIFICATE-----',
+          '-----BEGIN CERTIFICATE-----\nCA\n-----END CERTIFICATE-----',
+        }, vim.tbl_map(function(block) return block.text end, found))
+        assert.same({ 2, 2 }, { found[2].first, found[2].last })
+      end
+    )
+
     it('names a private key, never decodes it', function()
       local lines
       inspect.pem({

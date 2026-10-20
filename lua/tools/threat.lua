@@ -119,7 +119,8 @@ function M.new(scope)
     local date = os.date('%Y-%m-%d') --[[@as string]]
     local dir, err = adr.dir(war.root())
     if not dir then return notify(err, vim.log.levels.ERROR) end
-    local record = adr.create(dir, ('%s: %s'):format(M.TITLE, text))
+    local record, why = adr.create(dir, ('%s: %s'):format(M.TITLE, text))
+    if not record then return notify(why, vim.log.levels.ERROR) end
     vim.fn.writefile(M.template(record.number, date, text), record.file)
     vim.cmd.edit(vim.fn.fnameescape(record.file))
     notify(('Model %d written: tick what holds'):format(record.number))

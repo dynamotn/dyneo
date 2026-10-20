@@ -176,7 +176,8 @@ function M.new()
   local date = os.date('%Y-%m-%d') --[[@as string]]
   local dir, err = adr.dir(M.root())
   if not dir then return notify(err, vim.log.levels.ERROR) end
-  local record = adr.create(dir, ('%s %s'):format(M.TITLE, date))
+  local record, why = adr.create(dir, ('%s %s'):format(M.TITLE, date))
+  if not record then return notify(why, vim.log.levels.ERROR) end
   vim.fn.writefile(M.template(record.number, date), record.file)
   vim.cmd.edit(vim.fn.fnameescape(record.file))
   notify(('Review %d written: tick what holds'):format(record.number))
