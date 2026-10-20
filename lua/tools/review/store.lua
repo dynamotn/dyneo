@@ -92,7 +92,8 @@ end
 --- Read review `id` of `remote`
 ---
 --- A missing file is an empty review. One that does not decode is renamed
---- `<file>.bad` and reported, so the next save cannot overwrite it silently.
+--- `<file>.bad` (or `.bad.N` when one exists) and reported, so neither a
+--- save nor a later bad file overwrites it.
 ---@param remote DyForgeRemote
 ---@param id string
 ---@return DyReviewState
@@ -110,6 +111,11 @@ function M.load(remote, id)
   end
   if not (ok and decoded and valid(state)) then
     local aside = path .. '.bad'
+    local n = 0
+    while vim.uv.fs_stat(aside) do
+      n = n + 1
+      aside = ('%s.bad.%d'):format(path, n)
+    end
     local moved = vim.uv.fs_rename(path, aside)
     notify(
       moved and ('Unreadable review state kept as ' .. aside)
@@ -138,12 +144,22 @@ function M.save(remote, id, state)
     drafts = state.drafts or {},
   })
   local dir = vim.fs.dirname(path)
-  vim.fn.mkdir(dir, 'p')
+  vim.fn.mkdir(dir, 'p', '0700')
+  -- `mkdir` sets the mode of new directories only, so tighten the whole
+  -- subtree from `review/` down, comment text being private
+  local top = root()
+  local current = dir
+  while #current >= #top and vim.startswith(current, top) do
+    vim.uv.fs_chmod(current, tonumber('700', 8))
+    if current == top then break end
+    current = vim.fs.dirname(current)
+  end
   local temp = ('%s.tmp.%d'):format(path, vim.uv.os_getpid())
   if vim.fn.writefile({ vim.json.encode(out) }, temp) ~= 0 then
     vim.fn.delete(temp)
     error('review store: cannot write ' .. temp)
   end
+  vim.uv.fs_chmod(temp, tonumber('600', 8))
   local ok, err = vim.uv.fs_rename(temp, path)
   if not ok then
     vim.fn.delete(temp)

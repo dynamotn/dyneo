@@ -108,6 +108,35 @@ describe('tools.review.store', function()
     assert.equal(1, vim.fn.filereadable(path .. '.bad'))
   end)
 
+  it('keeps every corrupt copy', function()
+    local path = store.path(remote, 'pr-1')
+    local dir = vim.fs.dirname(path)
+    local undo = h.stub(vim, 'notify', function() end)
+    h.write(path, { 'first {' })
+    store.load(remote, 'pr-1')
+    h.write(path, { 'second {' })
+    store.load(remote, 'pr-1')
+    undo()
+    local kept = {}
+    for _, name in ipairs(vim.fn.readdir(dir)) do
+      kept[#kept + 1] = vim.fn.readfile(vim.fs.joinpath(dir, name))[1]
+    end
+    table.sort(kept)
+    assert.same({ 'first {', 'second {' }, kept)
+  end)
+
+  it('keeps the review private', function()
+    local review = vim.fs.joinpath(state_dir, 'dyneo', 'review')
+    -- a directory made earlier with looser permissions
+    vim.fn.mkdir(review, 'p', '0755')
+    store.save(remote, 'pr-1', { reviewed = {}, drafts = {} })
+    local function mode(p) return vim.uv.fs_stat(p).mode % 512 end
+    local path = store.path(remote, 'pr-1')
+    assert.equal(tonumber('600', 8), mode(path))
+    assert.equal(tonumber('700', 8), mode(vim.fs.dirname(path)))
+    assert.equal(tonumber('700', 8), mode(review))
+  end)
+
   it('writes atomically', function()
     local path = store.path(remote, 'pr-1')
     store.save(remote, 'pr-1', { reviewed = { a = 'old' }, drafts = {} })
