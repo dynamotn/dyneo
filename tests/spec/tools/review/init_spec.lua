@@ -240,6 +240,66 @@ describe('tools.review', function()
       assert.is_truthy(review.current().blocked:find('HTTP 502', 1, true))
     end)
 
+    for _, case in ipairs({
+      { kind = 'github', posted = '302/501', comment = 501 },
+      { kind = 'gitlab', posted = 'draft:61', comment = 61 },
+    }) do
+      it(
+        'imports a draft posted from here only once on ' .. case.kind,
+        function()
+          local adapter_of = require('tools.review.forge.' .. case.kind)
+          local imported_id =
+            vim.fn.sha256(case.kind .. ':' .. case.comment):sub(1, 12)
+          local mine = {
+            id = 'mine',
+            origin = 'user',
+            state = 'ready',
+            path = 'a.lua',
+            side = 'new',
+            line = 1,
+            body = 'x',
+            posted = case.posted,
+          }
+          stub(
+            store,
+            'load',
+            function() return { reviewed = {}, drafts = { mine } } end
+          )
+          adapter.import_id = adapter_of.import_id
+          adapter.pending = function(_, _, cb)
+            cb({
+              {
+                id = imported_id,
+                origin = 'forge',
+                state = 'ready',
+                path = 'a.lua',
+                side = 'new',
+                line = 1,
+                body = 'x',
+              },
+              {
+                id = 'other',
+                origin = 'forge',
+                state = 'ready',
+                path = 'b.lua',
+                side = 'new',
+                line = 2,
+                body = 'y',
+              },
+            })
+          end
+          review.open(remote, pull())
+          assert.same(
+            { 'mine', 'other' },
+            vim.tbl_map(
+              function(d) return d.id end,
+              review.current().state.drafts
+            )
+          )
+        end
+      )
+    end
+
     it('keeps why the pull request is read only', function()
       review.open(remote, pull({ read_only = 'The pull request is merged' }))
       assert.equals('The pull request is merged', review.current().blocked)

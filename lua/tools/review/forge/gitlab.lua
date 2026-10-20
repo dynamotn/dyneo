@@ -857,6 +857,15 @@ local function parse_posted(posted)
   return tonumber(posted:match('^draft:(%d+)$'))
 end
 
+--- The id `pending` gives the draft note a forge id `posted` names, nil
+--- for a forge id naming none
+---@param posted string
+---@return string?
+function M.import_id(posted)
+  local note = parse_posted(posted)
+  return note and forge_draft_id(note) or nil
+end
+
 --- The note of mine in `rows` each draft was published as, by draft id
 ---
 --- A note matches by its text and its place: the thread a reply went into,

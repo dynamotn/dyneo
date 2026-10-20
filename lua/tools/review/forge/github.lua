@@ -625,6 +625,15 @@ local function parse_posted(posted)
   return tonumber(review), tonumber(comment)
 end
 
+--- The id `pending` gives the comment a forge id `posted` names, nil for a
+--- forge id naming none
+---@param posted string
+---@return string?
+function M.import_id(posted)
+  local _, comment = parse_posted(posted)
+  return comment and forge_draft_id(comment) or nil
+end
+
 --- Why a pending review cannot be submitted as it is
 local CHANGED = 'the pending review on GitHub no longer matches the drafts '
   .. 'here; open the pull request again'

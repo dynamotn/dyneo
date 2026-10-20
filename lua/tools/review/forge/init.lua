@@ -47,6 +47,7 @@ local M = {}
 ---@field pending fun(remote: DyForgeRemote, pull: DyReviewPull, cb: fun(drafts?: DyReviewDraft[], err?: string))
 ---@field submit fun(remote: DyForgeRemote, pull: DyReviewPull, drafts: DyReviewDraft[], review: { verdict: string, body?: string }, progress: fun(draft: DyReviewDraft, forge_id: string), cb: fun(err?: string, info?: { lost?: string[], already?: integer, skipped?: string }))
 ---@field suggestion fun(lines: string[]): string?
+---@field import_id? fun(posted: string): string? The id `pending` gives what a posted draft became, so it is not imported twice
 
 --- The module of each forge kind's adapter
 M.ADAPTERS = {

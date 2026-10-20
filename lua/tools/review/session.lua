@@ -323,7 +323,19 @@ local function load_forge(s, cb)
         function(d) return d.origin ~= 'forge' or d.posted ~= nil end,
         s.state.drafts
       )
-      s.state.drafts = vim.list_extend(kept, pending)
+      -- What a draft sent from here became is pending on the forge too:
+      -- imported again, it would show and count twice
+      local sent = {}
+      for _, d in ipairs(kept) do
+        local id = d.posted
+          and s.adapter.import_id
+          and s.adapter.import_id(d.posted)
+        if id then sent[id] = true end
+      end
+      s.state.drafts = vim.list_extend(
+        kept,
+        vim.tbl_filter(function(d) return not sent[d.id] end, pending)
+      )
     end
     done()
   end)
