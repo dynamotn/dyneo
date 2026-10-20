@@ -1,0 +1,8 @@
+[
+  {"old_path": "a.lua", "new_path": "a.lua", "new_file": false, "renamed_file": false, "deleted_file": false,
+   "diff": "@@ -1,6 +1,8 @@\n l1\n l2\n l3\n-gone\n+n4\n+n5\n+n6\n l5\n l6\n"},
+  {"old_path": "b_old.lua", "new_path": "b.lua", "new_file": false, "renamed_file": true, "deleted_file": false,
+   "diff": "@@ -1,3 +1,3 @@\n x\n-y\n+z\n w\n"},
+  {"old_path": "c.lua", "new_path": "c.lua", "new_file": false, "renamed_file": false, "deleted_file": false,
+   "diff": "@@ -10,1 +10,2 @@\n a\n+b\n\\ No newline at end of file\n"}
+]

@@ -13,6 +13,11 @@
 --- before any write, that the draft notes on GitLab are exactly the imported
 --- ones and those sent from here.
 ---
+--- A draft is placed by the merge request's own diff (`/diffs`): GitLab
+--- takes both lines of an unchanged one, the old and new path of a renamed
+--- file, and a line code at each end of a range; a line in no hunk goes on
+--- the file.
+---
 --- A draft sent goes by `draft:<draft note id>`. Publishing deletes the draft
 --- note and answers no id for the note it becomes; a later submit that finds
 --- the draft note gone looks for a note of mine with the same text in the
@@ -632,42 +637,195 @@ local function sent_text(draft)
   return body_of(draft)
 end
 
---- A draft as the input of a new draft note on `pull`
+--- The SHA-1 of `msg` in hex, as GitLab names a file in a line code
+---@param msg string
+---@return string
+local function sha1(msg)
+  local bit = require('bit')
+  local band, bor, bxor, bnot = bit.band, bit.bor, bit.bxor, bit.bnot
+  local rol, tobit, tohex = bit.rol, bit.tobit, bit.tohex
+  local h = { 0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0 }
+  local bits = #msg * 8
+  local function be32(n)
+    return string.char(
+      math.floor(n / 2 ^ 24) % 256,
+      math.floor(n / 2 ^ 16) % 256,
+      math.floor(n / 2 ^ 8) % 256,
+      n % 256
+    )
+  end
+  msg = msg
+    .. '\128'
+    .. ('\0'):rep((55 - #msg) % 64)
+    .. be32(math.floor(bits / 2 ^ 32))
+    .. be32(bits % 2 ^ 32)
+  local w = {}
+  for chunk = 1, #msg, 64 do
+    for i = 0, 15 do
+      local a, b, c, d = msg:byte(chunk + i * 4, chunk + i * 4 + 3)
+      w[i] = tobit(a * 2 ^ 24 + b * 2 ^ 16 + c * 2 ^ 8 + d)
+    end
+    for i = 16, 79 do
+      w[i] = rol(bxor(w[i - 3], w[i - 8], w[i - 14], w[i - 16]), 1)
+    end
+    local a, b, c, d, e = h[1], h[2], h[3], h[4], h[5]
+    for i = 0, 79 do
+      local f, k
+      if i < 20 then
+        f, k = bor(band(b, c), band(bnot(b), d)), 0x5A827999
+      elseif i < 40 then
+        f, k = bxor(b, c, d), 0x6ED9EBA1
+      elseif i < 60 then
+        f, k = bor(band(b, c), band(b, d), band(c, d)), 0x8F1BBCDC
+      else
+        f, k = bxor(b, c, d), 0xCA62C1D6
+      end
+      local t = tobit(rol(a, 5) + f + e + k + w[i])
+      a, b, c, d, e = t, a, rol(b, 30), c, d
+    end
+    h[1], h[2], h[3] = tobit(h[1] + a), tobit(h[2] + b), tobit(h[3] + c)
+    h[4], h[5] = tobit(h[4] + d), tobit(h[5] + e)
+  end
+  return tohex(h[1]) .. tohex(h[2]) .. tohex(h[3]) .. tohex(h[4]) .. tohex(h[5])
+end
+
+---@class DyGitLabLine
+---@field kind 'new'|'old'|'context' added, removed or unchanged
+---@field old integer The line before the change, or the one it comes before
+---@field new integer The line after the change, or the one it comes before
+
+---@class DyGitLabFile
+---@field old_path string
+---@field new_path string
+---@field new table<integer, DyGitLabLine> By line on the new side
+---@field old table<integer, DyGitLabLine> By line on the old side
+
+--- The lines of a file's unified diff, by side
+---
+--- An added line keeps the old line it comes before, and a removed one the
+--- new line: GitLab's line codes name both.
+---@param diff string
+---@return table<integer, DyGitLabLine> new
+---@return table<integer, DyGitLabLine> old
+local function diff_lines(diff)
+  local new, old = {}, {}
+  local o, n
+  for line in (diff .. '\n'):gmatch('([^\n]*)\n') do
+    local from, to = line:match('^@@ %-(%d+),?%d* %+(%d+),?%d* @@')
+    if from then
+      o, n = tonumber(from), tonumber(to)
+    elseif o and n then
+      local mark = line:sub(1, 1)
+      if mark == ' ' then
+        local at = { kind = 'context', old = o, new = n }
+        new[n], old[o] = at, at
+        o, n = o + 1, n + 1
+      elseif mark == '-' then
+        old[o] = { kind = 'old', old = o, new = n }
+        o = o + 1
+      elseif mark == '+' then
+        new[n] = { kind = 'new', old = o, new = n }
+        n = n + 1
+      end
+    end
+  end
+  return new, old
+end
+
+--- The files of `pull`'s diff, by new and by old path
+---@param remote DyForgeRemote
 ---@param pull DyReviewPull
----@param draft DyReviewDraft
+---@param on_done fun(files?: table<string, DyGitLabFile>, err?: string)
+local function diff_files(remote, pull, on_done)
+  all_pages(
+    remote,
+    mr_path(remote, pull, '/diffs'),
+    'changed files',
+    function(rows, err)
+      if not rows then return on_done(nil, err) end
+      local files = {}
+      for _, row in ipairs(rows) do
+        local new_path = tbl(row) and text(row.new_path)
+        local old_path = tbl(row) and text(row.old_path)
+        if not (new_path and old_path) then
+          return on_done(nil, 'GitLab answered with a malformed diff')
+        end
+        local new, old = diff_lines(text(row.diff, '') --[[@as string]])
+        local file =
+          { old_path = old_path, new_path = new_path, new = new, old = old }
+        files[old_path] = files[old_path] or file
+        -- The new path wins: it is the one a draft names
+        files[new_path] = file
+      end
+      on_done(files)
+    end
+  )
+end
+
+--- A line of `file` as an end of a `line_range`
+---@param file DyGitLabFile
+---@param at DyGitLabLine
 ---@return table
-local function draft_note_input(pull, draft)
-  local input = { note = body_of(draft) }
+local function range_end(file, at)
+  return {
+    line_code = ('%s_%d_%d'):format(sha1(file.new_path), at.old, at.new),
+    -- GitLab's word for any line not added
+    type = at.kind == 'new' and 'new' or 'old',
+    old_line = at.kind ~= 'new' and at.old or nil,
+    new_line = at.kind ~= 'old' and at.new or nil,
+  }
+end
+
+--- A draft as the input of a new draft note on `pull`, placed by the merge
+--- request's own diff, or why it cannot be
+---
+--- An unchanged line names both sides, an added or removed one its own side
+--- only; a line in no hunk is a comment on the file naming the line.
+---@param pull DyReviewPull
+---@param files table<string, DyGitLabFile>
+---@param draft DyReviewDraft
+---@return table? input
+---@return string? err
+local function draft_note_input(pull, files, draft)
   if draft.reply_to then
-    input.in_reply_to_discussion_id = draft.reply_to
+    local input = {
+      note = body_of(draft),
+      in_reply_to_discussion_id = draft.reply_to,
+    }
     if draft.resolve then input.resolve_discussion = true end
     return input
+  end
+  local file = files[draft.path]
+  if not file then
+    return nil, ("%s is not in the merge request's diff"):format(draft.path)
   end
   ---@type table<string, any>
   local position = {
     base_sha = pull.base_sha,
     start_sha = pull.start_sha or pull.base_sha,
     head_sha = pull.head_sha,
-    old_path = draft.path,
-    new_path = draft.path,
+    old_path = file.old_path,
+    new_path = file.new_path,
   }
-  input.position = position
-  if draft.file_level then
+  local lines = draft.side == 'old' and file.old or file.new
+  local at = not draft.file_level and lines[draft.line]
+  if not at then
     position.position_type = 'file'
-    return input
+    local on_file = vim.tbl_extend('force', draft, { file_level = true })
+    return { note = body_of(on_file), position = position }
   end
   position.position_type = 'text'
-  local key = draft.side == 'old' and 'old_line' or 'new_line'
-  local kind = draft.side == 'old' and 'old' or 'new'
-  position[key] = draft.line
+  position.old_line = at.kind ~= 'new' and at.old or nil
+  position.new_line = at.kind ~= 'old' and at.new or nil
   local start = range_start(draft)
-  if start then
+  local first = start and lines[start]
+  if first then
     position.line_range = {
-      start = { type = kind, [key] = start },
-      ['end'] = { type = kind, [key] = draft.line },
+      start = range_end(file, first),
+      ['end'] = range_end(file, at),
     }
   end
-  return input
+  return { note = body_of(draft), position = position }
 end
 
 --- Run `worker` on each of `items` in turn, stopping at the first error
@@ -711,6 +869,8 @@ local function published(rows, me, drafts)
   local note_of, taken = {}, {}
   for _, draft in ipairs(drafts) do
     local body = sent_text(draft)
+    -- A line in no hunk went out on the file, naming the line
+    local on_file = ('L%d: %s'):format(draft.line or 0, body)
     for _, row in ipairs(rows) do
       local notes = tbl(row) and tbl(row.notes) or {}
       for _, note in ipairs(notes) do
@@ -722,7 +882,7 @@ local function published(rows, me, drafts)
           and not taken[id]
           and author
           and author.id == me.id
-          and note.body == body
+          and (note.body == body or not draft.file_level and note.body == on_file)
           and (
             draft.reply_to and row.id == draft.reply_to
             or not draft.reply_to and at and at.path == draft.path
@@ -795,12 +955,14 @@ end
 ---@param progress fun(draft: DyReviewDraft, forge_id: string)
 ---@param on_done fun(err?: string)
 local function send(remote, pull, plan, progress, on_done)
+  ---@type table<DyReviewDraft, table>
+  local inputs = {}
   local function add(draft, next)
     forge.write(
       remote,
       'POST',
       mr_path(remote, pull, '/draft_notes'),
-      draft_note_input(pull, draft),
+      inputs[draft],
       function(data, err)
         if data == nil then return next(err) end
         local id = type(data) == 'table' and int(data.id)
@@ -875,18 +1037,40 @@ local function send(remote, pull, plan, progress, on_done)
       set(now)
     end)
   end
-  in_turn(plan.new, add, function(add_err)
-    if add_err then return on_done(add_err) end
-    publish(function(publish_err)
-      if publish_err then return on_done(publish_err) end
-      in_turn(plan.resolves, resolve, function(resolve_err)
-        if resolve_err then return on_done(resolve_err) end
-        note(function(note_err)
-          if note_err then return on_done(note_err) end
-          verdict(on_done)
+  local function write_all()
+    in_turn(plan.new, add, function(add_err)
+      if add_err then return on_done(add_err) end
+      publish(function(publish_err)
+        if publish_err then return on_done(publish_err) end
+        in_turn(plan.resolves, resolve, function(resolve_err)
+          if resolve_err then return on_done(resolve_err) end
+          note(function(note_err)
+            if note_err then return on_done(note_err) end
+            verdict(on_done)
+          end)
         end)
       end)
     end)
+  end
+  --- Every draft note's input, built before the first write: a draft that
+  --- cannot be placed stops the submit while nothing is sent
+  ---@param files table<string, DyGitLabFile>
+  local function place(files)
+    for _, draft in ipairs(plan.new) do
+      local input, err = draft_note_input(pull, files, draft)
+      if not input then return on_done(err) end
+      inputs[draft] = input
+    end
+    write_all()
+  end
+  local on_diff = vim.tbl_filter(
+    function(draft) return not draft.reply_to end,
+    plan.new
+  )
+  if #on_diff == 0 then return place({}) end
+  diff_files(remote, pull, function(files, err)
+    if not files then return on_done(err) end
+    place(files)
   end)
 end
 

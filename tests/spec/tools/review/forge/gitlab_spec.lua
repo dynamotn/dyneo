@@ -121,6 +121,7 @@ exit 1
   local NEW_DRAFT = MR .. '_draft_notes'
   local PUBLISH = MR .. '_draft_notes_bulk_publish'
   local APPROVALS = MR .. '_approvals'
+  local DIFFS = MR .. '_diffs_per_page_100_page_1'
 
   --- A merge request node of the GraphQL listing
   ---@param iid integer
@@ -545,9 +546,10 @@ exit 1
       )
     end
 
-    --- Answer every write of a submit that succeeds; draft notes are
-    --- numbered from 900 on
+    --- Answer every read and write of a submit that succeeds; draft notes
+    --- are numbered from 900 on
     local function writes_succeed()
+      answer(DIFFS, 'diffs.json')
       for n = 1, 9 do
         answer(NEW_DRAFT .. '.' .. n, { id = 899 + n })
       end
@@ -558,6 +560,9 @@ exit 1
       answer(MR .. '_unapprove', { approved = false })
       answer(APPROVALS, { user_has_approved = false })
     end
+
+    --- SHA-1 of `a.lua`, as `sha1sum` gives it
+    local A = 'bf6d65a69d79ae89a55de1c2b09b3f98b96d6d36'
 
     it('creates every draft note, publishes them, then the verdict', function()
       answer('user', 'user.json')
@@ -572,6 +577,7 @@ exit 1
           body = 'A range.',
           suggestion = { 'x = 1', 'y = ```z```' },
         }),
+        draft({ id = 'added', line = 4 }),
         draft({ id = 'old', path = 'b.lua', side = 'old', line = 2 }),
         draft({
           id = 'file',
@@ -580,6 +586,7 @@ exit 1
           body = 'Outside.',
           file_level = true,
         }),
+        draft({ id = 'outside', path = 'c.lua', line = 50 }),
         draft({ id = 'reply', reply_to = 'd1', body = 'Agreed.' }),
         draft({
           id = 'both',
@@ -594,6 +601,9 @@ exit 1
       assert.same({
         'user',
         DRAFTS,
+        DIFFS,
+        NEW_DRAFT,
+        NEW_DRAFT,
         NEW_DRAFT,
         NEW_DRAFT,
         NEW_DRAFT,
@@ -607,37 +617,59 @@ exit 1
         MR .. '_approve',
       }, keys())
       local list = calls()
+      -- An unchanged line names both sides
       assert.same({
         note = 'One line.',
         position = vim.tbl_extend('force', POSITION, {
           position_type = 'text',
           old_path = 'a.lua',
           new_path = 'a.lua',
+          old_line = 3,
           new_line = 3,
         }),
-      }, list[3].body)
+      }, list[4].body)
       assert.same({
         note = 'A range.\n\n````suggestion:-3+0\nx = 1\ny = ```z```\n````',
         position = vim.tbl_extend('force', POSITION, {
           position_type = 'text',
           old_path = 'a.lua',
           new_path = 'a.lua',
+          old_line = 6,
           new_line = 8,
           line_range = {
-            start = { type = 'new', new_line = 5 },
-            ['end'] = { type = 'new', new_line = 8 },
+            start = { line_code = A .. '_5_5', type = 'new', new_line = 5 },
+            ['end'] = {
+              line_code = A .. '_6_8',
+              type = 'old',
+              old_line = 6,
+              new_line = 8,
+            },
           },
         }),
-      }, list[4].body)
+      }, list[5].body)
+      -- An added line names the new side only
+      assert.same({
+        position_type = 'text',
+        old_path = 'a.lua',
+        new_path = 'a.lua',
+        new_line = 4,
+      }, {
+        position_type = list[6].body.position.position_type,
+        old_path = list[6].body.position.old_path,
+        new_path = list[6].body.position.new_path,
+        old_line = list[6].body.position.old_line,
+        new_line = list[6].body.position.new_line,
+      })
+      -- A removed line of a renamed file: the old side and the old path
       assert.same({
         note = 'text',
         position = vim.tbl_extend('force', POSITION, {
           position_type = 'text',
-          old_path = 'b.lua',
+          old_path = 'b_old.lua',
           new_path = 'b.lua',
           old_line = 2,
         }),
-      }, list[5].body)
+      }, list[7].body)
       assert.same({
         note = 'L40: Outside.',
         position = vim.tbl_extend('force', POSITION, {
@@ -645,30 +677,68 @@ exit 1
           old_path = 'c.lua',
           new_path = 'c.lua',
         }),
-      }, list[6].body)
+      }, list[8].body)
+      -- A line in no hunk goes on the file, naming the line
+      assert.same({
+        note = 'L50: text',
+        position = vim.tbl_extend('force', POSITION, {
+          position_type = 'file',
+          old_path = 'c.lua',
+          new_path = 'c.lua',
+        }),
+      }, list[9].body)
       assert.same(
         { note = 'Agreed.', in_reply_to_discussion_id = 'd1' },
-        list[7].body
+        list[10].body
       )
       assert.same({
         note = 'Fixed.',
         in_reply_to_discussion_id = 'd3',
         resolve_discussion = true,
-      }, list[8].body)
-      assert.same({ '--method', 'POST' }, vim.list_slice(list[9].args, 4, 5))
-      assert.same({ '--method', 'PUT' }, vim.list_slice(list[10].args, 4, 5))
-      assert.is_nil(list[10].body)
-      assert.same({ body = 'Summary.' }, list[11].body)
-      assert.same({ sha = 'a7a7a7' }, list[13].body)
+      }, list[11].body)
+      assert.same({ '--method', 'POST' }, vim.list_slice(list[12].args, 4, 5))
+      assert.same({ '--method', 'PUT' }, vim.list_slice(list[13].args, 4, 5))
+      assert.is_nil(list[13].body)
+      assert.same({ body = 'Summary.' }, list[14].body)
+      assert.same({ sha = 'a7a7a7' }, list[16].body)
       assert.same({
         { 'line', 'draft:900' },
         { 'range', 'draft:901' },
-        { 'old', 'draft:902' },
-        { 'file', 'draft:903' },
-        { 'reply', 'draft:904' },
-        { 'both', 'draft:905' },
+        { 'added', 'draft:902' },
+        { 'old', 'draft:903' },
+        { 'file', 'draft:904' },
+        { 'outside', 'draft:905' },
+        { 'reply', 'draft:906' },
+        { 'both', 'draft:907' },
         { 'resolve', 'd2' },
       }, reports)
+    end)
+
+    it('refuses a draft on a file not in the diff, before any write', function()
+      answer('user', 'user.json')
+      answer(DRAFTS, {})
+      writes_succeed()
+      local err, reports = submit({
+        draft({ id = 'a' }),
+        draft({ id = 'z', path = 'zzz.lua' }),
+      }, { verdict = 'approve' })
+      assert.matches('zzz.lua', err, 1, true)
+      assert.same({}, reports)
+      assert.same({ 'user', DRAFTS, DIFFS }, keys())
+    end)
+
+    it('refuses to place drafts when the diff cannot be read', function()
+      answer('user', 'user.json')
+      answer(DRAFTS, {})
+      writes_succeed()
+      answer(DIFFS, { code = 1 })
+      local err, reports = submit(
+        { draft({ id = 'a' }) },
+        { verdict = 'approve' }
+      )
+      assert.matches('502', err)
+      assert.same({}, reports)
+      assert.same({ 'user', DRAFTS, DIFFS }, keys())
     end)
 
     it('publishes my imported draft notes with the new ones', function()
@@ -688,6 +758,7 @@ exit 1
       assert.same({
         'user',
         DRAFTS,
+        DIFFS,
         NEW_DRAFT,
         PUBLISH,
         APPROVALS,
@@ -709,6 +780,7 @@ exit 1
       assert.same({
         'user',
         DRAFTS,
+        DIFFS,
         NEW_DRAFT,
         PUBLISH,
         APPROVALS,
@@ -752,8 +824,8 @@ exit 1
         draft({ id = 'b', body = 'Two.' }),
       }, { verdict = 'comment' })
       assert.is_nil(err)
-      assert.same({ 'user', DRAFTS, NEW_DRAFT, PUBLISH }, keys())
-      assert.equals('Two.', calls()[3].body.note)
+      assert.same({ 'user', DRAFTS, DIFFS, NEW_DRAFT, PUBLISH }, keys())
+      assert.equals('Two.', calls()[4].body.note)
       assert.same({ { 'b', 'draft:901' } }, reports)
     end)
 
@@ -798,7 +870,7 @@ exit 1
       }, { verdict = 'approve' })
       assert.matches('502', err)
       assert.same({ { 'a', 'draft:900' } }, reports)
-      assert.same({ 'user', DRAFTS, NEW_DRAFT, NEW_DRAFT }, keys())
+      assert.same({ 'user', DRAFTS, DIFFS, NEW_DRAFT, NEW_DRAFT }, keys())
     end)
 
     it('names drafts deleted before they were published', function()
@@ -827,6 +899,28 @@ exit 1
       assert.same({ lost = { 'lost' } }, info)
       assert.same({}, reports)
       assert.same({ 'user', DRAFTS, DISCUSSIONS }, keys())
+    end)
+
+    it('finds a draft published on its file, naming its line', function()
+      answer('user', 'user.json')
+      answer(DRAFTS, {})
+      answer(DISCUSSIONS, {
+        {
+          id = 'dz',
+          notes = {
+            mine(970, 'L50: text', {
+              position = { position_type = 'file', new_path = 'c.lua' },
+            }),
+          },
+        },
+      })
+      writes_succeed()
+      local err, reports, info = submit({
+        draft({ id = 'out', path = 'c.lua', line = 50, posted = 'draft:905' }),
+      }, { verdict = 'comment' })
+      assert.is_nil(err)
+      assert.same({ already = 970 }, info)
+      assert.same({}, reports)
     end)
 
     it('only resolves when the review already went out', function()
