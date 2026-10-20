@@ -6,8 +6,10 @@
 --- what goes out; nothing is written before that. Each draft is marked
 --- posted and saved as soon as the forge has it, so a submit cut short sends
 --- only the rest when run again, and the verdict goes out only with the
---- last of them. Pending AI drafts never leave. No message names a draft's
---- text.
+--- last of them. The adapter is handed every draft it must check, posted
+--- ones included: it skips those itself, and needs them to tell a review
+--- already out or drafts lost with a deleted pending review. Dropped and
+--- pending AI drafts never leave. No message names a draft's text.
 local M = {}
 
 local drafts = require('tools.review.drafts')
@@ -18,10 +20,14 @@ local notify = require('util.notify').titled('Review')
 local WARN, ERROR = vim.log.levels.WARN, vim.log.levels.ERROR
 
 --- Verdicts a forge refuses without a word of why
-M.NEEDS_BODY = { request_changes = true, reject = true }
+M.NEEDS_BODY = { request_changes = true }
 
 --- Whether a submit is between its first question and the forge's answer
 local busy = false
+
+--- Whether a review is being sent: closing or opening one waits for it
+---@return boolean
+function M.busy() return busy end
 
 --- `fn`, run on the main loop: prompts and file writes are not allowed in
 --- a fast event
@@ -52,7 +58,8 @@ local function forge_name(s)
 end
 
 ---@class DyReviewSendPlan
----@field send DyReviewDraft[]
+---@field send DyReviewDraft[] What the adapter is handed, posted ones too
+---@field unposted DyReviewDraft[] What goes out now
 ---@field skipped integer Pending AI drafts left out
 ---@field outside DyReviewDraft[] Line drafts no hunk of the head holds
 ---@field comments integer
@@ -62,10 +69,10 @@ end
 ---@field verdict? { id: string, label: string }
 ---@field body? string
 
---- Count what `plan.send` holds
+--- Count what `plan.unposted` holds
 ---@param plan DyReviewSendPlan
 local function tally(plan)
-  for _, draft in ipairs(plan.send) do
+  for _, draft in ipairs(plan.unposted) do
     if draft.origin == 'forge' then
       plan.imported = plan.imported + 1
     elseif draft.reply_to then
@@ -84,7 +91,7 @@ end
 ---@param cb fun(err?: string)
 local function revalidate(s, plan, cb)
   local lines, missing, seen = {}, {}, {}
-  for _, draft in ipairs(plan.send) do
+  for _, draft in ipairs(plan.unposted) do
     if
       draft.origin ~= 'forge'
       and not draft.reply_to
@@ -125,6 +132,73 @@ local function revalidate(s, plan, cb)
       check()
     end)
   )
+end
+
+--- The plan of what the state holds now: every draft but dropped and
+--- pending AI ones for the adapter, the unposted ones counted
+---@param s DyReviewSession
+---@param cb fun(plan?: DyReviewSendPlan, err?: string)
+local function build(s, cb)
+  ---@type DyReviewSendPlan
+  local plan = {
+    send = {},
+    unposted = {},
+    skipped = 0,
+    outside = {},
+    comments = 0,
+    replies = 0,
+    resolutions = 0,
+    imported = 0,
+  }
+  for _, draft in ipairs(s.state.drafts) do
+    if draft.state == 'dropped' then
+      -- not wanted
+    elseif draft.origin == 'ai' and draft.state == 'pending' then
+      plan.skipped = plan.skipped + 1
+    else
+      plan.send[#plan.send + 1] = draft
+      if not draft.posted then plan.unposted[#plan.unposted + 1] = draft end
+    end
+  end
+  tally(plan)
+  revalidate(s, plan, function(err)
+    if err then return cb(nil, err) end
+    cb(plan)
+  end)
+end
+
+--- What of `plan` the confirmation answers for: the drafts going out, their
+--- words and places, and what is left out
+---@param plan DyReviewSendPlan
+---@return string
+local function signature(plan)
+  local parts = { tostring(plan.skipped), tostring(#plan.send) }
+  local outside = {}
+  for _, draft in ipairs(plan.outside) do
+    outside[draft] = true
+  end
+  for _, draft in ipairs(plan.unposted) do
+    parts[#parts + 1] = vim.inspect({
+      draft.id,
+      draft.body,
+      draft.suggestion,
+      draft.resolve,
+      draft.path,
+      draft.line,
+      draft.start_line,
+      draft.file_level or outside[draft] or false,
+    })
+  end
+  return table.concat(parts, '\n')
+end
+
+--- Whether `plan`'s verdict needs a body it lacks
+---@param plan DyReviewSendPlan
+---@return boolean
+local function lacks_body(plan)
+  return M.NEEDS_BODY[plan.verdict.id] == true
+    and plan.comments + plan.replies + plan.imported == 0
+    and not plan.body
 end
 
 --- What the confirmation shows: counts, paths and lines, and the body
@@ -179,8 +253,7 @@ end
 ---@param plan DyReviewSendPlan
 ---@param cb fun(ok: boolean)
 local function ask_body(plan, cb)
-  local needed = M.NEEDS_BODY[plan.verdict.id]
-    and plan.comments + plan.replies + plan.imported == 0
+  local needed = lacks_body(plan)
   vim.ui.input(
     {
       prompt = needed and 'Body of the review (needed): '
@@ -316,7 +389,82 @@ local function send(s, plan, finish)
   end
 end
 
---- Ask for the verdict and body, confirm, then send
+--- Read the pull request again and check it can still take this review
+---@param s DyReviewSession
+---@param cb fun(err?: string, level?: integer) An error refuses the submit
+local function check_pull(s, cb)
+  local called, raised = pcall(
+    s.adapter.get,
+    s.remote,
+    s.pull.id,
+    main(function(pull, err)
+      if not pull then
+        return cb(
+          'Could not read the pull request again: ' .. (err or 'no answer'),
+          ERROR
+        )
+      end
+      if session.current() ~= s then
+        return cb('The review was closed: nothing sent', WARN)
+      end
+      if pull.head_sha ~= s.pull.head_sha then
+        return cb(
+          ('The pull request moved to %s: reopen it before submitting'):format(
+            pull.head_sha:sub(1, 7)
+          ),
+          WARN
+        )
+      end
+      if pull.read_only then return cb('Not sent: ' .. pull.read_only, WARN) end
+      cb()
+    end)
+  )
+  if not called then
+    cb('Could not read the pull request again: ' .. tostring(raised), ERROR)
+  end
+end
+
+--- Show the confirmation of `plan`; on yes, check the pull request and the
+--- drafts once more, and send only if both are still what was shown
+---@param s DyReviewSession
+---@param plan DyReviewSendPlan
+---@param finish fun()
+local function confirm(s, plan, finish)
+  if lacks_body(plan) then
+    return ask_body(plan, function(ok)
+      if not ok then
+        finish()
+        return notify('Not sent')
+      end
+      confirm(s, plan, finish)
+    end)
+  end
+  local shown = signature(plan)
+  if vim.fn.confirm(M.summary(s, plan), '&Send\n&Cancel', 2) ~= 1 then
+    finish()
+    return notify('Not sent')
+  end
+  check_pull(s, function(err, level)
+    if err then
+      finish()
+      return notify(err, level)
+    end
+    build(s, function(now, why)
+      if not now then
+        finish()
+        return notify('Not sent: ' .. (why or '?'), ERROR)
+      end
+      now.verdict, now.body = plan.verdict, plan.body
+      if signature(now) ~= shown then
+        notify('The drafts changed while asking: confirm again', WARN)
+        return confirm(s, now, finish)
+      end
+      send(s, now, finish)
+    end)
+  end)
+end
+
+--- Ask for the verdict and body, then confirm
 ---@param s DyReviewSession
 ---@param plan DyReviewSendPlan
 ---@param finish fun()
@@ -343,20 +491,7 @@ local function ask(s, plan, finish)
           finish()
           return notify('Not sent')
         end
-        local said = plan.comments + plan.replies + plan.imported
-        if said + plan.resolutions == 0 and not plan.body then
-          finish()
-          return notify('Nothing to send: no draft and no body', WARN)
-        end
-        if vim.fn.confirm(M.summary(s, plan), '&Send\n&Cancel', 2) ~= 1 then
-          finish()
-          return notify('Not sent')
-        end
-        if session.current() ~= s then
-          finish()
-          return notify('The review was closed: nothing sent', WARN)
-        end
-        send(s, plan, finish)
+        confirm(s, plan, finish)
       end)
     end)
   )
@@ -372,60 +507,19 @@ function M.run(s)
   if blocked then return notify('Not sent: ' .. blocked, WARN) end
   busy = true
   local function finish() busy = false end
-  local called, raised = pcall(
-    s.adapter.get,
-    s.remote,
-    s.pull.id,
-    main(function(pull, err)
-      if not pull then
+  check_pull(s, function(err, level)
+    if err then
+      finish()
+      return notify(err, level)
+    end
+    build(s, function(plan, why)
+      if not plan then
         finish()
-        return notify(
-          'Could not read the pull request again: ' .. (err or 'no answer'),
-          ERROR
-        )
+        return notify('Not sent: ' .. (why or '?'), ERROR)
       end
-      if session.current() ~= s then
-        finish()
-        return notify('The review was closed: nothing sent', WARN)
-      end
-      if pull.head_sha ~= s.pull.head_sha then
-        finish()
-        return notify(
-          ('The pull request moved to %s: reopen it before submitting'):format(
-            pull.head_sha:sub(1, 7)
-          ),
-          WARN
-        )
-      end
-      if pull.read_only then
-        finish()
-        return notify('Not sent: ' .. pull.read_only, WARN)
-      end
-      local list, skipped = drafts.sendable(s.state)
-      ---@type DyReviewSendPlan
-      local plan = {
-        send = list,
-        skipped = skipped,
-        outside = {},
-        comments = 0,
-        replies = 0,
-        resolutions = 0,
-        imported = 0,
-      }
-      tally(plan)
-      revalidate(s, plan, function(why)
-        if why then
-          finish()
-          return notify('Not sent: ' .. why, ERROR)
-        end
-        ask(s, plan, finish)
-      end)
+      ask(s, plan, finish)
     end)
-  )
-  if not called then
-    finish()
-    notify('Could not read the pull request again: ' .. tostring(raised), ERROR)
-  end
+  end)
 end
 
 return M

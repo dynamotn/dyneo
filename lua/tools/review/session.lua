@@ -90,6 +90,18 @@ function M.changed(s)
   panel.refresh(s)
 end
 
+--- Whether a review is being sent, said when it is: closing or opening one
+--- then would leave its drafts' posted marks to two states at once
+---@return boolean
+local function sending()
+  local submit = package.loaded['tools.review.submit']
+  if submit and submit.busy() then
+    notify('A review is being sent: wait for it to finish', WARN)
+    return true
+  end
+  return false
+end
+
 --- Whether `path`, resolved, lies under directory `dir`
 ---@param dir string
 ---@param path string
@@ -351,6 +363,7 @@ end
 ---@param remote DyForgeRemote
 ---@param pull DyReviewPull
 function M.open(remote, pull)
+  if sending() then return end
   local review = require('tools.review')
   if session and M.same(session, remote, pull.id) then
     if session.pull.head_sha == pull.head_sha then return review.show() end
@@ -488,6 +501,7 @@ end
 ---@param on_done? fun() Once the worktree is removed or kept
 ---@return boolean closed
 function M.close(on_done)
+  if sending() then return false end
   local s = M.need()
   if not s then return false end
   local names = unsaved(s)

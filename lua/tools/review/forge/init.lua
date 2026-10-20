@@ -33,6 +33,10 @@ local M = {}
 ---@field resolved boolean
 ---@field comments DyReviewComment[]
 
+--- `submit` is handed every draft but dropped and pending AI ones, posted
+--- ones included: it never sends a posted draft again, and checks them
+--- against the forge to tell drafts lost with a deleted pending review
+--- (`info.lost`) and a review already out (`info.already`).
 ---@class DyReviewForge
 ---@field verdicts { id: string, label: string }[]
 ---@field list fun(remote: DyForgeRemote, cb: fun(pulls?: DyReviewPull[], err?: string, capped?: boolean))
