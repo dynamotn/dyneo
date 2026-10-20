@@ -96,6 +96,32 @@ describe('tools.review.triage', function()
     end)
   end)
 
+  describe('risk word boundaries', function()
+    for _, path in ipairs({
+      'src/AuthService.java',
+      'src/AuthController.cs',
+      'src/authentication.py',
+      'src/authenticator.go',
+      'src/authorization/policy.go',
+      'src/authorize.ts',
+      'src/JwtFilter.ts',
+      'src/TokenStore.cs',
+      'src/authz.go',
+    }) do
+      it(
+        ('ranks %s high'):format(path),
+        function() assert.is_true(triage.risk(path) >= 100) end
+      )
+    end
+
+    for _, path in ipairs({ 'src/author.go', 'lexer/author_list.go' }) do
+      it(
+        ('leaves %s at 0'):format(path),
+        function() assert.equals(0, triage.risk(path)) end
+      )
+    end
+  end)
+
   describe('buckets', function()
     it('orders buckets, drops empty ones and totals lines', function()
       local out = triage.buckets({

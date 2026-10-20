@@ -107,12 +107,14 @@ M.CONFIG = {
 ---@type { [1]: string, [2]: integer }[]
 M.RISK = {
   { '%f[%a]auth%f[%A]', 100 },
-  { '%f[%a]authn%f[%A]', 100 },
-  { '%f[%a]authz%f[%A]', 100 },
+  { 'authn', 100 },
+  { 'authz', 100 },
+  { 'authenticat', 100 },
+  { 'authoriz', 100 },
   { 'oauth', 100 },
   { 'crypto', 100 },
-  { '%f[%a]tls%f[%A]', 100 },
-  { '%f[%a]jwt%f[%A]', 100 },
+  { '%f[%a]tls', 100 },
+  { 'jwt', 100 },
   { '%f[%a]tokens?%f[%A]', 100 },
   { 'secur', 100 },
   { 'permission', 100 },
@@ -171,7 +173,9 @@ end
 ---@param path string
 ---@return integer
 function M.risk(path)
-  local p = normalize(path)
+  -- An upper-case letter after a lower-case one starts a word, so
+  -- `AuthService` reads as `auth_service` while `author` stays one word.
+  local p = normalize((path:gsub('(%l)(%u)', '%1_%2')))
   local best = 0
   for _, rule in ipairs(M.RISK) do
     if rule[2] > best and p:find(rule[1]) then best = rule[2] end
