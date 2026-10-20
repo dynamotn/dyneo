@@ -1,5 +1,19 @@
 local language = require('config.languages').rust
 
+--- Whether rustaceanvim starts rust-analyzer for a buffer: what it decides
+--- by default (a file buffer, the server on `$PATH`), and never under a
+--- directory still held untrusted, since rust-analyzer runs the project's
+--- build scripts and proc macros
+---@param bufnr integer
+---@return boolean
+local function auto_attach(bufnr)
+  if vim.bo[bufnr].buftype ~= '' then return false end
+  local name = vim.api.nvim_buf_get_name(bufnr)
+  if name == '' or name:match('^%a[%w+.-]*://') then return false end
+  if require('util.untrusted').held(bufnr) then return false end
+  return vim.fn.executable('rust-analyzer') == 1
+end
+
 return vim.list_contains(DyNeo.enabled_languages, 'rust')
     and {
       {
@@ -18,6 +32,7 @@ return vim.list_contains(DyNeo.enabled_languages, 'rust')
         ft = language.filetypes,
         opts = {
           server = {
+            auto_attach = auto_attach,
             on_attach = function(_, bufnr)
               local function map(lhs, cmd, desc)
                 vim.keymap.set(
@@ -82,6 +97,16 @@ return vim.list_contains(DyNeo.enabled_languages, 'rust')
         config = function(_, opts)
           vim.g.rustaceanvim =
             vim.tbl_deep_extend('keep', vim.g.rustaceanvim or {}, opts or {})
+          -- Its ftplugin is what starts the server, and it does not run again
+          -- for a buffer already open when its directory is let go
+          require('util.untrusted').on_release('rustaceanvim', function(bufnr)
+            if
+              vim.list_contains(language.filetypes, vim.bo[bufnr].filetype)
+              and auto_attach(bufnr)
+            then
+              require('rustaceanvim.lsp').start(bufnr)
+            end
+          end)
           if vim.fn.executable('rust-analyzer') == 0 then
             require('util.plugin').error(
               '**rust-analyzer** not found in PATH, please install it.\nhttps://rust-analyzer.github.io/',

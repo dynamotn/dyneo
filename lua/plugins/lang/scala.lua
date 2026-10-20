@@ -39,28 +39,43 @@ return vim.list_contains(DyNeo.enabled_languages, 'scala')
           return metals_config
         end,
         config = function(self, metals_config)
+          -- Once it runs, metals also takes the Java sources of a Scala
+          -- build; Java alone never loads it
+          local filetypes = vim.list_extend(vim.deepcopy(self.ft), { 'java' })
+          ---@param bufnr integer
+          local function attach(bufnr)
+            if not vim.list_contains(filetypes, vim.bo[bufnr].filetype) then
+              return
+            end
+            -- metals compiles the build (sbt, mill plugins), so not under a
+            -- directory still held untrusted; released, it starts from the
+            -- `on_release` below
+            if require('util.untrusted').held(bufnr) then return end
+            -- Java only in a Scala build: next to jdtls in a plain Maven or
+            -- Gradle project it would be a second JVM server
+            if
+              vim.bo[bufnr].filetype == 'java'
+              and not vim.fs.root(bufnr, {
+                'build.sbt',
+                'build.sc',
+                'build.mill',
+                '.scala-build',
+              })
+            then
+              return
+            end
+            -- It attaches to the current buffer
+            vim.api.nvim_buf_call(
+              bufnr,
+              function() require('metals').initialize_or_attach(metals_config) end
+            )
+          end
           vim.api.nvim_create_autocmd('FileType', {
             group = vim.api.nvim_create_augroup('dy_metals', { clear = true }),
-            -- Once it runs, metals also takes the Java sources of a Scala
-            -- build; Java alone never loads it
-            pattern = vim.list_extend(vim.deepcopy(self.ft), { 'java' }),
-            callback = function(event)
-              -- Java only in a Scala build: next to jdtls in a plain Maven or
-              -- Gradle project it would be a second JVM server
-              if
-                vim.bo[event.buf].filetype == 'java'
-                and not vim.fs.root(event.buf, {
-                  'build.sbt',
-                  'build.sc',
-                  'build.mill',
-                  '.scala-build',
-                })
-              then
-                return
-              end
-              require('metals').initialize_or_attach(metals_config)
-            end,
+            pattern = filetypes,
+            callback = function(event) attach(event.buf) end,
           })
+          require('util.untrusted').on_release('metals', attach)
         end,
       },
       {

@@ -86,12 +86,39 @@ describe('util.untrusted', function()
     assert.is_false(untrusted.held(inside))
   end)
 
+  it('release starts what a plugin starts itself, once per name', function()
+    local started, errors = {}, {}
+    table.insert(
+      restores,
+      h.stub(vim, 'notify', function(msg) table.insert(errors, msg) end)
+    )
+    untrusted.on_release('a', function() table.insert(started, 'replaced') end)
+    untrusted.on_release(
+      'a',
+      function(bufnr) table.insert(started, { 'a', bufnr }) end
+    )
+    untrusted.on_release('b', function() error('broken') end)
+    untrusted.on_release(
+      'c',
+      function(bufnr) table.insert(started, { 'c', bufnr }) end
+    )
+    untrusted.hold(dir .. '/wt')
+    local inside = h.buffer({ name = dir .. '/wt/a.lua' })
+    h.buffer({ name = dir .. '/wt-other/a.lua' })
+    untrusted.release(dir .. '/wt')
+    -- A starter that fails says so and does not stop the others
+    assert.same({ { 'a', inside }, { 'c', inside } }, started)
+    assert.equals(1, #errors)
+    assert.matches('Could not start b', errors[1])
+  end)
+
   it('forget lets go without starting anything', function()
     local runs = 0
     table.insert(
       restores,
       h.stub(vim.api, 'nvim_exec_autocmds', function() runs = runs + 1 end)
     )
+    untrusted.on_release('a', function() runs = runs + 1 end)
     untrusted.hold(dir .. '/wt')
     local inside = h.buffer({ name = dir .. '/wt/a.lua' })
     untrusted.forget(dir .. '/wt')

@@ -54,18 +54,26 @@ end
 ---@param dir string
 function M.forget(dir) holds[resolve(dir)] = nil end
 
---- Let `dir` go and start the servers of its loaded buffers. Only the
---- `vim.lsp.enable` group runs again, so ftplugins do not.
+---@type table<string, fun(bufnr: integer)> By the name they were given
+local starters = {}
+
+--- Start, for a buffer let go, a server its own plugin starts outside
+--- `vim.lsp.enable` (rustaceanvim, nvim-jdtls, ...), which re-running the
+--- `vim.lsp.enable` group does not reach. Kept by name, so loading the
+--- plugin's spec again replaces its starter instead of adding a second one.
+---@param name string
+---@param start fun(bufnr: integer) Called for every buffer let go; it checks
+--- the filetype itself
+function M.on_release(name, start) starters[name] = start end
+
+--- Let `dir` go and start the servers of its loaded buffers: the
+--- `vim.lsp.enable` group runs again (alone, so ftplugins do not), then the
+--- starters of `on_release`.
 ---@param dir string
 function M.release(dir)
   dir = resolve(dir)
   holds[dir] = nil
-  local ok, autocmds = pcall(vim.api.nvim_get_autocmds, {
-    group = M.LSP_GROUP,
-    event = 'FileType',
-  })
-  -- No group: no server is enabled, so there is nothing to start
-  if not ok or #autocmds == 0 then return end
+  local buffers = {} ---@type integer[]
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
     local name = vim.api.nvim_buf_get_name(bufnr)
     if
@@ -74,10 +82,31 @@ function M.release(dir)
       and not M.held(bufnr)
       and under(dir, resolve(name))
     then
+      table.insert(buffers, bufnr)
+    end
+  end
+  local ok, autocmds = pcall(vim.api.nvim_get_autocmds, {
+    group = M.LSP_GROUP,
+    event = 'FileType',
+  })
+  -- No group: `vim.lsp.enable` has no server to start
+  local enabled = ok and #autocmds > 0
+  for _, bufnr in ipairs(buffers) do
+    if enabled then
       vim.api.nvim_exec_autocmds(
         'FileType',
         { group = M.LSP_GROUP, buffer = bufnr }
       )
+    end
+    for name, start in vim.spairs(starters) do
+      local started, err = pcall(start, bufnr)
+      if not started then
+        vim.notify(
+          ('Could not start %s: %s'):format(name, err),
+          vim.log.levels.ERROR,
+          { title = require('util.notify').title('review') }
+        )
+      end
     end
   end
 end
