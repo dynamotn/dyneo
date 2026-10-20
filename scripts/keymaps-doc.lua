@@ -297,8 +297,9 @@ end
 --- filetype is set without events, so no server or parser starts.
 ---
 --- Several tools map only in a buffer that looks like theirs: a manifest, a
---- file of a Helm chart, a schedule, an AsyncAPI document. Every buffer is
---- one of all of these at once, so each of them maps what it would.
+--- file of a Helm chart, a schedule, an AsyncAPI document, a data pipeline's
+--- Python. Every buffer is one of all of these at once, so each of them maps
+--- what it would.
 local function attach_tools()
   local chart = vim.fn.tempname()
   vim.fn.mkdir(vim.fs.joinpath(chart, 'templates'), 'p')
@@ -312,6 +313,7 @@ local function attach_tools()
     'apiVersion: batch/v1',
     'kind: CronJob',
     'schedule: "0 * * * *"',
+    'from airflow import DAG',
   }
 
   -- One entry per group, holding every filetype it names

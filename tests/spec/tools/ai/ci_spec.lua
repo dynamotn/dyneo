@@ -291,4 +291,44 @@ describe('tools.ai.ci', function()
       got
     )
   end)
+
+  it('asks Airflow, Prefect and Dagster for the log of a task', function()
+    local asked, undo = {}, {}
+    for _, kind in ipairs({ 'airflow', 'prefect', 'dagster' }) do
+      local module = require('tools.ci_' .. kind)
+      table.insert(
+        undo,
+        h.stub(module, 'log', function(target, pipeline, job, ...)
+          local args = { ... }
+          table.insert(asked, {
+            kind,
+            target.name,
+            pipeline.id,
+            job.id,
+              -- Prefect reads lines, the others bytes
+            #args == 2 and args[1] or nil,
+          })
+          args[#args](kind, false, nil, false)
+        end)
+      )
+    end
+    local got = {}
+    for _, kind in ipairs({ 'airflow', 'prefect', 'dagster' }) do
+      ai_ci.fetch_log_for(
+        { kind = kind, target = { name = kind .. '-target' } },
+        { id = 'run', jobs = {} },
+        { id = 'task', name = 'task' },
+        function(text) table.insert(got, text) end
+      )
+    end
+    for i = #undo, 1, -1 do
+      undo[i]()
+    end
+    assert.same({
+      { 'airflow', 'airflow-target', 'run', 'task', ai_ci.MAX_LOG },
+      { 'prefect', 'prefect-target', 'run', 'task' },
+      { 'dagster', 'dagster-target', 'run', 'task', ai_ci.MAX_LOG },
+    }, asked)
+    assert.same({ 'airflow', 'prefect', 'dagster' }, got)
+  end)
 end)

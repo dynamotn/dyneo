@@ -110,25 +110,26 @@ function M.fetch_log(remote, pipeline, job, on_done)
 end
 
 --- Hand `on_done` the log of `job` of `pipeline`, from whichever system ran
---- it: a Jenkins build's console, an Argo step's pod, a forge's job
+--- it: a Jenkins build's console, an Argo step's pod, an Airflow task's try,
+--- a Prefect task run's or a Dagster step's events, a forge's job
 ---@param ctx DyCiContext
 ---@param pipeline DyCiPipeline
 ---@param job DyCiJob
 ---@param on_done fun(raw: string?, cut: boolean, err: string?, skipped: boolean)
 function M.fetch_log_for(ctx, pipeline, job, on_done)
+  local target = ctx.target --[[@as any]]
   if ctx.kind == 'jenkins' then
-    return require('tools.ci_jenkins').log(
-      ctx.target --[[@as DyJenkinsTarget]],
-      pipeline,
-      M.MAX_LOG,
-      on_done
-    )
+    return require('tools.ci_jenkins').log(target, pipeline, M.MAX_LOG, on_done)
   end
-  if ctx.kind == 'argo' then
-    return require('tools.ci_argo').log(
-      ctx.target --[[@as DyArgoTarget]],
+  if ctx.kind == 'argo' or ctx.kind == 'prefect' then
+    return require('tools.ci_' .. ctx.kind).log(target, pipeline, job, on_done)
+  end
+  if ctx.kind == 'airflow' or ctx.kind == 'dagster' then
+    return require('tools.ci_' .. ctx.kind).log(
+      target,
       pipeline,
       job,
+      M.MAX_LOG,
       on_done
     )
   end

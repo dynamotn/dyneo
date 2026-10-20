@@ -81,8 +81,12 @@ dyneo-asyncapi	dyneo.txt	/*dyneo-asyncapi*
 dyneo-breaking	dyneo.txt	/*dyneo-breaking*
 dyneo-channels	dyneo.txt	/*dyneo-channels*
 dyneo-ci	dyneo.txt	/*dyneo-ci*
+dyneo-ci-airflow	dyneo.txt	/*dyneo-ci-airflow*
 dyneo-ci-argo	dyneo.txt	/*dyneo-ci-argo*
+dyneo-ci-dagster	dyneo.txt	/*dyneo-ci-dagster*
+dyneo-ci-data-pipelines	dyneo.txt	/*dyneo-ci-data-pipelines*
 dyneo-ci-jenkins	dyneo.txt	/*dyneo-ci-jenkins*
+dyneo-ci-prefect	dyneo.txt	/*dyneo-ci-prefect*
 dyneo-cidr	dyneo.txt	/*dyneo-cidr*
 dyneo-commands	dyneo.txt	/*dyneo-commands*
 dyneo-configuration	dyneo.txt	/*dyneo-configuration*

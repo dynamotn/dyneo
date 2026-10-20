@@ -107,6 +107,31 @@ DyNeo.ai = {
 --- of its own host.
 DyNeo.jenkins = { url = nil }
 
+---@class DyPipelines
+---@field airflow_url? string The Airflow webserver a DAG's runs are asked of,
+--- `https://airflow.example.com`, when its clone names none
+---@field airflow_api 'v1'|'v2' `v2` for Airflow 3, `v1` for Airflow 2
+---@field airflow_token_command? string[] Prints a JWT for Airflow 3, which
+--- takes no password: `{ 'pass', 'airflow/token' }`. Sent only to the host
+--- of `airflow_url`. Airflow 2 takes a password from `~/.netrc` instead.
+---@field dagster_url? string The Dagster webserver, `http://localhost:3000`,
+--- or a Dagster+ deployment, `https://<org>.dagster.cloud/<deployment>`
+---@field dagster_token_command? string[] Prints a Dagster+ user token, sent
+--- only to the host of `dagster_url`
+
+---@type DyPipelines The servers of `:DyCiStatus` in a data pipeline's Python
+--- file. A clone may name its own in its git config (`dyneo.airflowUrl`,
+--- `dyneo.dagsterUrl`), never in a file of the repository, and a token goes
+--- only to the server set here. Prefect needs none of it: its own client
+--- reads the profile `prefect profile use` set.
+DyNeo.pipelines = {
+  airflow_url = nil,
+  airflow_api = 'v2',
+  airflow_token_command = nil,
+  dagster_url = nil,
+  dagster_token_command = nil,
+}
+
 ---@class DyEnabledPlugins
 ---@field obsidian boolean
 ---@field leetcode boolean

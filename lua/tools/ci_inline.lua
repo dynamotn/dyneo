@@ -42,6 +42,24 @@ local BUCKETS = {
   -- Argo
   error = 'fail',
   omitted = 'skipped',
+  -- Airflow: a task an upstream failure kept from running did not fail
+  upstream_failed = 'skipped',
+  up_for_retry = 'running',
+  up_for_reschedule = 'pending',
+  restarting = 'running',
+  deferred = 'pending',
+  removed = 'skipped',
+  awaiting_input = 'attention',
+  none = 'pending',
+  -- Prefect
+  crashed = 'fail',
+  paused = 'attention',
+  -- Dagster
+  started = 'running',
+  starting = 'pending',
+  not_started = 'pending',
+  managed = 'pending',
+  suspended = 'attention',
   failure = 'fail',
   failed = 'fail',
   timed_out = 'fail',
@@ -179,6 +197,19 @@ function M.azure_job_lines(lines)
   return jobs
 end
 
+--- The module that asks each system that is no forge
+M.MODULES = {
+  jenkins = 'tools.ci_jenkins',
+  argo = 'tools.ci_argo',
+  airflow = 'tools.ci_airflow',
+  prefect = 'tools.ci_prefect',
+  dagster = 'tools.ci_dagster',
+}
+
+--- The systems whose pipelines are Python files: their mappings sit under
+--- `<localleader>p`, since Python's own `<localleader>s` sends to a REPL
+M.PYTHON = { airflow = true, prefect = true, dagster = true }
+
 --- Where each job of a pipeline file is defined, 1-based, by every name
 --- its runs can carry
 ---@param lines string[]
@@ -186,10 +217,7 @@ end
 ---@return table<string, integer>
 function M.job_lines(lines, kind)
   local jobs = {}
-  if kind == 'jenkins' then
-    return require('tools.ci_jenkins').job_lines(lines)
-  end
-  if kind == 'argo' then return require('tools.ci_argo').job_lines(lines) end
+  if M.MODULES[kind] then return require(M.MODULES[kind]).job_lines(lines) end
   if kind == 'gitlab' then
     for number, line in ipairs(lines) do
       local key = key_of(line)
@@ -251,6 +279,8 @@ end
 ---@field template? string Argo: the template the step runs
 ---@field status? string
 ---@field conclusion? string
+---@field try? integer Airflow: the try whose log is read
+---@field map_index? integer Airflow: a mapped task's index, `-1` if not one
 
 ---@class DyCiMark
 ---@field line integer 1-based
@@ -269,6 +299,15 @@ function M.marks(jobs, lines, kind)
     -- Azure names a leg of a matrix after its job: `Build linux`
     if not line and kind == 'azure' then
       line = lines[job.name:match('^(.-)%s+%S+$') or '']
+    end
+    -- Airflow names a mapped instance `task[2]`, and a task of a group
+    -- `group.task`; Prefect a task's run `task-0`
+    if not line and kind == 'airflow' then
+      local id = job.name:gsub('%[%d+%]$', '')
+      line = lines[id] or lines[id:match('([^.]+)$') or '']
+    end
+    if not line and kind == 'prefect' then
+      line = lines[job.name:match('^(.-)%-[%w]+$') or '']
     end
     -- Argo names a retry or a loop item after its step, `build(0:linux)`,
     -- and a step it reached through another template after that template
@@ -334,6 +373,7 @@ function M.clear(bufnr) vim.api.nvim_buf_clear_namespace(bufnr or 0, ns, 0, -1) 
 ---@field url? string
 ---@field jobs DyCiJob[]
 ---@field note? string Why the jobs are not all there is to see
+---@field run_id? string Prefect: the flow run's id, its name being shown
 
 --- Jobs a forge hands over per page, the most both of them allow
 M.PER_PAGE = 100
@@ -565,8 +605,31 @@ end
 ---@field file string
 ---@field kind DyCiKind
 ---@field remote? DyForgeRemote The forge, for GitHub, GitLab and Azure
----@field target? DyJenkinsTarget|DyArgoTarget What else is asked
----@field branch? string The branch, but for Argo
+---@field target? DyJenkinsTarget|DyArgoTarget|DyAirflowTarget|DyPrefectTarget|DyDagsterTarget What else is asked
+---@field branch? string The branch, for a forge and Jenkins
+---@field where? string What a run is of, shown when no branch is
+
+--- The definition `bufnr`'s cursor is in or below, else the first
+---@param bufnr integer
+---@param defs { id: string, line: integer }[] In the order of their lines
+---@return { id: string, line: integer }
+function M.at_cursor(bufnr, defs)
+  local chosen = defs[1]
+  if bufnr == vim.api.nvim_get_current_buf() then
+    local row = vim.api.nvim_win_get_cursor(0)[1]
+    for _, def in ipairs(defs) do
+      if def.line <= row then chosen = def end
+    end
+  end
+  return chosen
+end
+
+--- What a data pipeline's file defines that runs: DAGs, flows or jobs
+local DEFINITIONS = {
+  airflow = { 'dags', 'No DAG in this file' },
+  prefect = { 'flows', 'No @flow in this file' },
+  dagster = { 'jobs', 'No job or asset in this file' },
+}
 
 --- Hand `on_context` where the file of `bufnr` lives, and the forge and
 --- branch it is on; say why and hand nothing when one is missing
@@ -576,7 +639,7 @@ function M.context(bufnr, on_context)
   local kind = M.kind(bufnr)
   if not kind then
     return notify(
-      'Not a pipeline of GitLab, GitHub, Azure, Jenkins or Argo',
+      'Not a pipeline file of a CI or data pipeline DyNeo knows',
       vim.log.levels.WARN
     )
   end
@@ -591,7 +654,40 @@ function M.context(bufnr, on_context)
     return require('tools.ci_argo').target(dir, lines, function(target, err)
       if not target then return failed(err) end
       if not vim.api.nvim_buf_is_valid(bufnr) then return end
-      on_context({ dir = dir, file = file, kind = kind, target = target })
+      on_context({
+        dir = dir,
+        file = file,
+        kind = kind,
+        target = target,
+        where = ('%s/%s'):format(target.context, target.namespace),
+      })
+    end)
+  end
+  if M.PYTHON[kind] then
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local module = require(M.MODULES[kind])
+    local list, none = unpack(DEFINITIONS[kind])
+    local defs = module[list](lines)
+    -- Assets no job of the file names run in Dagster's own asset job
+    if #defs == 0 and kind == 'dagster' and module.has_assets(lines) then
+      defs = { { id = module.ASSET_JOB, line = 1 } }
+    end
+    if #defs == 0 then return failed(none) end
+    local chosen = M.at_cursor(bufnr, defs)
+    -- Prefect looks for the project's `.venv` there
+    local root = kind == 'prefect'
+        and vim.fs.root(file, { '.venv', 'pyproject.toml', '.git' })
+      or dir
+    return module.target(root, chosen.id, function(target, err)
+      if not target then return failed(err) end
+      if not vim.api.nvim_buf_is_valid(bufnr) then return end
+      on_context({
+        dir = dir,
+        file = file,
+        kind = kind,
+        target = target,
+        where = chosen.id,
+      })
     end)
   end
   if kind == 'jenkins' then
@@ -645,17 +741,8 @@ end
 ---@param ctx DyCiContext
 ---@param on_done fun(pipeline: DyCiPipeline?, err: string?)
 function M.fetch_for(ctx, on_done)
-  if ctx.kind == 'jenkins' then
-    return require('tools.ci_jenkins').fetch(
-      ctx.target --[[@as DyJenkinsTarget]],
-      on_done
-    )
-  end
-  if ctx.kind == 'argo' then
-    return require('tools.ci_argo').fetch(
-      ctx.target --[[@as DyArgoTarget]],
-      on_done
-    )
+  if M.MODULES[ctx.kind] then
+    return require(M.MODULES[ctx.kind]).fetch(ctx.target, on_done)
   end
   M.fetch(ctx.remote, ctx.branch, ctx.file, on_done)
 end
@@ -665,6 +752,8 @@ local RUN_NAMES = {
   gitlab = 'Pipeline',
   jenkins = 'Build',
   argo = 'Workflow',
+  airflow = 'DAG run',
+  prefect = 'Flow run',
 }
 
 --- Fetch and show the last pipeline of `ctx` on `bufnr`
@@ -678,8 +767,7 @@ function M.show_status(bufnr, ctx)
     local marks = M.marks(pipeline.jobs, M.job_lines(lines, ctx.kind), ctx.kind)
     M.show(bufnr, marks)
     local bucket = M.bucket(pipeline.status)
-    local where = ctx.branch
-      or ('%s/%s'):format(ctx.target.context, ctx.target.namespace)
+    local where = ctx.branch or ctx.where or '?'
     notify(
       ('%s %s %s on %s%s%s'):format(
         M.SYMBOLS[bucket],
@@ -826,25 +914,32 @@ end
 --- The mappings of a pipeline file
 ---@param bufnr integer
 function M.attach(bufnr)
+  local kind = M.kind(bufnr)
+  local prefix = M.PYTHON[kind] and '<localleader>p' or '<localleader>'
+  if M.PYTHON[kind] and package.loaded['which-key'] then
+    pcall(
+      require('which-key').add,
+      { { prefix, group = 'pipeline', buffer = bufnr } }
+    )
+  end
   vim.keymap.set(
     'n',
-    '<localleader>s',
+    prefix .. 's',
     function() M.status(bufnr) end,
     { buffer = bufnr, desc = 'Pipeline Status (CI)' }
   )
   vim.keymap.set(
     'n',
-    '<localleader>x',
+    prefix .. 'x',
     function() M.clear(bufnr) end,
     { buffer = bufnr, desc = 'Clear Status (CI)' }
   )
   vim.keymap.set(
     'n',
-    '<localleader>e',
+    prefix .. 'e',
     function() require('tools.ai.ci').explain(bufnr) end,
     { buffer = bufnr, desc = 'Explain Failed Job (AI)' }
   )
-  local kind = M.kind(bufnr)
   if kind == 'gitlab' or kind == 'jenkins' then
     vim.keymap.set('n', '<localleader>l', function() M.lint(bufnr) end, {
       buffer = bufnr,

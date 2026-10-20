@@ -122,9 +122,9 @@ below follow the sections of `:help dyneo`.
   decoded, held back from AI; expired or expiring certificates flagged.
   `:DyInspect`
 - **CI** — the last pipeline on the jobs of the file that defines them,
-  GitLab, GitHub, Azure DevOps, Jenkins and Argo Workflows, GitLab's and
-  Jenkins' lint, GitHub Actions pinned to commits. `:DyCiStatus` ·
-  `:DyActionsPin`
+  GitLab, GitHub, Azure DevOps, Jenkins and Argo Workflows, and the tasks
+  of Airflow, Prefect and Dagster pipelines; GitLab's and Jenkins' lint,
+  GitHub Actions pinned to commits. `:DyCiStatus` · `:DyActionsPin`
 - **OpenAPI** — the operation under the cursor as a kulala or Hurl request,
   and the breaking changes of a spec since a revision. `:DyOpenApiRequest` ·
   `:DyOpenApiDiff`

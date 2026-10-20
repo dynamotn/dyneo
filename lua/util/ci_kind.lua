@@ -1,11 +1,19 @@
 --- Which CI system a buffer defines a pipeline for
 ---
---- Read from the filetype, the file's name and, for plain YAML, its first
---- lines, and nothing else: `plugin/ci_inline.lua` asks it of every Groovy
---- and YAML buffer that opens, before deciding to load `tools.ci_inline`.
+--- Read from the filetype, the file's name and, for plain YAML and Python,
+--- its first lines, and nothing else: the `plugin/` shims ask it of every
+--- Groovy, YAML and Python buffer that opens, before deciding to load
+--- `tools.ci_inline`.
 local M = {}
 
----@alias DyCiKind DyForgeKind|'jenkins'|'argo'
+---@alias DyCiKind DyForgeKind|'jenkins'|'argo'|'airflow'|'prefect'|'dagster'
+
+--- The data pipeline a Python file belongs to, by the module it imports, in
+--- the order they are looked for
+M.PYTHON = { 'airflow', 'prefect', 'dagster' }
+
+--- Lines of a Python buffer read for its imports
+M.PYTHON_SCAN = 200
 
 --- The kinds of Argo Workflows that run, or define, a workflow
 M.ARGO_KINDS = {
@@ -56,6 +64,13 @@ function M.of(bufnr)
   if ft == 'yaml' then
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, M.SCAN, false)
     return M.argo_kind(lines) and 'argo' or nil
+  end
+  if ft == 'python' then
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, M.PYTHON_SCAN, false)
+    local py = require('util.py_defs')
+    for _, module in ipairs(M.PYTHON) do
+      if py.imports(lines, module) then return module end
+    end
   end
   return nil
 end

@@ -3,21 +3,16 @@
 --- A `Jenkinsfile` says nothing of the server or the job that build it, so
 --- the clone's own git config names them -- `dyneo.jenkinsJob`, and
 --- `dyneo.jenkinsUrl` or `DyNeo.jenkins.url` for the server -- never a file
---- of the repository. `curl` reads the credentials from `~/.netrc`, which
---- hands each only to its own host; none is read or passed here.
+--- of the repository. `util.ci_http` asks it, the credentials left to
+--- `curl`, which hands each only to its own host; none is read here.
 ---
 --- The stages come from the Pipeline Stage View plugin's `wfapi`; a server
 --- without it still tells the build, and says why there are no stages.
 local M = {}
 
 local forge = require('util.forge')
+local http = require('util.ci_http')
 local system = require('util.system')
-
---- Milliseconds a request may take
-M.TIMEOUT = 30 * 1000
-
---- Bytes of JSON read from the server
-M.MAX_BYTES = 4 * 1024 * 1024
 
 --- Bytes of a Jenkinsfile sent to be checked
 M.MAX_FILE = 512 * 1024
@@ -52,83 +47,36 @@ end
 ---@param branch string
 ---@param on_done fun(target: DyJenkinsTarget?, err: string?)
 function M.target(dir, branch, on_done)
-  system.run(
-    { 'git', 'config', '--get-regexp', [[^dyneo\.jenkins]] },
-    { cwd = dir, timeout = 5000 },
-    function(result)
-      local values = {}
-      for key, value in (result.stdout or ''):gmatch('dyneo%.(%S+) ([^\n]+)') do
-        values[key:lower()] = vim.trim(value)
-      end
-      local job = values.jenkinsjob
-      if not job or job == '' then
-        return on_done(
-          nil,
-          'No Jenkins job: git config dyneo.jenkinsJob <folder/job/{branch}>'
-        )
-      end
-      local url = values.jenkinsurl or DyNeo.jenkins.url
-      if not url or url == '' then
-        return on_done(
-          nil,
-          'No Jenkins server: git config dyneo.jenkinsUrl, or DyNeo.jenkins.url'
-        )
-      end
-      if not url:match('^https?://[%w%.%-]+[:/]?') then
-        return on_done(nil, 'Not a Jenkins URL: ' .. url)
-      end
-      on_done({
-        url = (url:gsub('/+$', '')),
-        job = job,
-        base = M.job_url(url, job, branch),
-      })
+  http.git_config(dir, function(values)
+    local job = values.jenkinsjob
+    if not job or job == '' then
+      return on_done(
+        nil,
+        'No Jenkins job: git config dyneo.jenkinsJob <folder/job/{branch}>'
+      )
     end
-  )
-end
-
---- `curl` asking `url`, with the `~/.netrc` entry of its host if there is one
----@param args string[] What follows the options
----@return string[]
-function M.curl(args)
-  return vim.list_extend({
-    'curl',
-    '--fail-with-body',
-    '--silent',
-    '--show-error',
-    '--netrc-optional',
-    '--proto',
-    '=https,http',
-    '--max-time',
-    tostring(math.floor(M.TIMEOUT / 1000)),
-  }, args)
+    local url = values.jenkinsurl or DyNeo.jenkins.url
+    if not url or url == '' then
+      return on_done(
+        nil,
+        'No Jenkins server: git config dyneo.jenkinsUrl, or DyNeo.jenkins.url'
+      )
+    end
+    if not http.is_server(url) then
+      return on_done(nil, 'Not a Jenkins URL: ' .. url)
+    end
+    on_done({
+      url = (url:gsub('/+$', '')),
+      job = job,
+      base = M.job_url(url, job, branch),
+    })
+  end)
 end
 
 --- GET `url` and decode its JSON
 ---@param url string
 ---@param on_done fun(data: table?, err: string?)
-local function get_json(url, on_done)
-  system.run(
-    M.curl({ '--', url }),
-    { timeout = M.TIMEOUT + 1000, max_bytes = M.MAX_BYTES },
-    function(result)
-      if result.code ~= 0 then
-        return on_done(nil, system.failure(result, 'curl'))
-      end
-      if result.cut then
-        return on_done(nil, 'Jenkins answered with more than can be read')
-      end
-      local ok, data = pcall(
-        vim.json.decode,
-        result.stdout or '',
-        { luanil = { object = true, array = true } }
-      )
-      if not ok or type(data) ~= 'table' then
-        return on_done(nil, 'Jenkins answered with something not JSON')
-      end
-      on_done(data)
-    end
-  )
-end
+local function get_json(url, on_done) http.json({ url = url }, on_done) end
 
 --- The status a build's `result` and `building` come down to
 ---@param build table
@@ -214,28 +162,10 @@ end
 ---@param max_bytes integer
 ---@param on_done fun(text: string?, cut: boolean, err: string?, skipped: boolean)
 function M.log(target, pipeline, max_bytes, on_done)
-  local url = ('%s/%d/consoleText'):format(target.base, pipeline.id)
-  local command = vim.list_extend({
-    'bash',
-    '-c',
-    'set -o pipefail; curl "${@:3}" -- "$1" | tail -c "$2"',
-    'dy_jenkins_log',
-    url,
-    tostring(max_bytes + 1),
-  }, vim.list_slice(M.curl({}), 2))
-  system.run(
-    command,
-    { timeout = M.TIMEOUT + 1000, max_bytes = max_bytes + 1024 },
-    function(result)
-      if result.code ~= 0 then
-        return on_done(nil, false, system.failure(result, 'curl'), false)
-      end
-      local text = result.stdout or ''
-      -- One byte more than kept says the start was left out
-      local skipped = #text > max_bytes
-      if skipped then text = text:sub(#text - max_bytes + 1) end
-      on_done(text, false, nil, skipped)
-    end
+  http.tail(
+    ('%s/%d/consoleText'):format(target.base, pipeline.id),
+    max_bytes,
+    on_done
   )
 end
 
@@ -278,7 +208,7 @@ function M.lint(url, text, on_done)
     return on_done(nil, 'The Jenkinsfile is too large to send')
   end
   system.run(
-    M.curl({
+    http.curl({
       '--request',
       'POST',
       -- The file goes on standard input, never as a word of the command
@@ -287,7 +217,11 @@ function M.lint(url, text, on_done)
       '--',
       url .. '/pipeline-model-converter/validate',
     }),
-    { timeout = M.TIMEOUT + 1000, stdin = text, max_bytes = M.MAX_BYTES },
+    {
+      timeout = http.TIMEOUT + 1000,
+      stdin = text,
+      max_bytes = http.MAX_BYTES,
+    },
     function(result)
       if result.code ~= 0 then
         return on_done(nil, system.failure(result, 'curl'))

@@ -653,6 +653,13 @@ one of the same keys in those buffers.
 `<localleader>ot`      n      Today  (ft: markdown, markdown.mdx)
 
 ==============================================================================
+<localleader>p  pr (Octo)
+
+`<localleader>pe`      n      Explain Failed Job (AI)  (ft: python)
+`<localleader>ps`      n      Pipeline Status (CI)  (ft: python)
+`<localleader>px`      n      Clear Status (CI)  (ft: python)
+
+==============================================================================
 [  prev
 
 `[B`                   n      Move Tab Prev

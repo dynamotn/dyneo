@@ -892,6 +892,46 @@ is marked with the steps that ran it, a retry or a loop item on its step.
 The context is pinned for the log an AI is asked about, which comes from the
 step's pod while the cluster keeps it.
 
+                                                     *dyneo-ci-data-pipelines*
+A Python file that imports `airflow`, `prefect` or `dagster` is a data
+pipeline's, and gets the last run of what it defines, on the lines of its
+tasks.  Python keeps `<localleader>s` for its REPL, so here the keys are
+`<localleader>ps` (status), `<localleader>px` (clear) and `<localleader>pe`
+(ask an AI why a task failed).  A file defining several picks the one the
+cursor is in, else the first.  Names made at run time are not read from
+the file, and their runs land on no line.
+
+                                                          *dyneo-ci-airflow*
+Airflow: a DAG of `DAG("id")`, `DAG(dag_id=...)` or `@dag`, its tasks by
+`task_id=`, `@task` (and `@task.bash`, ...) and `@task_group`; a mapped
+instance and a task of a group are marked on the task.  The webserver is
+the clone's `git config dyneo.airflowUrl`, else `DyNeo.pipelines.airflow_url`.
+Airflow 3 (`DyNeo.pipelines.airflow_api = 'v2'`, the default) takes only a
+JWT: `DyNeo.pipelines.airflow_token_command` prints one, and it is sent
+only to the host of `airflow_url`, never to a server a clone names.
+Airflow 2 (`'v1'`) takes a password through `curl --netrc-optional`.  The
+`AIR` rules of ruff (a task stored under another name than its `task_id`,
+a DAG with no schedule, what Airflow 3 moved) are on in every Python
+buffer, and only ever speak of Airflow code.
+
+                                                          *dyneo-ci-prefect*
+Prefect: a flow of `@flow`, named after its function with `_` turned to
+`-` unless it says `name=`, its tasks by `@task`.  Prefect's own client
+asks, run by the Python beside `prefect` (the project's `.venv`, else
+`$PATH`), so the API URL and key come from the active profile or
+`PREFECT_*` and are never read here.  It runs outside the project, so a
+`.env` or `prefect.toml` of the tree cannot send the key elsewhere, and it
+never starts a server of its own.  The last run that ran is shown, a run
+only scheduled skipped.
+
+                                                          *dyneo-ci-dagster*
+Dagster: a job of `@job` or `define_asset_job("name")`, else the asset job
+Dagster runs a file's assets in; each `@asset` (behind its `key_prefix`)
+and `@op` is marked with its step.  The webserver is the clone's `git
+config dyneo.dagsterUrl`, else `DyNeo.pipelines.dagster_url`; a Dagster+
+token from `DyNeo.pipelines.dagster_token_command` goes only to that
+deployment's host.
+
 In a `.gitlab-ci.yml`, `<localleader>l` (or |:DyCiLint|) has GitLab check the
 saved file with `glab ci lint`, and puts what it finds on the jobs it names;
 in a `Jenkinsfile`, the server checks it through
@@ -1358,7 +1398,10 @@ timestamps and GitLab's section markers are taken out, and only its last
 since a log may print whatever the job had in its environment.  Azure DevOps
 hands a log only whole, so only its last 5000 lines are read; Jenkins gives
 the console of the whole build, of which only the end is kept; Argo the log
-of the step's pod.  The prompt is `prompts/ci/failure.md`.
+of the step's pod; Airflow the log of the task's last try; Prefect the last
+5000 lines a task run logged, or the flow run for the flow; Dagster the
+messages and the error a step logged.  The prompt is
+`prompts/ci/failure.md`.
 
 Keeping AI local                                            *dyneo-ai-local*
 
@@ -1802,7 +1845,8 @@ Operations ~
                                                                  *:DyCiStatus*
 :DyCiStatus             Show the last pipeline on the jobs of this
                         `.gitlab-ci.yml`, workflow, Azure pipeline,
-                        `Jenkinsfile` or Argo workflow.
+                        `Jenkinsfile`, Argo workflow, or Airflow, Prefect
+                        or Dagster file (|dyneo-ci-data-pipelines|).
 :DyCiStatus clear       Clear it.  See |dyneo-ci|.
 
                                                                    *:DyCiLint*

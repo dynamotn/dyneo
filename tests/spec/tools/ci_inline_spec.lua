@@ -341,6 +341,49 @@ describe('tools.ci_inline', function()
       )
     end)
 
+    it('shows the last run of the Airflow DAG under the cursor', function()
+      h.globals()
+      DyNeo.pipelines.airflow_api = 'v1'
+      git('config', 'dyneo.airflowUrl', 'https://airflow.example.com')
+      cli('curl', {
+        'case "$*" in',
+        [[  */dags/second/dagRuns\?order_by*) echo '{"dag_runs":[{"dag_run_id":"scheduled__1","state":"failed"}]}';;]],
+        [[  */taskInstances\?*) echo '{"task_instances":[{"task_id":"b","state":"failed","try_number":1,"map_index":-1}],"total_entries":1}';;]],
+        [[  *) exit 22;;]],
+        'esac',
+      })
+      h.write(repo .. '/dags/etl.py', {
+        'from airflow import DAG',
+        'from airflow.operators.bash import BashOperator',
+        'with DAG("first") as d1:',
+        '    BashOperator(task_id="a", bash_command="true")',
+        'with DAG("second") as d2:',
+        '    BashOperator(task_id="b", bash_command="false")',
+      })
+      vim.cmd.edit(repo .. '/dags/etl.py')
+      local bufnr = vim.api.nvim_get_current_buf()
+      vim.bo.filetype = 'python'
+      ci.attach(bufnr)
+      -- Python's own `<localleader>s` stays the REPL's
+      assert.equals(
+        'Pipeline Status (CI)',
+        vim.fn.maparg('<localleader>ps', 'n', false, true).desc
+      )
+      assert.equals('', vim.fn.maparg('<localleader>s', 'n'))
+      vim.api.nvim_win_set_cursor(0, { 6, 0 })
+      ci.status(bufnr)
+      assert.is_true(vim.wait(5000, function() return #notes > 0 end, 20))
+      assert.same({ { 5, '  ✗ fail' } }, marks(bufnr))
+      assert.is_truthy(notes[1]:find('DAG run scheduled__1 on second', 1, true))
+      assert.is_truthy(
+        notes[1]:find(
+          'https://airflow.example.com/dags/second/grid?dag_run_id=scheduled__1',
+          1,
+          true
+        )
+      )
+    end)
+
     it('says when no Azure pipeline runs the file', function()
       git('remote', 'add', 'origin', 'git@ssh.dev.azure.com:v3/c/p/web')
       cli('az', { [[echo '{"count":0,"value":[]}']] })
@@ -526,7 +569,7 @@ describe('tools.ci_inline', function()
       ci.status(h.buffer({ filetype = 'yaml', lines = GITLAB }))
       ci.status(h.buffer({ filetype = 'yaml.gitlab', lines = GITLAB }))
       assert.same({
-        'Not a pipeline of GitLab, GitHub, Azure, Jenkins or Argo',
+        'Not a pipeline file of a CI or data pipeline DyNeo knows',
         'This buffer holds no file',
       }, notes)
     end)
