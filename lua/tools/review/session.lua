@@ -298,6 +298,27 @@ local function worktree(s, cb)
   end)
 end
 
+--- Remove the worktree of review `s`, let go once it is gone; one git will
+--- not remove stays held, and where it is is said
+---@param s DyReviewSession
+---@param on_done? fun()
+local function remove_worktree(s, on_done)
+  git.worktree_remove(s.root, s.worktree, function(ok, err)
+    if ok then
+      untrusted.forget(s.worktree)
+    else
+      notify(
+        ('Kept the review worktree at %s: %s'):format(
+          s.worktree,
+          err or 'git refused to remove it'
+        ),
+        WARN
+      )
+    end
+    if on_done then on_done() end
+  end)
+end
+
 --- Read threads and import my pending drafts from the forge, then `cb`
 ---@param s DyReviewSession
 ---@param cb fun()
@@ -495,8 +516,8 @@ function M.start(remote, pull, adapter, fail)
                 untrusted.hold(s.worktree, function() M.ask_trust(s) end)
                 local loaded, state = pcall(store.load, remote, pull.id)
                 if not loaded then
-                  untrusted.forget(s.worktree)
-                  return fail('Could not read the review', tostring(state))
+                  fail('Could not read the review', tostring(state))
+                  return remove_worktree(s)
                 end
                 s.state = state
                 session, opening = s, false
@@ -572,20 +593,7 @@ function M.close(on_done)
   git.delete_refs(s.root, s.refs, { s.refs .. 'reviewed' }, function(_, err)
     if err then notify('Could not delete the review refs: ' .. err, WARN) end
   end)
-  git.worktree_remove(s.root, s.worktree, function(ok, err)
-    if ok then
-      untrusted.forget(s.worktree)
-    else
-      notify(
-        ('Kept the review worktree at %s: %s'):format(
-          s.worktree,
-          err or 'git refused to remove it'
-        ),
-        WARN
-      )
-    end
-    if on_done then on_done() end
-  end)
+  remove_worktree(s, on_done)
   return true
 end
 

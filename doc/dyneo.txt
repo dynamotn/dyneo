@@ -1826,6 +1826,10 @@ this pull request run on this machine?  Until you say yes, the head is
 checked out in a worktree (`.worktrees/dyreview-<forge>-<id>`) where no
 language server, linter, formatter or project `.nvim` folder runs, and the
 diff is read from git objects.  Dependencies are never installed there.
+Every `.worktrees/dyreview-*` directory is held from startup, so one left by
+an earlier session or a crash runs nothing either until a review trusts it;
+an open that fails after making the worktree removes it, or keeps it held
+and says where when git refuses.
 `:DyReview trust` asks again.  Sources of the CI line that need the code
 (Argo reads the workflow files) wait for the answer.
 

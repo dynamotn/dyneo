@@ -5,7 +5,8 @@
 --- buffer there opens. A held directory keeps both off: servers' `root_dir`
 --- and `util.project_rtp` ask `held` first, and `release` starts the servers
 --- once the user says yes. This is asked for every buffer and every server,
---- so with nothing held it costs one table check.
+--- so with nothing held it costs one table check, and a pattern hold one
+--- string match per name.
 local M = {}
 
 --- The augroup `vim.lsp.enable` starts servers from, on nightly and 0.12
@@ -17,6 +18,15 @@ M.LSP_GROUP = 'nvim.lsp.enable'
 
 ---@type table<string, DyUntrustedHold> By real path, without a trailing `/`
 local holds = {}
+
+--- Lua patterns whose first capture is a directory held by its name alone,
+--- from before any session holds it exactly
+---@type table<string, true>
+local patterns = {}
+
+--- Directories a pattern names that were let go once trusted, by real path
+---@type table<string, true>
+local released = {}
 
 --- `path` normalized and resolved, a file not there yet by its directory
 ---@param path string
@@ -47,12 +57,26 @@ end
 ---@param on_first? fun(bufnr: integer) Run once, scheduled, for the first
 --- held buffer something asks about
 function M.hold(dir, on_first)
-  holds[resolve(dir)] = { on_first = on_first, asked = false }
+  dir = resolve(dir)
+  holds[dir] = { on_first = on_first, asked = false }
+  released[dir] = nil
 end
 
---- Let `dir` go without starting anything
+--- Hold every directory `pattern` names, matched against the absolute name
+--- of a buffer or path as given: a worktree an earlier session left, or
+--- one a crash left behind, is held from startup without knowing it. Only a
+--- `release` after trust lets one of them go.
+---@param pattern string A Lua pattern whose first capture is the directory
+function M.hold_pattern(pattern) patterns[pattern] = true end
+
+--- Let `dir` go without starting anything; a directory a pattern names is
+--- held by it again
 ---@param dir string
-function M.forget(dir) holds[resolve(dir)] = nil end
+function M.forget(dir)
+  dir = resolve(dir)
+  holds[dir] = nil
+  released[dir] = nil
+end
 
 ---@type table<string, fun(bufnr: integer)> By the name they were given
 local starters = {}
@@ -73,6 +97,7 @@ function M.on_release(name, start) starters[name] = start end
 function M.release(dir)
   dir = resolve(dir)
   holds[dir] = nil
+  released[dir] = true
   local buffers = {} ---@type integer[]
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
     local name = vim.api.nvim_buf_get_name(bufnr)
@@ -116,7 +141,7 @@ end
 ---@param target integer|string A buffer, `0` for the current one, or a path
 ---@return boolean
 function M.held(target)
-  if next(holds) == nil then return false end
+  if next(holds) == nil and next(patterns) == nil then return false end
   local bufnr ---@type integer?
   local path ---@type string
   if type(target) == 'number' then
@@ -127,16 +152,26 @@ function M.held(target)
   else
     path = target --[[@as string]]
   end
-  path = resolve(path)
-  for dir, hold in pairs(holds) do
-    if under(dir, path) then
-      if hold.on_first and not hold.asked then
-        hold.asked = true
-        local first = bufnr or vim.api.nvim_get_current_buf()
-        vim.schedule(function() hold.on_first(first) end)
+  -- An exact hold first: its `on_first` asks the trust question
+  if next(holds) ~= nil then
+    local real = resolve(path)
+    for dir, hold in pairs(holds) do
+      if under(dir, real) then
+        if hold.on_first and not hold.asked then
+          hold.asked = true
+          local first = bufnr or vim.api.nvim_get_current_buf()
+          vim.schedule(function() hold.on_first(first) end)
+        end
+        return true
       end
-      return true
     end
+  end
+  if next(patterns) == nil then return false end
+  local name = path:sub(1, 1) == '/' and path or vim.fn.fnamemodify(path, ':p')
+  name = vim.fs.normalize(name)
+  for pattern in pairs(patterns) do
+    local dir = name:match(pattern)
+    if dir and not released[resolve(dir)] then return true end
   end
   return false
 end

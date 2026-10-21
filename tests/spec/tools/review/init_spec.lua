@@ -225,6 +225,30 @@ describe('tools.review', function()
       )
     end)
 
+    it('removes the worktree when the open fails after making it', function()
+      stub(store, 'load', function() error('disk broke') end)
+      review.open(remote, pull())
+      assert.is_nil(review.current())
+      local after = vim.list_slice(calls, #calls - 4)
+      assert.same(
+        { 'worktree_add', 'hold', 'unlock', 'worktree_remove', 'forget' },
+        after
+      )
+    end)
+
+    it('keeps a worktree git will not remove held, saying where', function()
+      stub(store, 'load', function() error('disk broke') end)
+      stub(git, 'worktree_remove', function(_, _, cb)
+        rec('worktree_remove')
+        cb(false, 'it is locked')
+      end)
+      review.open(remote, pull())
+      assert.is_false(vim.tbl_contains(calls, 'forget'))
+      local warning = table.concat(said(vim.log.levels.WARN), '\n')
+      assert.is_truthy(warning:find('dyreview-github-7', 1, true))
+      assert.is_truthy(warning:find('it is locked', 1, true))
+    end)
+
     it('lets the lock go when the open fails', function()
       stub(git, 'fetch', function(_, _, _, cb) cb(false, 'no network') end)
       review.open(remote, pull())

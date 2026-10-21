@@ -126,6 +126,56 @@ describe('util.untrusted', function()
     assert.equals(0, runs)
   end)
 
+  describe('hold_pattern', function()
+    local PATTERN = '^(.*/%.worktrees/dyreview%-[^/]+)'
+
+    before_each(function()
+      vim.fn.mkdir(dir .. '/repo/.worktrees/dyreview-github-7/src', 'p')
+      untrusted.hold_pattern(PATTERN)
+    end)
+
+    it('holds every directory the pattern names, and only those', function()
+      local wt = dir .. '/repo/.worktrees/dyreview-github-7'
+      assert.is_true(untrusted.held(wt))
+      assert.is_true(untrusted.held(wt .. '/src/a.lua'))
+      assert.is_true(untrusted.held(h.buffer({ name = wt .. '/src/b.lua' })))
+      assert.is_true(
+        untrusted.held(dir .. '/repo/.worktrees/dyreview-gitlab-3/x')
+      )
+      assert.is_false(untrusted.held(dir .. '/repo/.worktrees/feature/a.lua'))
+      assert.is_false(untrusted.held(dir .. '/repo/src/a.lua'))
+    end)
+
+    it('lets a directory released after trust go, until held again', function()
+      local wt = dir .. '/repo/.worktrees/dyreview-github-7'
+      untrusted.hold(wt)
+      untrusted.release(wt)
+      assert.is_false(untrusted.held(wt .. '/src/a.lua'))
+      -- Another review's worktree stays held
+      assert.is_true(
+        untrusted.held(dir .. '/repo/.worktrees/dyreview-github-8')
+      )
+      untrusted.hold(wt)
+      untrusted.forget(wt)
+      assert.is_true(untrusted.held(wt .. '/src/a.lua'))
+    end)
+
+    it('still asks the trust question of an exact hold first', function()
+      local wt = dir .. '/repo/.worktrees/dyreview-github-7'
+      local asked = 0
+      untrusted.hold(wt, function() asked = asked + 1 end)
+      assert.is_true(untrusted.held(wt .. '/src/a.lua'))
+      vim.wait(200, function() return asked > 0 end)
+      assert.equals(1, asked)
+    end)
+
+    it('resolves no path that the pattern does not match', function()
+      local function boom() error('resolved a path') end
+      table.insert(restores, h.stub(vim.uv, 'fs_realpath', boom))
+      assert.is_false(untrusted.held('/x/src/a.lua'))
+    end)
+  end)
+
   it('held answers false fast when nothing is held', function()
     local function boom() error('looked further than the holds') end
     table.insert(restores, h.stub(vim.uv, 'fs_realpath', boom))
