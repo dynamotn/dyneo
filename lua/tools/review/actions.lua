@@ -350,7 +350,8 @@ function M.toggle_resolve()
   session.changed(s)
 end
 
---- The draft on the cursor's line, an AI one first
+--- The shown draft on the cursor's line, an AI one first: a dropped draft
+--- has no mark to act on
 ---@param s DyReviewSession
 ---@param path string
 ---@param side DyReviewSide
@@ -363,6 +364,7 @@ local function draft_at(s, path, side, line)
       draft.path == path
       and draft.side == side
       and not draft.posted
+      and draft.state ~= 'dropped'
       and line >= (draft.start_line or draft.line)
       and line <= draft.line
       and (not found or draft.origin == 'ai')

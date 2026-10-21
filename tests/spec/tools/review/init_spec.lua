@@ -588,6 +588,31 @@ describe('tools.review', function()
       assert.equals('dropped', draft.state)
     end)
 
+    it('acts on the shown draft, not a dropped AI one beside it', function()
+      local mine = {
+        id = 'u1',
+        origin = 'user',
+        state = 'ready',
+        path = 'src/auth.lua',
+        side = 'new',
+        line = 3,
+        body = 'mine',
+      }
+      local dropped = vim.tbl_extend(
+        'force',
+        mine,
+        { id = 'a1', origin = 'ai', state = 'dropped', body = 'ai' }
+      )
+      review.current().state.drafts = { mine, dropped }
+      vim.api.nvim_win_set_cursor(0, { 3, 0 })
+      review.ai_action('drop')
+      assert.equals('dropped', mine.state)
+      review.current().state.drafts = { dropped }
+      notes = {}
+      review.ai_action('drop')
+      assert.equals('No draft on this line', said(vim.log.levels.WARN)[1])
+    end)
+
     it('marks a file reviewed at its blob, and unmarks it', function()
       review.mark('src/auth.lua')
       assert.equals('blob1', review.current().state.reviewed['src/auth.lua'])
