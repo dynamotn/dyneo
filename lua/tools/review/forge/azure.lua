@@ -742,6 +742,7 @@ end
 ---@field verdict string
 ---@field now integer               my vote as it stands
 ---@field me string
+---@field mark? integer             the newest thread id seen or posted
 
 --- Send a checked review of `pull`: each new thread and reply, reported
 --- once it is on Azure DevOps, then the resolutions, the body as a thread,
@@ -808,7 +809,11 @@ local function send(remote, pull, plan, progress, on_done)
         { parentCommentId = 0, content = plan.body, commentType = TEXT },
       },
       status = OPEN_BODY[plan.verdict] and ACTIVE or CLOSED,
-    }, function(data, err) next(data == nil and err or nil) end)
+    }, function(data, err)
+      local id = tbl(data) and int(data.id)
+      if id and id > (plan.mark or -1) then plan.mark = id end
+      next(data == nil and err or nil)
+    end)
   end
   local function vote(next)
     if plan.now == plan.vote then return next() end
@@ -851,15 +856,21 @@ end
 
 --- Whether `rows` hold a thread of mine on the pull request itself whose
 --- text is `body`
+---
+--- Only a thread past `since`, the mark of the last whole submit, counts:
+--- the same words said in an earlier round are no sign this round's went
+--- out.
 ---@param rows table[]
 ---@param me string
 ---@param body string
+---@param since? integer
 ---@return boolean
-local function body_out(rows, me, body)
+local function body_out(rows, me, body, since)
   for _, row in ipairs(rows) do
     local first = live_comments(row)[1]
     if
       row.isDeleted ~= true
+      and (int(row.id) or -1) > (since or -1)
       and not tbl(row.threadContext)
       and first
       and is_me(first.author, me)
@@ -980,9 +991,9 @@ end
 ---@param remote DyForgeRemote
 ---@param pull DyReviewPull
 ---@param drafts DyReviewDraft[]
----@param review { verdict: string, body?: string }
+---@param review { verdict: string, body?: string, since?: integer }
 ---@param progress fun(draft: DyReviewDraft, forge_id: string)
----@param cb fun(err?: string, info?: { lost?: string[], already?: integer, skipped?: string })
+---@param cb fun(err?: string, info?: { lost?: string[], already?: integer, skipped?: string, mark?: integer })
 function M.submit(remote, pull, drafts, review, progress, cb)
   local verdict = type(review) == 'table' and review.verdict
   local want = M.VOTES[verdict]
@@ -1005,6 +1016,13 @@ function M.submit(remote, pull, drafts, review, progress, cb)
     now = 0,
     me = '',
   }
+  local answer = cb
+  -- A whole submit says the newest thread it knows of, the mark a later
+  -- round's body is matched past
+  cb = function(err, info)
+    if err or not plan.mark then return answer(err, info) end
+    answer(nil, vim.tbl_extend('force', info or {}, { mark = plan.mark }))
+  end
   local sent = {}
   for _, draft in ipairs(drafts) do
     if draft.posted then
@@ -1048,6 +1066,8 @@ function M.submit(remote, pull, drafts, review, progress, cb)
       local by_id = {}
       for _, row in ipairs(rows) do
         by_id[row.id] = row
+        local id = int(row.id)
+        if id and id > (plan.mark or -1) then plan.mark = id end
       end
       local lost = {}
       for _, item in ipairs(sent) do
@@ -1070,7 +1090,8 @@ function M.submit(remote, pull, drafts, review, progress, cb)
       end
       local matched = take_unreported(rows, me, plan, sent, progress)
       local has_body = review.body ~= nil and review.body ~= ''
-      local out = has_body and body_out(rows, me, review.body --[[@as string]])
+      local out = has_body
+        and body_out(rows, me, review.body --[[@as string]], review.since)
       -- A submit that timed out after the body went out
       if out then plan.body = nil end
       my_vote(remote, pull, me, function(now, vote_err)

@@ -597,7 +597,8 @@ exit 1
         draft({ id = 'resolve', reply_to = 'd2', body = '', resolve = true }),
       }, { verdict = 'approve', body = 'Summary.' })
       assert.is_nil(err)
-      assert.is_nil(info)
+      -- The body note's id: the mark a later round's body is matched past
+      assert.same({ mark = 777 }, info)
       assert.same({
         'user',
         DRAFTS,
@@ -919,7 +920,7 @@ exit 1
         draft({ id = 'out', path = 'c.lua', line = 50, posted = 'draft:905' }),
       }, { verdict = 'comment' })
       assert.is_nil(err)
-      assert.same({ already = 970 }, info)
+      assert.same({ already = 970, mark = 970 }, info)
       assert.same({}, reports)
     end)
 
@@ -944,7 +945,7 @@ exit 1
         draft({ id = 'r', reply_to = 'd2', body = '', resolve = true }),
       }, { verdict = 'approve', body = 'LGTM' })
       assert.is_nil(err)
-      assert.same({ already = 960 }, info)
+      assert.same({ already = 960, mark = 960 }, info)
       assert.same({ { 'r', 'd2' } }, reports)
       assert.same({
         'user',
@@ -973,7 +974,7 @@ exit 1
         { verdict = 'approve', body = 'LGTM' }
       )
       assert.is_nil(err)
-      assert.is_nil(info)
+      assert.same({ mark = 960 }, info)
       assert.same({}, reports)
       -- The body is out already: not posted twice
       assert.same({
@@ -1012,9 +1013,56 @@ exit 1
       writes_succeed()
       local err, _, info = submit({}, { verdict = 'comment', body = 'Hi.' })
       assert.is_nil(err)
-      assert.is_nil(info)
+      assert.same({ mark = 777 }, info)
       assert.same({ 'user', DRAFTS, DISCUSSIONS, MR .. '_notes' }, keys())
       assert.same({ body = 'Hi.' }, calls()[4].body)
+    end)
+
+    it('posts a body said in an earlier round again', function()
+      answer('user', 'user.json')
+      answer(DRAFTS, {})
+      -- Round 1's body, out before the mark of its whole submit
+      answer(DISCUSSIONS, { { id = 'dy', notes = { mine(960, 'LGTM') } } })
+      writes_succeed()
+      local err, _, info = submit(
+        {},
+        { verdict = 'comment', body = 'LGTM', since = 960 }
+      )
+      assert.is_nil(err)
+      assert.same({ 'user', DRAFTS, DISCUSSIONS, MR .. '_notes' }, keys())
+      assert.same({ mark = 960 }, info)
+    end)
+
+    it('takes a body past the mark as out already', function()
+      answer('user', 'user.json')
+      answer(DRAFTS, {})
+      answer(DISCUSSIONS, {
+        { id = 'dy', notes = { mine(960, 'LGTM') } },
+        { id = 'dz', notes = { mine(980, 'LGTM') } },
+      })
+      writes_succeed()
+      local err, _, info = submit(
+        {},
+        { verdict = 'comment', body = 'LGTM', since = 960 }
+      )
+      assert.is_nil(err)
+      assert.same({ already = 980, mark = 980 }, info)
+      assert.same({ 'user', DRAFTS, DISCUSSIONS }, keys())
+    end)
+
+    it('submits a later round as usual after one went out', function()
+      -- Round 1's comment, deleted on the web since: round 2 hands over
+      -- only its own drafts
+      answer('user', 'user.json')
+      answer(DRAFTS, {})
+      writes_succeed()
+      local err, reports = submit(
+        { draft({ id = 'new' }) },
+        { verdict = 'comment', since = 960 }
+      )
+      assert.is_nil(err)
+      assert.same({ { 'new', 'draft:900' } }, reports)
+      assert.same({ 'user', DRAFTS, DIFFS, NEW_DRAFT, PUBLISH }, keys())
     end)
 
     it('fails when the drafts cannot be told published or lost', function()

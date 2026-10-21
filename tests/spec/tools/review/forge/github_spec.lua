@@ -794,13 +794,14 @@ exit 1
       assert.same({ 'user', REVIEWS }, keys())
     end)
 
-    --- My review `id`, out with `state` and `body`
-    local function out_review(id, state, body)
+    --- My review `id`, out with `state` and `body` on `commit` (the head)
+    local function out_review(id, state, body, commit)
       return {
         id = id,
         node_id = 'PRR_' .. id,
         state = state,
         body = body,
+        commit_id = commit or pull.head_sha,
         user = { login = 'me' },
       }
     end
@@ -869,6 +870,32 @@ exit 1
         }, { verdict = 'approve', body = 'LGTM' })
       end
     )
+
+    it('sends the same verdict and text again on a new head', function()
+      local input = sent_after(
+        { out_review(301, 'APPROVED', 'LGTM', 'oldhead') },
+        { verdict = 'approve', body = 'LGTM' }
+      )
+      assert.same(
+        { pullRequestReviewId = 'PRR_900', event = 'APPROVE', body = 'LGTM' },
+        input
+      )
+    end)
+
+    it('submits a later round as usual after one went out', function()
+      -- Round 1 is out and its comment edited on the web: round 2 hands
+      -- over only its own drafts, and is sent as a review of its own
+      answer('user', 'user.json')
+      answer(REVIEWS, { out_review(301, 'COMMENTED', 'LGTM') })
+      writes_succeed()
+      local err, reports = submit(
+        { draft({ id = 'new' }) },
+        { verdict = 'comment', body = 'LGTM' }
+      )
+      assert.is_nil(err)
+      assert.same({ { 'new', '900/601' } }, reports)
+      assert.equals('graphql_DyReviewSubmit', keys()[#calls()])
+    end)
 
     it('only resolves when an empty pending review would go out', function()
       answer('user', 'user.json')

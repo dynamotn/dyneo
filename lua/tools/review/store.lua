@@ -25,10 +25,12 @@ local notify = require('util.notify').titled('Review')
 ---@field resolve? boolean
 ---@field file_level? boolean  line outside every hunk
 ---@field posted? string       forge id once sent
+---@field done? string         head SHA of the whole submit it went out with
 
 ---@class DyReviewState
 ---@field reviewed table<string, string>  path -> blob SHA
 ---@field last_head? string
+---@field mark? integer  newest forge note or thread id of the last whole submit
 ---@field drafts DyReviewDraft[]
 
 --- Whether `name` is one path segment that stays inside its parent

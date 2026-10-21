@@ -6,10 +6,13 @@
 --- what goes out; nothing is written before that. Each draft is marked
 --- posted and saved as soon as the forge has it, so a submit cut short sends
 --- only the rest when run again, and the verdict goes out only with the
---- last of them. The adapter is handed every draft it must check, posted
---- ones included: it skips those itself, and needs them to tell a review
---- already out or drafts lost with a deleted pending review. Dropped and
---- pending AI drafts never leave. No message names a draft's text.
+--- last of them. The adapter is handed every draft of this round it must
+--- check, posted ones included: it skips those itself, and needs them to
+--- tell a review already out or drafts lost with a deleted pending review.
+--- A whole submit retires every posted draft (`done`), so a later round
+--- never hands them over again: what happened to them on the forge since is
+--- no business of that round. Dropped and pending AI drafts never leave. No
+--- message names a draft's text.
 local M = {}
 
 local drafts = require('tools.review.drafts')
@@ -58,7 +61,8 @@ local function forge_name(s)
 end
 
 ---@class DyReviewSendPlan
----@field send DyReviewDraft[] What the adapter is handed, posted ones too
+---@field send DyReviewDraft[] What the adapter is handed, posted ones of
+--- this round too
 ---@field unposted DyReviewDraft[] What goes out now
 ---@field skipped integer Pending AI drafts left out
 ---@field outside DyReviewDraft[] Line drafts no hunk of the head holds
@@ -151,8 +155,8 @@ local function build(s, cb)
     imported = 0,
   }
   for _, draft in ipairs(s.state.drafts) do
-    if draft.state == 'dropped' then
-      -- not wanted
+    if draft.state == 'dropped' or draft.done then
+      -- not wanted, or out with an earlier review
     elseif draft.origin == 'ai' and draft.state == 'pending' then
       plan.skipped = plan.skipped + 1
     else
@@ -305,10 +309,17 @@ end
 --- Record a whole submit: the head reviewed, and the `reviewed` ref
 ---@param s DyReviewSession
 ---@param plan DyReviewSendPlan
----@param info? { already?: integer, skipped?: string }
+---@param info? { already?: integer, skipped?: string, mark?: integer }
 local function done(s, plan, info)
   local head = s.pull.head_sha
   s.state.last_head = head
+  for _, draft in ipairs(s.state.drafts) do
+    if draft.posted and not draft.done then draft.done = head end
+  end
+  local mark = info and info.mark
+  if type(mark) == 'number' and mark > (s.state.mark or -1) then
+    s.state.mark = mark
+  end
   session.changed(s)
   git.update_ref(
     s.root,
@@ -358,7 +369,7 @@ local function send(s, plan, finish)
     s.remote,
     s.pull,
     plan.send,
-    { verdict = plan.verdict.id, body = plan.body },
+    { verdict = plan.verdict.id, body = plan.body, since = s.state.mark },
     function(draft, forge_id)
       -- Marked at once, so an answer arriving before the save sees it
       draft.posted = forge_id

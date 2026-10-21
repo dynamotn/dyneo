@@ -908,11 +908,15 @@ local function published(rows, me, drafts)
 end
 
 --- A note of mine on the merge request itself holding `body`, nil for none
+---
+--- Only a note past `since`, the mark of the last whole submit, counts: the
+--- same words said in an earlier round are no sign this round's went out.
 ---@param rows table[] Every discussion
 ---@param me { id: integer }
 ---@param body string
+---@param since? integer
 ---@return integer?
-local function body_note(rows, me, body)
+local function body_note(rows, me, body, since)
   for _, row in ipairs(rows) do
     local notes = tbl(row) and tbl(row.notes) or {}
     for _, note in ipairs(notes) do
@@ -921,6 +925,7 @@ local function body_note(rows, me, body)
         author
         and author.id == me.id
         and int(note.id)
+        and note.id > (since or -1)
         and not tbl(note.position)
         and note.system ~= true
         and note.body == body
@@ -954,6 +959,7 @@ end
 ---@field body? string              a note on the merge request
 ---@field verdict string
 ---@field approved? boolean         whether I have approved, when known
+---@field mark? integer             the newest note id seen or posted
 
 --- Send a checked review of `pull`: each new draft note, reported once it is
 --- on GitLab, then every draft note published, the resolutions, the body as
@@ -1023,7 +1029,11 @@ local function send(remote, pull, plan, progress, on_done)
       'POST',
       mr_path(remote, pull, '/notes'),
       { body = plan.body },
-      function(data, err) next(data == nil and err or nil) end
+      function(data, err)
+        local id = type(data) == 'table' and int(data.id)
+        if id and id > (plan.mark or -1) then plan.mark = id end
+        next(data == nil and err or nil)
+      end
     )
   end
   local function verdict(next)
@@ -1104,9 +1114,9 @@ end
 ---@param remote DyForgeRemote
 ---@param pull DyReviewPull
 ---@param drafts DyReviewDraft[]
----@param review { verdict: string, body?: string }
+---@param review { verdict: string, body?: string, since?: integer }
 ---@param progress fun(draft: DyReviewDraft, forge_id: string)
----@param cb fun(err?: string, info?: { lost?: string[], already?: integer, skipped?: string })
+---@param cb fun(err?: string, info?: { lost?: string[], already?: integer, skipped?: string, mark?: integer })
 function M.submit(remote, pull, drafts, review, progress, cb)
   local verdict = type(review) == 'table' and review.verdict
   local known = false
@@ -1128,6 +1138,13 @@ function M.submit(remote, pull, drafts, review, progress, cb)
     body = review.body,
     verdict = verdict,
   }
+  local answer = cb
+  -- A whole submit says the newest note it knows of, the mark a later
+  -- round's body is matched past
+  cb = function(err, info)
+    if err or not plan.mark then return answer(err, info) end
+    answer(nil, vim.tbl_extend('force', info or {}, { mark = plan.mark }))
+  end
   local sent = {}
   for _, draft in ipairs(drafts) do
     local note = parse_posted(draft.posted)
@@ -1193,6 +1210,12 @@ function M.submit(remote, pull, drafts, review, progress, cb)
         if capped then
           return cb('More discussions than can be read on GitLab')
         end
+        for _, row in ipairs(rows) do
+          for _, note in ipairs(tbl(row) and tbl(row.notes) or {}) do
+            local id = tbl(note) and int(note.id)
+            if id and id > (plan.mark or -1) then plan.mark = id end
+          end
+        end
         local note_of = published(rows, me, gone)
         local lost, newest = {}, nil
         for _, draft in ipairs(gone) do
@@ -1217,7 +1240,8 @@ function M.submit(remote, pull, drafts, review, progress, cb)
           return send(remote, pull, plan, progress, cb)
         end
         local has_body = review.body ~= nil and review.body ~= ''
-        local body_out = has_body and body_note(rows, me, review.body)
+        local body_out = has_body
+          and body_note(rows, me, review.body, review.since)
         if body_out then
           -- A submit that timed out after the note went out
           plan.body = nil

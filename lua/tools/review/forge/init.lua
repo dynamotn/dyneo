@@ -35,10 +35,13 @@ local M = {}
 ---@field resolved boolean
 ---@field comments DyReviewComment[]
 
---- `submit` is handed every draft but dropped and pending AI ones, posted
---- ones included: it never sends a posted draft again, and checks them
---- against the forge to tell drafts lost with a deleted pending review
---- (`info.lost`) and a review already out (`info.already`).
+--- `submit` is handed every draft of this round but dropped and pending AI
+--- ones, posted ones included: it never sends a posted draft again, and
+--- checks them against the forge to tell drafts lost with a deleted pending
+--- review (`info.lost`) and a review already out (`info.already`). Drafts of
+--- an earlier whole submit (`done`) are never handed over. `review.since` is
+--- the `info.mark` of the last whole submit -- the newest note or thread id
+--- the forge had then -- and a body is taken as out only past it.
 ---@class DyReviewForge
 ---@field verdicts { id: string, label: string }[]
 ---@field list fun(remote: DyForgeRemote, cb: fun(pulls?: DyReviewPull[], err?: string, capped?: boolean))
@@ -46,7 +49,7 @@ local M = {}
 ---@field get fun(remote: DyForgeRemote, id: string, cb: fun(pull?: DyReviewPull, err?: string))
 ---@field threads fun(remote: DyForgeRemote, pull: DyReviewPull, cb: fun(threads?: DyReviewThread[], err?: string, capped?: boolean))
 ---@field pending fun(remote: DyForgeRemote, pull: DyReviewPull, cb: fun(drafts?: DyReviewDraft[], err?: string))
----@field submit fun(remote: DyForgeRemote, pull: DyReviewPull, drafts: DyReviewDraft[], review: { verdict: string, body?: string }, progress: fun(draft: DyReviewDraft, forge_id: string), cb: fun(err?: string, info?: { lost?: string[], already?: integer, skipped?: string }))
+---@field submit fun(remote: DyForgeRemote, pull: DyReviewPull, drafts: DyReviewDraft[], review: { verdict: string, body?: string, since?: integer }, progress: fun(draft: DyReviewDraft, forge_id: string), cb: fun(err?: string, info?: { lost?: string[], already?: integer, skipped?: string, mark?: integer }))
 ---@field suggestion fun(lines: string[]): string?
 ---@field import_id? fun(posted: string): string? The id `pending` gives what a posted draft became, so it is not imported twice
 

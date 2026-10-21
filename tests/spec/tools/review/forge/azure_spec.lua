@@ -619,7 +619,7 @@ exit 1
           draft({ id = 'resolve', reply_to = '8', body = '', resolve = true }),
         }, { verdict = 'approve', body = 'Summary.' })
         assert.is_nil(err)
-        assert.is_nil(info)
+        assert.same({ mark = 104 }, info)
         assert.same({
           WHO,
           THREADS,
@@ -878,7 +878,7 @@ exit 1
         { verdict = 'approve' }
       )
       assert.is_nil(err)
-      assert.same({ already = 10 }, info)
+      assert.same({ already = 10, mark = 6 }, info)
       assert.same({}, reports)
       -- The author may have opened it again since: not ours to close
       assert.same({ WHO, THREADS, REVIEWERS }, keys())
@@ -909,7 +909,7 @@ exit 1
         { verdict = 'approve' }
       )
       assert.is_nil(err)
-      assert.same({ already = 10 }, info)
+      assert.same({ already = 10, mark = 6 }, info)
       assert.same({ { 'both', '6/3' } }, reports)
       assert.same(
         { WHO, THREADS, REVIEWERS, 'PATCH_pullRequestThreads_7_6' },
@@ -994,7 +994,7 @@ exit 1
         draft({ id = 'r', reply_to = '6', body = '', resolve = true }),
       }, { verdict = 'approve', body = 'LGTM' })
       assert.is_nil(err)
-      assert.same({ already = 10 }, info)
+      assert.same({ already = 10, mark = 101 }, info)
       assert.same({ { 'r', '6' } }, reports)
       assert.same(
         { WHO, THREADS, REVIEWERS, 'PATCH_pullRequestThreads_7_6' },
@@ -1016,11 +1016,54 @@ exit 1
         { verdict = 'reject', body = 'LGTM' }
       )
       assert.is_nil(err)
-      assert.is_nil(info)
+      assert.same({ mark = 101 }, info)
       assert.same({}, reports)
       -- The body is out already: not posted twice
       assert.same({ WHO, THREADS, REVIEWERS, VOTE }, keys())
       assert.same({ id = ME, vote = -10 }, calls()[4].body)
+    end)
+
+    it('posts a body said in an earlier round again', function()
+      writes_succeed()
+      -- Round 1's body, out before the mark of its whole submit
+      answer(THREADS, { value = { mine(101, 'LGTM') } })
+      my_vote(10)
+      local err, _, info = submit(
+        {},
+        { verdict = 'approve', body = 'LGTM', since = 101 }
+      )
+      assert.is_nil(err)
+      assert.same({ WHO, THREADS, REVIEWERS, NEW_THREAD }, keys())
+      assert.same({ mark = 101 }, info)
+    end)
+
+    it('takes a body past the mark as out already', function()
+      writes_succeed()
+      answer(THREADS, { value = { mine(101, 'LGTM'), mine(120, 'LGTM') } })
+      my_vote(10)
+      local err, _, info = submit(
+        {},
+        { verdict = 'approve', body = 'LGTM', since = 101 }
+      )
+      assert.is_nil(err)
+      assert.same({ already = 10, mark = 120 }, info)
+      assert.same({ WHO, THREADS, REVIEWERS }, keys())
+    end)
+
+    it('submits a later round as usual after one went out', function()
+      -- Round 1's thread, deleted on the web since: round 2 hands over
+      -- only its own drafts
+      writes_succeed()
+      answer(
+        THREADS,
+        { value = { mine(90, 'Other.', nil, { isDeleted = true }) } }
+      )
+      local err, reports = submit(
+        { draft({ id = 'new', line = 3 }) },
+        { verdict = 'no_vote', since = 90 }
+      )
+      assert.is_nil(err)
+      assert.same({ { 'new', '100' } }, reports)
     end)
 
     it('only resolves when a no-vote review would be empty', function()
@@ -1042,7 +1085,7 @@ exit 1
       writes_succeed()
       local err, _, info = submit({}, { verdict = 'no_vote', body = 'Hi.' })
       assert.is_nil(err)
-      assert.is_nil(info)
+      assert.same({ mark = 100 }, info)
       assert.same({ WHO, THREADS, REVIEWERS, NEW_THREAD }, keys())
       assert.same({ comments = first('Hi.'), status = 4 }, calls()[4].body)
     end)

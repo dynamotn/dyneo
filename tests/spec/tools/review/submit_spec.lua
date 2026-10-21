@@ -46,6 +46,7 @@ describe('tools.review.submit', function()
       next = 100,
       fail_at = nil, ---@type integer? Fail before the n-th unposted draft
       verdict_times_out = false, -- publish, then answer with an error
+      mark = nil, ---@type integer? Given back on a whole submit
     }
     local function id()
       f.next = f.next + 1
@@ -135,7 +136,7 @@ describe('tools.review.submit', function()
           f.verdict_times_out = false
           return cb('timed out')
         end
-        cb()
+        cb(nil, f.mark and { mark = f.mark } or nil)
       end,
     }
     return f
@@ -293,6 +294,32 @@ describe('tools.review.submit', function()
     assert.equals(1, vim.tbl_count(forge.published))
     assert.is_true(told('already out'))
     assert.equals(head, s.state.last_head)
+  end)
+
+  it('retires the drafts of a review once it is out', function()
+    s.state.drafts = { draft({ id = 'a' }) }
+    forge.mark = 500
+    submit.run(s)
+    assert.equals(head, s.state.drafts[1].done)
+    assert.equals(head, saves[#saves].drafts[1].done)
+    assert.equals(500, s.state.mark)
+    table.insert(s.state.drafts, draft({ id = 'b', line = 3 }))
+    again()
+    -- The draft out in the first round is never handed over again
+    assert.same({ 'b' }, sent[2].ids)
+    assert.equals(500, sent[2].review.since)
+    assert.equals(head, s.state.drafts[2].done)
+  end)
+
+  it('retires nothing on a submit cut short', function()
+    s.state.drafts = { draft({ id = 'a' }), draft({ id = 'b', line = 3 }) }
+    forge.fail_at = 2
+    submit.run(s)
+    assert.is_nil(s.state.drafts[1].done)
+    assert.is_nil(s.state.mark)
+    again()
+    assert.equals(head, s.state.drafts[1].done)
+    assert.equals(head, s.state.drafts[2].done)
   end)
 
   it('never passes dropped or pending AI drafts and counts these', function()

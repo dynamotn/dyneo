@@ -854,15 +854,17 @@ local function sent_before(drafts, pending, reviews)
 end
 
 --- Whether review `last` is the one asked for again: my newest review out
---- on GitHub, left with `event` and `body`. A submit that timed out after it
---- reached GitHub reads that way; any other verdict or text is a new one.
+--- on GitHub, left on the head with `event` and `body`. A submit that timed
+--- out after it reached GitHub reads that way; any other verdict or text,
+--- or the same one on a new head, is a new one.
 ---@param reviews table[]
 ---@param me string
 ---@param last? integer
 ---@param event string
 ---@param body? string
+---@param head string
 ---@return boolean
-local function already_out(reviews, me, last, event, body)
+local function already_out(reviews, me, last, event, body, head)
   if not last then return false end
   local newest
   for _, row in ipairs(reviews) do
@@ -880,6 +882,7 @@ local function already_out(reviews, me, last, event, body)
   return newest ~= nil
     and newest.id == last
     and newest.state == SUBMITTED_AS[event]
+    and newest.commit_id == head
     and text(newest.body, '') == (body or '')
 end
 
@@ -903,9 +906,9 @@ end
 ---@param remote DyForgeRemote
 ---@param pull DyReviewPull
 ---@param drafts DyReviewDraft[]
----@param review { verdict: string, body?: string }
+---@param review { verdict: string, body?: string, since?: integer }
 ---@param progress fun(draft: DyReviewDraft, forge_id: string)
----@param cb fun(err?: string, info?: { lost?: string[], already?: integer, skipped?: string })
+---@param cb fun(err?: string, info?: { lost?: string[], already?: integer, skipped?: string, mark?: integer })
 function M.submit(remote, pull, drafts, review, progress, cb)
   local verdict = type(review) == 'table' and review.verdict
   local event = EVENTS[verdict]
@@ -975,7 +978,7 @@ function M.submit(remote, pull, drafts, review, progress, cb)
       if
         nothing_new
         and me
-        and already_out(reviews, me, last, event, review.body)
+        and already_out(reviews, me, last, event, review.body, pull.head_sha)
       then
         return resolve_only({ already = last })
       end
