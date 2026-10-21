@@ -46,6 +46,11 @@ local EXACT = {
   function_expression = true,
   -- Lua's anonymous `function() ... end`
   ['function'] = true,
+  -- Ruby's `def`, `def self.x`, `class`, `class << self`
+  method = true,
+  singleton_method = true,
+  class = true,
+  singleton_class = true,
 }
 
 --- Whether a node of `kind` is a definition. `block` is Terraform's (and
@@ -55,6 +60,8 @@ local EXACT = {
 ---@return boolean
 local function definition(kind, parent)
   if kind == 'block' then return parent == 'body' or parent == 'config_file' end
+  -- Ruby's `module`; Python's is the root of the file, and has no parent
+  if kind == 'module' then return parent ~= nil end
   if EXACT[kind] then return true end
   local head, tail = kind:match('^(.-)_?([%a]+)$')
   if not head or not vim.list_contains(SUFFIXES, tail) then return false end

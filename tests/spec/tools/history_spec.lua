@@ -96,6 +96,31 @@ describe('tools.history', function()
     end
   end)
 
+  it('reads the definitions of Ruby, by their node types', function()
+    local program = node('program', 0, 20)
+    local mod = node('module', 0, 20, program)
+    local body = node('body_statement', 1, 19, mod)
+    local class = node('class', 1, 18, body)
+    local method = node('method', 2, 4, node('body_statement', 2, 17, class))
+    assert.same(
+      { 3, 5, 'method' },
+      { history.enclosing(node('call', 3, 3, method)) }
+    )
+    assert.same(
+      { 2, 19, 'class' },
+      { history.enclosing(node('constant', 1, 1, class)) }
+    )
+    assert.same({ 1, 21, 'module' }, { history.enclosing(body) })
+    assert.equals(
+      'singleton_method',
+      select(3, history.enclosing(node('singleton_method', 5, 7, body)))
+    )
+    assert.equals(
+      'singleton_class',
+      select(3, history.enclosing(node('singleton_class', 8, 12, body)))
+    )
+  end)
+
   it('finds the definition the cursor is in, with the Lua parser', function()
     if not pcall(vim.treesitter.language.add, 'lua') then
       return pending('no Lua parser on this machine')
