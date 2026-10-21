@@ -56,7 +56,15 @@ local function run(root, args, opts, on_done)
     { GIT_TERMINAL_PROMPT = '0', GIT_OPTIONAL_LOCKS = '0' },
     opts.env or {}
   )
-  local cmd = { 'git', '--no-pager', '--literal-pathspecs' }
+  -- The repository's hooks never run: a fetch, a ref update or a worktree
+  -- of a pull request comes before anyone trusted it
+  local cmd = {
+    'git',
+    '--no-pager',
+    '--literal-pathspecs',
+    '-c',
+    'core.hooksPath=/dev/null',
+  }
   vim.list_extend(cmd, args)
   sys.run(cmd, opts, function(result)
     local err

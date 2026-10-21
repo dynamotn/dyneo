@@ -457,6 +457,8 @@ describe('tools.review.git', function()
         '--no-pager',
         '--literal-pathspecs',
         '-c',
+        'core.hooksPath=/dev/null',
+        '-c',
         'gc.auto=0',
         'fetch',
         '--no-tags',
@@ -475,6 +477,74 @@ describe('tools.review.git', function()
       )
       assert.is_false(ok)
       assert.is_truthy(err and err ~= '')
+    end)
+  end)
+
+  describe('hooks', function()
+    it('runs none of the repository on fetch, refs or worktree', function()
+      local hooks = root .. '/.hooks'
+      local marker = root .. '/.hooked'
+      for _, name in ipairs({ 'post-checkout', 'reference-transaction' }) do
+        h.write(hooks .. '/' .. name, {
+          '#!/bin/sh',
+          ('echo %s >> %q'):format(name, marker),
+        })
+        vim.fn.setfperm(hooks .. '/' .. name, 'rwxr-xr-x')
+      end
+      sh(root, 'config', 'core.hooksPath', hooks)
+      -- The hooks do run for git itself
+      sh(root, 'update-ref', 'refs/dyneo/probe', sha.main)
+      assert.is_equal(1, vim.fn.filereadable(marker))
+      vim.fn.delete(marker)
+
+      local remote, clean_remote = h.tmpdir()
+      sh(remote, 'init', '-q', '--bare')
+      sh(root, 'push', '-q', remote, 'feature:refs/pull/1/head')
+      vim.fn.delete(marker)
+      sh(root, 'remote', 'add', 'up', remote)
+      local parent, clean = h.tmpdir()
+      assert.is_true(
+        await(
+          function(cb)
+            git.fetch(
+              root,
+              'up',
+              { '+refs/pull/1/head:refs/dyneo/review/pr-1' },
+              cb
+            )
+          end
+        )
+      )
+      assert.is_true(
+        await(
+          function(cb)
+            git.update_ref(root, 'refs/dyneo/review/pr-2', sha.main, cb)
+          end
+        )
+      )
+      assert.same(
+        { 'refs/dyneo/review/pr-1', 'refs/dyneo/review/pr-2' },
+        await(
+          function(cb)
+            git.delete_refs(
+              root,
+              'refs/dyneo/review',
+              { 'refs/dyneo/probe' },
+              cb
+            )
+          end
+        )
+      )
+      assert.is_true(
+        await(
+          function(cb) git.worktree_add(root, parent .. '/wt', sha.feature, cb) end
+        )
+      )
+      local hooked = vim.fn.filereadable(marker) == 1
+        and table.concat(vim.fn.readfile(marker), ', ')
+      assert.is_false(hooked)
+      clean()
+      clean_remote()
     end)
   end)
 
