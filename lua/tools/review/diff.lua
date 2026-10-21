@@ -173,11 +173,42 @@ end
 ---@param fn fun(bufnr: integer, path: string, side: DyReviewSide)
 function M.on_buffer(fn) handler = fn end
 
+--- The first part of `path` under `root` that is a symbolic link, and where
+--- it points; nil when there is none
+---@param root string
+---@param path string
+---@return string? link The part of `path` that is one
+---@return string? target
+local function symlink_in(root, path)
+  local at, parts = root, {}
+  for part in path:gmatch('[^/]+') do
+    at = at .. '/' .. part
+    parts[#parts + 1] = part
+    local stat = vim.uv.fs_lstat(at)
+    if not stat then return nil end
+    if stat.type == 'link' then
+      return table.concat(parts, '/'), vim.uv.fs_readlink(at) or '?'
+    end
+  end
+  return nil
+end
+
 --- Show the change of `path`, merge-base to head, in a codediff tab
+---
+--- A symlink of the pull request is never loaded: it would open what it
+--- points at, any file of this machine, as if it were the author's.
 ---@param session DyReviewSession
 ---@param path string
 ---@return 'opened'|'shown'|false # `shown` when that diff is open already
 function M.open(session, path)
+  local link, target = symlink_in(session.worktree, path)
+  if link then
+    notify(
+      ('%s is a symlink to %s: not opened'):format(link, target),
+      vim.log.levels.WARN
+    )
+    return false
+  end
   if vim.fn.exists(':CodeDiff') ~= 2 then
     notify(
       'codediff.nvim is not installed: `:DyReview` needs it',
