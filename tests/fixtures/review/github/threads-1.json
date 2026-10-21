@@ -1,0 +1,14 @@
+{"data": {"repository": {"pullRequest": {"reviewThreads": {
+  "pageInfo": {"hasNextPage": true, "endCursor": "c1"},
+  "nodes": [
+    {
+      "id": "PRRT_1", "path": "a.lua", "line": 10, "startLine": 8,
+      "originalLine": 9, "originalStartLine": 7, "diffSide": "RIGHT",
+      "isResolved": false, "subjectType": "LINE",
+      "comments": {"pageInfo": {"hasNextPage": false}, "nodes": [
+        {"author": {"login": "alice"}, "body": "Why?", "createdAt": "2026-10-01T10:00:00Z"},
+        {"author": null, "body": "Because.", "createdAt": "2026-10-01T11:00:00Z"}
+      ]}
+    }
+  ]
+}}}}}

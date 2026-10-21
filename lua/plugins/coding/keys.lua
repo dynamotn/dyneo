@@ -24,6 +24,7 @@ return {
           { '<leader>pA', group = 'architecture' },
           { '<leader>pj', group = 'jira' },
           { '<leader>pr', group = 'decision records' },
+          { '<leader>pv', group = 'review' },
           { '<leader>q', group = 'quit/session' },
           { '<leader>s', group = 'search' },
           { '<leader>u', group = 'ui' },

@@ -484,6 +484,48 @@ local function yq_flavour()
   )
 end
 
+--- What `:DyReview` needs: codediff.nvim for the diff, and a git that reads
+--- the attributes of a revision (`check-attr --source`)
+---@return table[]
+local function review()
+  local entries = {}
+  local loaded, plugin = pcall(require, 'util.plugin')
+  if loaded and pcall(require, 'lazy.core.config') then
+    table.insert(
+      entries,
+      plugin.has('codediff.nvim') and entry('ok', 'codediff.nvim found')
+        or entry('error', 'codediff.nvim is missing, required by `:DyReview`')
+    )
+  end
+  if vim.fn.executable('git') ~= 1 then return entries end
+  local result = require('util.system').sync(
+    { 'git', 'version' },
+    { text = true, timeout = 2000 }
+  )
+  local major, minor = (result.stdout or ''):match('(%d+)%.(%d+)')
+  major, minor = tonumber(major), tonumber(minor)
+  if not (major and minor) then
+    table.insert(entries, entry('warn', 'git version failed: cannot tell'))
+  elseif major > 2 or (major == 2 and minor >= 40) then
+    table.insert(
+      entries,
+      entry('ok', 'git is 2.40 or newer, as `:DyReview` needs')
+    )
+  else
+    table.insert(
+      entries,
+      entry(
+        'error',
+        ('git %d.%d is older than 2.40, which `:DyReview` needs'):format(
+          major,
+          minor
+        )
+      )
+    )
+  end
+  return entries
+end
+
 local function requirements()
   local entries = {}
   local required = { 'git', 'curl', 'tar', 'unzip', 'gzip' }
@@ -491,7 +533,7 @@ local function requirements()
     rg = 'the pickers',
     fd = 'the file pickers',
     lazygit = 'the `<leader>gg` git UI',
-    gh = 'the GitHub API, which the Mason quarantine asks first',
+    gh = 'the GitHub API, which the Mason quarantine and `:DyReview` ask',
   }
   -- Asked for by one command each and installed by hand: their absence is
   -- only worth knowing about, not a warning
@@ -576,6 +618,7 @@ local function requirements()
   end
   local flavour = yq_flavour()
   if flavour then table.insert(entries, flavour) end
+  vim.list_extend(entries, review())
   return entries
 end
 

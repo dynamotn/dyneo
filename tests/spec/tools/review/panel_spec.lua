@@ -1,0 +1,180 @@
+local h = require('helpers')
+
+describe('tools.review.panel', function()
+  local panel
+
+  before_each(function()
+    h.unload('tools.review.panel')
+    panel = require('tools.review.panel')
+  end)
+
+  local function file(path, kind, added, removed, fields)
+    return vim.tbl_extend('force', {
+      path = path,
+      status = 'M',
+      kind = kind,
+      added = added,
+      removed = removed,
+      risk = 0,
+      binary = false,
+    }, fields or {})
+  end
+
+  local function ai(path)
+    return {
+      origin = 'ai',
+      state = 'pending',
+      path = path,
+      side = 'new',
+      line = 1,
+      body = 'x',
+    }
+  end
+
+  --- A pull request with a risky reviewed file, a changed one and a lockfile
+  local function session(fields)
+    local token = file('src/auth/token.go', 'source', 120, 4, {
+      risk = 3,
+      blob = 'b1',
+    })
+    local migration = file('db/migrations/0042_bill.sql', 'source', 88, 0, {
+      risk = 2,
+      blob = 'b2',
+    })
+    local export = file('src/billing/export.go', 'source', 612, 0, {
+      blob = 'b3',
+    })
+    local lock = file('go.sum', 'generated', 9000, 7000, { blob = 'b4' })
+    local s = {
+      pull = { id = '412', title = 'feat: add billing export' },
+      trusted = true,
+      files = { token, migration, export, lock },
+      buckets = {
+        {
+          kind = 'source',
+          files = { token, migration, export },
+          added = 820,
+          removed = 4,
+        },
+        { kind = 'generated', files = { lock }, added = 9000, removed = 7000 },
+      },
+      state = {
+        reviewed = {
+          ['src/auth/token.go'] = 'b1',
+          ['src/billing/export.go'] = 'old',
+        },
+        drafts = {
+          ai('src/auth/token.go'),
+          ai('src/auth/token.go'),
+          ai('db/migrations/0042_bill.sql'),
+          vim.tbl_extend(
+            'force',
+            ai('src/billing/export.go'),
+            { state = 'kept' }
+          ),
+        },
+      },
+    }
+    return vim.tbl_extend('force', s, fields or {})
+  end
+
+  describe('render', function()
+    it('draws the header, buckets and files as the design shows', function()
+      local lines, rows = panel.render(session())
+      assert.same({
+        ' PR !412  feat: add billing export   (1 of 4 files reviewed)',
+        ' AI: 3 drafts to look at   ⟳ 1 file changed since last review',
+        ' ▾ Source             3 files  +820 -4',
+        '   ! ✓ src/auth/token.go            +120 -4   2 AI',
+        '   !   db/migrations/0042_bill.sql  +88   1 AI',
+        '     ⟳ src/billing/export.go        +612',
+        ' ▸ Generated & locks  1 file   +9000 -7000   (collapsed)',
+      }, lines)
+      assert.same({ kind = 'source' }, rows[3])
+      assert.equals('src/auth/token.go', rows[4].path)
+      assert.equals('src/billing/export.go', rows[6].path)
+      assert.same({ kind = 'generated' }, rows[7])
+      assert.is_nil(rows[1])
+    end)
+
+    it('escapes control characters of a title and a path', function()
+      local s = session({ trusted = false })
+      s.pull.title = 'feat: x\nINJECTED\r\27[31m'
+      s.files[1].path = 'src/a\nb.go'
+      s.blocked = 'merged\nreally'
+      local lines = panel.render(s)
+      for _, line in ipairs(lines) do
+        assert.is_nil(line:find('%c'), line)
+      end
+      assert.matches('feat: x^@INJECTED^M^[[31m', lines[1], 1, true)
+      local row = vim.tbl_filter(
+        function(line) return line:find('src/a^@b.go', 1, true) ~= nil end,
+        lines
+      )
+      assert.equals(1, #row)
+      -- What `nvim_buf_set_lines` refuses never reaches it
+      local bufnr = h.buffer()
+      assert.has_no.errors(
+        function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines) end
+      )
+    end)
+
+    it('shows the generated bucket once it is opened', function()
+      local lines, rows =
+        panel.render(session({ collapsed = { generated = false } }))
+      assert.equals(' ▾ Generated & locks  1 file   +9000 -7000', lines[7])
+      assert.equals('       go.sum                       +9000 -7000', lines[8])
+      assert.equals('go.sum', rows[8].path)
+    end)
+
+    it('folds a bucket the reviewer closed', function()
+      local lines = panel.render(session({ collapsed = { source = true } }))
+      assert.equals(' ▸ Source             3 files  +820 -4', lines[3])
+      assert.equals(
+        ' ▸ Generated & locks  1 file   +9000 -7000   (collapsed)',
+        lines[4]
+      )
+      assert.equals(4, #lines)
+    end)
+
+    it('says when the code is untrusted and why nothing can be sent', function()
+      local lines = panel.render(session({
+        trusted = false,
+        blocked = 'The pull request is merged',
+      }))
+      assert.is_true(
+        vim.tbl_contains(lines, ' Read only: The pull request is merged')
+      )
+      assert.is_true(
+        vim.tbl_contains(
+          lines,
+          ' Diff only: no language server runs until `:DyReview trust`'
+        )
+      )
+    end)
+
+    it('says when the threads could not be read', function()
+      local lines = panel.render(session({ threads_error = 'HTTP 500' }))
+      assert.is_true(vim.tbl_contains(lines, ' Threads not read: HTTP 500'))
+    end)
+
+    it('leaves the summary line out when there is nothing to say', function()
+      local s = session()
+      s.state.reviewed = {}
+      s.state.drafts = {}
+      local lines = panel.render(s)
+      assert.equals(
+        ' PR !412  feat: add billing export   (0 of 4 files reviewed)',
+        lines[1]
+      )
+      assert.equals(' ▾ Source             3 files  +820 -4', lines[2])
+    end)
+
+    it('names a binary file as such', function()
+      local s = session()
+      s.files[3].binary = true
+      local lines = panel.render(s)
+      assert.equals('     ⟳ src/billing/export.go        binary', lines[6])
+    end)
+  end)
+end)

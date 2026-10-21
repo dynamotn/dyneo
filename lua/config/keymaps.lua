@@ -352,6 +352,13 @@ map("n", "<leader>prp", "<cmd>DyPostmortem new<cr>", { desc = "New Postmortem" }
 map("n", "<leader>prP", "<cmd>DyPostmortem<cr>", { desc = "Postmortem Open Actions" })
 map("n", "<leader>pR", "<cmd>DyRoot<cr>", { desc = "Project Roots" })
 
+-- reviewing a pull request of any forge remote (`tools.review`)
+map("n", "<leader>pvv", "<cmd>DyReview pick<cr>", { desc = "Review a Pull Request" })
+map("n", "<leader>pvb", "<cmd>DyReview branch<cr>", { desc = "Review This Branch's Pull Request" })
+map("n", "<leader>pvd", "<cmd>DyReview drafts<cr>", { desc = "Review Drafts" })
+map("n", "<leader>pvs", "<cmd>DyReview submit<cr>", { desc = "Submit Review" })
+map("n", "<leader>pvq", "<cmd>DyReview close<cr>", { desc = "Close Review" })
+
 -- architecture work (`tools.nfr`, `tools.cidr`, `tools.war`, `tools.deps`, `tools.threat`)
 map("n", "<leader>pAn", "<cmd>DyNfr<cr>", { desc = "Service Levels (NFR)" })
 -- The objective is typed on the command line

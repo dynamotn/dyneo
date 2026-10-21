@@ -1,0 +1,24 @@
+[
+  {
+    "number": 7,
+    "state": "open",
+    "title": "Add a parser",
+    "body": "Parses things.",
+    "html_url": "https://github.com/o/r/pull/7",
+    "user": {"login": "alice"},
+    "requested_reviewers": [{"login": "bob"}, {"login": "me"}],
+    "base": {"ref": "main", "sha": "b7b7b7", "repo": {"full_name": "o/r"}},
+    "head": {"ref": "parser", "sha": "a7a7a7", "repo": {"full_name": "o/r"}}
+  },
+  {
+    "number": 9,
+    "state": "open",
+    "title": "Fix a typo",
+    "body": null,
+    "html_url": "https://github.com/o/r/pull/9",
+    "user": {"login": "carol"},
+    "requested_reviewers": [{"login": "bob"}],
+    "base": {"ref": "main", "sha": "b9b9b9", "repo": {"full_name": "o/r"}},
+    "head": {"ref": "typo", "sha": "a9a9a9", "repo": {"full_name": "carol/r"}}
+  }
+]

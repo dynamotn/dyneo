@@ -1,0 +1,8 @@
+[
+  {"id": 501, "path": "a.lua", "line": 12, "start_line": 10, "side": "RIGHT",
+   "start_side": "RIGHT", "subject_type": "line", "body": "A range."},
+  {"id": 502, "path": "b.lua", "line": null, "original_line": 3,
+   "side": "LEFT", "subject_type": "line", "body": "Old side, outdated."},
+  {"id": 503, "path": "c.lua", "line": null, "side": null,
+   "subject_type": "file", "body": "L40: Outside a hunk."}
+]

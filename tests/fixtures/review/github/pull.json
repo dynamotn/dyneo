@@ -1,0 +1,12 @@
+{
+  "number": 12,
+  "state": "closed",
+  "merged": true,
+  "title": "Old work",
+  "body": "Done.",
+  "html_url": "https://github.com/o/r/pull/12",
+  "user": {"login": "dave"},
+  "requested_reviewers": [],
+  "base": {"ref": "release/1.0", "sha": "b12", "repo": {"full_name": "o/r"}},
+  "head": {"ref": "old", "sha": "a12", "repo": null}
+}

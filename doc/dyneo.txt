@@ -85,6 +85,7 @@ CONTENTS                                                      *dyneo-contents*
        9.13 Postmortems ................................... |dyneo-postmortem|
        9.14 Function history ................................. |dyneo-history|
        9.15 Code owners ....................................... |dyneo-owners|
+       9.16 Pull request review ............................. |dyneo-review|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -1789,6 +1790,121 @@ one with sections -- is read with GitLab's rules: a path not starting with
 case) has its last match and its default owners, the owners of every
 section summed.
 
+9.16 Pull request review                                       *dyneo-review*
+
+`:DyReview` (|:DyReview|, under `<leader>pv`) reviews a pull request of
+GitHub in one place: a panel of the files changed, the diff beside it,
+your draft comments and the threads already there.  Use it for a review
+you mean to send as one piece; the forge plugins of
+|dyneo-integrations| stay for browsing and chores.
+
+Opening ~
+`<leader>pvv` (`:DyReview`, `:DyReview pick`) picks among the open pull
+requests of every forge remote of the repository.  `<leader>pvb`
+(`:DyReview branch`) opens the one of the branch, looked up on the tracked
+remote, and asks which remote when the branch tracks none.  A pull request
+pushed to since you last opened it reopens on its new head.  A pull request
+is open in one Neovim at a time: a lock beside its state names the process
+holding it, and another Neovim refuses to open it until that one closes the
+review or exits.  A lock left by a Neovim no longer running is taken over.
+
+Subcommands ~
+`pick`      Pick a pull request.                         `<leader>pvv`
+`branch`    The pull request of the current branch.      `<leader>pvb`
+`drafts`    Pick among your drafts and jump to one.      `<leader>pvd`
+`since`     Files changed since your last review.
+`submit`    Send the review, see |dyneo-review-submit|.  `<leader>pvs`
+`trust`     Ask the trust question again.
+`close`     Close the review.                            `<leader>pvq`
+
+Trust ~
+The question is asked once per pull request and head commit: may the code of
+this pull request run on this machine?  Until you say yes, the head is
+checked out in a worktree (`.worktrees/dyreview-<forge>-<id>`) where no
+language server, linter, formatter or project `.nvim` folder runs, and the
+diff is read from git objects.  Dependencies are never installed there.
+Every `.worktrees/dyreview-*` directory is held from startup, so one left by
+an earlier session or a crash runs nothing either until a review trusts it;
+an open that fails after making the worktree removes it, or keeps it held
+and says where when git refuses.
+`:DyReview trust` asks again.
+
+The panel ~
+Files are grouped in buckets by what triage makes of them; a file with a
+risk is marked `!`, one you marked reviewed `✓`, and one that changed since
+you marked it `⟳`.  Generated files are collapsed.  Threads that could not
+be read are said as `Threads not read`, never left out silently.
+
+In the panel: `<CR>` opens a file or folds a bucket, `m` marks the file
+reviewed, `q` closes the panel.
+
+Drafts ~
+In either side of the diff:
+
+    `<localleader>c`   n, x   Comment on the line or the lines selected
+    `<localleader>s`   n, x   Suggest a change over those lines
+    `<localleader>r`   n      Reply to the thread
+    `<localleader>R`   n      Resolve with the review, or take that back
+    `<localleader>m`   n      Mark the file reviewed
+    `<localleader>k`   n      Keep the AI draft
+    `<localleader>e`   n      Edit the draft
+    `<localleader>x`   n      Drop the draft
+    `]a` `[a`          n      Next or previous pending AI draft
+
+A draft is drawn as a sign and end-of-line text.  One written by the AI pass
+has its own sign, colour and an `AI` label with its state; the marker lives
+in the editor only, a comment you send carries no AI label.  A pending AI
+draft is never sent: keep it, edit it (which keeps it) or drop it.  A
+draft carrying a suggested change says `+ suggestion` in its label and in
+the drafts list, and the submit confirmation counts them.  Editing a draft
+shows its body and its suggestion block: what the float holds on `:w` is
+what is kept, so taking the block out drops the suggestion and typing one
+in adds it.  Drafts
+already on the forge, imported when the review opens, are read-only here.
+A comment on a line outside the diff is sent as a comment on the file naming
+the line.  So is one written on an older push of the pull request whose
+file changed since: its line may now name other code, and the submit
+confirmation lists it.  One whose file is the same at both heads keeps its
+line.  Drafts and the files you marked live in the state directory and
+survive a restart.
+
+Since your last review ~
+`:DyReview since` lists the files changed since the head you last reviewed,
+an interdiff held in a private ref, so it survives a rebase or force push;
+without that ref it lists the files whose content differs from when you
+marked them.
+
+                                                         *dyneo-review-submit*
+Submit ~
+`<leader>pvs` (`:DyReview submit`) asks the verdict and the body, then shows
+what will go out -- the drafts, those imported, the AI drafts left out, the
+comments outside the diff -- and sends on `Send`.  Before sending it reads
+the pull request again and refuses if it moved to a new head or became
+read-only; if the drafts changed while you were asking, it asks again.  The
+body is optional, except for GitHub's Request changes with nothing else
+to say.  A failure part-way is remembered: submit again and only what is
+not out yet is sent; comments already out are not sent twice, even one
+whose call timed out after it landed: found on the forge with its place
+and text, it is taken as sent.  A pending comment nothing here accounts
+for refuses the submit: close the review (`:DyReview close`) and open it
+again to import it.  Drafts lost
+because the pending review was deleted on the forge are offered to be sent
+again.  Once a review is out whole, its drafts are done: a later round
+sends only its own, whatever happened to the earlier comments on the web,
+and the same body or verdict said again on a new head goes out again.
+Verdicts:
+
+    GitHub        Approve, Request changes, Comment
+
+GitHub keeps your comments in one pending review, submitted with the
+verdict; resolving a thread is public at once, before the review is
+submitted.  A suggested change is sent as a suggestion block.
+
+Requirements and state ~
+git 2.40 or newer, codediff.nvim and `gh`.  `:checkhealth dyneo` reports
+them.  State lives in `stdpath('state')/dyneo/review/` (directories 0700,
+files 0600), and the commits it needs in private refs `refs/dyneo/review/`.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -2247,6 +2363,12 @@ Project ~
                                                                        *:DyC4*
 :DyC4 [{view}]          Draw {view} of the LikeC4 workspace of the buffer,
                         or one picked, through D2.  See |dyneo-diagram|.
+
+                                                                  *:DyReview*
+:DyReview [{sub}]       Review a pull request of any forge remote.  {sub} is
+                        `pick` (the default), `branch`, `drafts`,
+                        `since`, `submit`, `trust` or `close`.  See
+                        |dyneo-review|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose
