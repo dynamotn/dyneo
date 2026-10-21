@@ -471,6 +471,26 @@ exit 1
       assert.same(drafts, again)
     end)
 
+    it('imports a draft note on the merge request itself', function()
+      answer(DRAFTS, { { id = 65, note = 'Overall fine.' } })
+      local drafts, err = wait(
+        function(cb) gitlab.pending(remote, pull, cb) end
+      )
+      assert.is_nil(err)
+      assert.same({
+        {
+          id = forge_id(65),
+          origin = 'forge',
+          state = 'ready',
+          path = '',
+          side = 'new',
+          line = 1,
+          body = 'Overall fine.',
+          file_level = true,
+        },
+      }, drafts)
+    end)
+
     it('fails when the draft notes cannot be read whole', function()
       gitlab.MAX_PAGES = 1
       gitlab.PER_PAGE = 1
@@ -1063,6 +1083,78 @@ exit 1
       assert.is_nil(err)
       assert.same({ { 'new', 'draft:900' } }, reports)
       assert.same({ 'user', DRAFTS, DIFFS, NEW_DRAFT, PUBLISH }, keys())
+    end)
+
+    --- An imported draft note on the merge request itself
+    local function on_mr(n, body)
+      return vim.tbl_extend('force', imported(n), {
+        path = '',
+        file_level = true,
+        body = body,
+      })
+    end
+
+    it('publishes an imported draft note on the merge request', function()
+      answer('user', 'user.json')
+      answer(DRAFTS, { mine(65, 'Overall fine.') })
+      writes_succeed()
+      local err, reports = submit(
+        { on_mr(65, 'Overall fine.') },
+        { verdict = 'approve' }
+      )
+      assert.is_nil(err)
+      assert.same({ { forge_id(65), 'draft:65' } }, reports)
+      assert.same(
+        { 'user', DRAFTS, PUBLISH, APPROVALS, MR .. '_approve' },
+        keys()
+      )
+    end)
+
+    it('finds a draft note on the merge request once published', function()
+      -- The approval failed after the publish: the draft note is now a
+      -- note on the merge request, with no position
+      answer('user', 'user.json')
+      answer(DRAFTS, {})
+      answer(DISCUSSIONS, {
+        { id = 'dm', notes = { mine(990, 'Overall fine.') } },
+      })
+      writes_succeed()
+      local draft_out = vim.tbl_extend('force', on_mr(65, 'Overall fine.'), {
+        posted = 'draft:65',
+      })
+      local err, reports, info = submit({ draft_out }, { verdict = 'approve' })
+      assert.is_nil(err)
+      assert.same({}, reports)
+      assert.is_nil(info and info.lost)
+      assert.same({
+        'user',
+        DRAFTS,
+        DISCUSSIONS,
+        APPROVALS,
+        MR .. '_approve',
+      }, keys())
+    end)
+
+    it('does not take a note on a file for one on the merge request', function()
+      answer('user', 'user.json')
+      answer(DRAFTS, {})
+      answer(DISCUSSIONS, {
+        {
+          id = 'dx',
+          notes = {
+            mine(990, 'Overall fine.', {
+              position = { new_path = 'a.lua', new_line = 1 },
+            }),
+          },
+        },
+      })
+      writes_succeed()
+      local draft_out = vim.tbl_extend('force', on_mr(65, 'Overall fine.'), {
+        posted = 'draft:65',
+      })
+      local err, _, info = submit({ draft_out }, { verdict = 'approve' })
+      assert.is_string(err)
+      assert.same({ lost = { forge_id(65) } }, info)
     end)
 
     it('fails when the drafts cannot be told published or lost', function()

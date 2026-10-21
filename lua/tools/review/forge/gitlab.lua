@@ -869,7 +869,8 @@ end
 --- The note of mine in `rows` each draft was published as, by draft id
 ---
 --- A note matches by its text and its place: the thread a reply went into,
---- the file a comment is on. Each note stands for one draft only.
+--- the file a comment is on, or no file for a note on the merge request
+--- itself. Each note stands for one draft only.
 ---@param rows table[] Every discussion
 ---@param me { id: integer }
 ---@param drafts DyReviewDraft[]
@@ -895,6 +896,8 @@ local function published(rows, me, drafts)
           and (
             draft.reply_to and row.id == draft.reply_to
             or not draft.reply_to and at and at.path == draft.path
+            -- A draft note on the merge request itself names no file
+            or not draft.reply_to and not at and draft.path == ''
           )
         then
           note_of[draft.id], taken[id] = id, true
