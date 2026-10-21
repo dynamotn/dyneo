@@ -613,6 +613,38 @@ describe('tools.review', function()
       assert.equals('No draft on this line', said(vim.log.levels.WARN)[1])
     end)
 
+    it('resolves with a fresh draft beside a dropped reply', function()
+      local s = review.current()
+      s.threads = {
+        {
+          id = 't1',
+          path = 'src/auth.lua',
+          side = 'new',
+          line = 3,
+          resolved = false,
+          comments = {},
+        },
+      }
+      local dropped = {
+        id = 'u1',
+        origin = 'user',
+        state = 'dropped',
+        path = 'src/auth.lua',
+        side = 'new',
+        line = 3,
+        body = 'never mind',
+        reply_to = 't1',
+      }
+      s.state.drafts = { dropped }
+      vim.api.nvim_win_set_cursor(0, { 3, 0 })
+      review.toggle_resolve()
+      assert.is_nil(dropped.resolve)
+      local resolving = s.state.drafts[2]
+      assert.is_true(resolving.resolve)
+      assert.equals('ready', resolving.state)
+      assert.equals('t1', resolving.reply_to)
+    end)
+
     it('marks a file reviewed at its blob, and unmarks it', function()
       review.mark('src/auth.lua')
       assert.equals('blob1', review.current().state.reviewed['src/auth.lua'])

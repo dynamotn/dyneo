@@ -322,10 +322,12 @@ function M.toggle_resolve()
   if not (s and path and side) then return end
   local thread = thread_at(s, path, side, line)
   if not thread then return notify('No thread on this line', WARN) end
+  -- A dropped reply is never sent, so it cannot carry the resolve
   for i, draft in ipairs(s.state.drafts) do
     if
       draft.reply_to == thread.id
       and draft.origin == 'user'
+      and draft.state ~= 'dropped'
       and not draft.posted
     then
       draft.resolve = not draft.resolve
