@@ -398,5 +398,14 @@ describe('plugins.ui.status', function()
         spec.opts.icons.kinds.symbols
       )
     end)
+
+    it('stays out of a browser text box, on the UI it waits for', function()
+      stub(vim.g, 'started_by_firenvim', true)
+      local spec = specs_of('Bekaboo/dropbar.nvim')[1]
+      assert.is_false(spec.cond)
+      assert.equals('UIEnter', spec.event)
+      vim.g.started_by_firenvim = nil
+      assert.is_true(specs_of('Bekaboo/dropbar.nvim')[1].cond)
+    end)
   end)
 end)

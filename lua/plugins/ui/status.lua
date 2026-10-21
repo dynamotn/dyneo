@@ -350,6 +350,7 @@ return {
     -- Winbar to show context of current position
     'Bekaboo/dropbar.nvim',
     event = 'UIEnter',
+    cond = not vim.g.started_by_firenvim,
     keys = {
       {
         '<leader>;',
