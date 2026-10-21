@@ -297,6 +297,7 @@ local function source_ftplugins()
   for _, file in ipairs(files) do
     local bufnr = vim.api.nvim_create_buf(true, false)
     sourcing_ft = vim.fn.fnamemodify(file, ':t:r')
+    io.stderr:write('[ftplugin] ' .. sourcing_ft .. '\n')
     vim.api.nvim_buf_call(bufnr, function() pcall(vim.cmd.source, file) end)
     sourcing_ft = nil
   end
@@ -344,6 +345,7 @@ local function attach_tools()
   for _, name in ipairs(names) do
     local group = by_group[name]
     sourcing_ft = table.concat(group.fts, ', ')
+    io.stderr:write('[tool] ' .. name .. '\n')
     for _, ft in ipairs(group.fts) do
       -- A pattern such as `yaml.*` is not a filetype a buffer can have
       if not ft:find('[*?[]') then
@@ -559,13 +561,16 @@ vim.api.nvim_create_autocmd('VimEnter', {
     local ok, err = pcall(function()
       -- which-key takes its `spec` apart as it sets up, so the groups are
       -- read before `VeryLazy` loads it
+      io.stderr:write('[phase] groups\n')
       names = groups()
       -- Headless there is no UI to enter, so `UIEnter` is fired by hand, as
       -- attaching one does. lazy.nvim's `VeryLazy` waits for it, and is what
       -- loads `config.keymaps`.
       samples.quiet_sidekick()
       samples.quiet_noice()
+      io.stderr:write('[phase] UIEnter\n')
       vim.api.nvim_exec_autocmds('UIEnter', { modeline = false })
+      io.stderr:write('[phase] UIEnter done\n')
       local fired = vim.wait(
         5000,
         function() return vim.g.did_very_lazy == true end,
@@ -575,9 +580,12 @@ vim.api.nvim_create_autocmd('VimEnter', {
       -- The plugins behind `LazyFile` map their toggles as they set up, so a
       -- file is opened for them. It has no filetype, which keeps language
       -- servers and parsers out of it.
+      io.stderr:write('[phase] edit\n')
       pcall(vim.cmd.edit, vim.fn.fnameescape(vim.fn.tempname()))
       attach(vim.api.nvim_get_current_buf())
+      io.stderr:write('[phase] ftplugins\n')
       source_ftplugins()
+      io.stderr:write('[phase] tools\n')
       attach_tools()
     end)
     if not ok then
@@ -585,6 +593,7 @@ vim.api.nvim_create_autocmd('VimEnter', {
       return vim.cmd('cquit')
     end
     vim.defer_fn(function()
+      io.stderr:write('[phase] collect\n')
       local problems = {}
       local ok, err = pcall(function()
         collect()
@@ -603,6 +612,7 @@ vim.api.nvim_create_autocmd('VimEnter', {
       for _, line in ipairs(problems) do
         io.stderr:write('keymaps-doc: ' .. line .. '\n')
       end
+      io.stderr:write('[phase] quit\n')
       vim.cmd(#problems > 0 and 'cquit' or 'qall!')
     end, 1000)
   end,

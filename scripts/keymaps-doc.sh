@@ -30,7 +30,8 @@ ln -s "${repo}" "${workdir}/config/${NVIM_APPNAME:-nvim}"
 # The paths go through the environment and `fnameescape`, for a checkout
 # under a path with a space
 XDG_CONFIG_HOME="${workdir}/config" KEYMAPS_DOC_REPO="${repo}" \
-  "${timeout_bin}" --kill-after=10 300 nvim --headless -i NONE \
+  "${timeout_bin}" --kill-after=10 90 nvim --headless -i NONE \
+  --cmd 'exe "luafile" fnameescape(getenv("KEYMAPS_DOC_REPO") .. "/scripts/ci-trace.lua")' \
   --cmd 'exe "luafile" fnameescape(getenv("KEYMAPS_DOC_REPO") .. "/scripts/keymaps-doc.lua")' \
   < /dev/null
 # Ex mode, so a bad tag fails the script: an error in `-c` leaves exit 0
