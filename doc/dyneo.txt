@@ -544,6 +544,12 @@ PIN never freezes the editor.  Until the clear text is in, the buffer shows
 the ciphertext read-only.  A decryption that fails, times out or prints more
 than can be read leaves the ciphertext as it is.
 
+A file of a pull request under review stays encrypted: one in a directory
+not trusted yet, and every file of a `.worktrees/dyreview-*` worktree even
+after `:DyReview trust`.  The file's own metadata picks where your keys and
+tokens go (a sops Vault address, a KMS key), and trusting a pull request's
+code is not consent to spend them on its files.
+
 The buffer is held back from every AI integration before the clear text goes
 in (|dyneo-ai-guard|), keeps no swap or undo file, and cannot be undone back
 to the ciphertext.  Ansible Vault cannot ask for a password inside Neovim:

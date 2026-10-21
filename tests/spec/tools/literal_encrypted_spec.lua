@@ -157,6 +157,48 @@ describe('tools.encrypted', function()
     assert.equals('Written, encrypted with sops', notes[#notes])
   end)
 
+  describe('a pull request under review', function()
+    --- Open `file` as the hook does, and say whether anything ran
+    local function open_left(file)
+      h.write(file, { 'plain: a: 1', 'x: ENC[AES256_GCM,data:x]', 'sops:' })
+      local bufnr, decrypted = open(file)
+      return bufnr, decrypted, vim.uv.fs_stat(log) ~= nil
+    end
+
+    it('leaves a held file encrypted, without running sops', function()
+      vim.fn.mkdir(dir .. '/held', 'p')
+      h.unload('util.untrusted')
+      local untrusted = require('util.untrusted')
+      untrusted.hold(dir .. '/held')
+      local bufnr, decrypted, ran = open_left(dir .. '/held/values.yaml')
+      untrusted.forget(dir .. '/held')
+      assert.is_false(decrypted)
+      assert.is_false(ran)
+      assert.equals(
+        'x: ENC[AES256_GCM,data:x]',
+        vim.api.nvim_buf_get_lines(bufnr, 1, 2, false)[1]
+      )
+      assert.matches('left encrypted', notes[#notes])
+    end)
+
+    it('leaves a review worktree file encrypted even once trusted', function()
+      local wt = dir .. '/repo/.worktrees/dyreview-github-1'
+      vim.fn.mkdir(wt, 'p')
+      local _, decrypted, ran = open_left(wt .. '/values.yaml')
+      assert.is_false(decrypted)
+      assert.is_false(ran)
+    end)
+
+    it('leaves an Ansible Vault there encrypted too', function()
+      local wt = dir .. '/repo/.worktrees/dyreview-gitlab-2'
+      vim.fn.mkdir(wt, 'p')
+      h.write(wt .. '/vault.yml', { '$ANSIBLE_VAULT;1.1;AES256', 'enc:a' })
+      local _, decrypted = open(wt .. '/vault.yml')
+      assert.is_false(decrypted)
+      assert.is_nil(vim.uv.fs_stat(log))
+    end)
+  end)
+
   it('takes sops leaving an unchanged file alone as written', function()
     local file = dir .. '/values.yaml'
     h.write(file, { 'plain: a: 1', 'x: ENC[AES256_GCM,data:x]', 'sops:' })

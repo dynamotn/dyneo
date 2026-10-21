@@ -287,6 +287,32 @@ local function decrypt_into(bufnr, kind, header, unchanged, on_done)
   end)
 end
 
+--- A directory `:DyReview` checks a pull request out into
+local REVIEW_WORKTREE = '/%.worktrees/dyreview%-[^/]+/'
+
+--- Why the file of `bufnr` is not opened in the clear, if it is not
+---
+--- A pull request's file chooses, through its own metadata, where the
+--- reviewer's credentials go: a sops `hc_vault` address, a KMS key, an
+--- Ansible vault id. A held buffer and every file of a review worktree stay
+--- encrypted, the latter even once its code is trusted: trusting the code
+--- is not consent to spend the reviewer's keys on its files.
+---@param bufnr integer
+---@param file string
+---@return string?
+function M.untrusted(bufnr, file)
+  if require('util.untrusted').held(bufnr) then
+    return 'it lies in a directory not trusted yet'
+  end
+  local real = vim.uv.fs_realpath(file) or file
+  for _, path in ipairs({ vim.fs.normalize(file), vim.fs.normalize(real) }) do
+    if path:find(REVIEW_WORKTREE) then
+      return 'it belongs to a pull request under review'
+    end
+  end
+  return nil
+end
+
 --- Open the clear text of `bufnr`, if it holds an encrypted file
 ---
 --- It is read on the main loop's behalf, not on it: a slow KMS, or an agent
@@ -304,6 +330,14 @@ function M.open(bufnr, on_done)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local kind = M.kind(lines, file)
   if not kind then return on_done(false) end
+  local why = M.untrusted(bufnr, file)
+  if why then
+    notify(
+      ('%s left encrypted: %s'):format(vim.fs.basename(file), why),
+      vim.log.levels.WARN
+    )
+    return on_done(false)
+  end
 
   -- Held back before anything of the clear text is in the buffer
   sensitive.mark(bufnr, ('decrypted with %s'):format(TOOLS[kind].name))
