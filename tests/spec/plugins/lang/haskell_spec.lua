@@ -67,12 +67,25 @@ describe('plugins.lang.haskell', function()
     assert.is_true(auto_attach())
     executables = {}
     assert.is_false(auto_attach())
+    -- Released on a machine without hls, nothing is started either
+    untrusted.release('/work/held')
+    assert.same({}, started)
+    untrusted.hold('/work/held')
+    executables = { 'haskell-language-server-wrapper' }
     untrusted.release('/work/held')
     assert.same({ held }, started)
   end)
 
   it('starts hls for a released cabal file only when hls reads it', function()
     local started, supported = {}, false
+    table.insert(
+      restores,
+      h.stub(
+        vim.fn,
+        'executable',
+        function(name) return name == 'haskell-language-server' and 1 or 0 end
+      )
+    )
     table.insert(
       restores,
       h.stub(package.loaded, 'haskell-tools', {

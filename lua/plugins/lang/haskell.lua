@@ -6,6 +6,13 @@ local filetypes = vim.list_extend(vim.deepcopy(language.filetypes), {
   'cabalproject',
 })
 
+--- Whether hls is on `$PATH`, as `haskell-tools` asks before it starts it
+---@return boolean
+local function has_hls()
+  return vim.fn.executable('haskell-language-server-wrapper') == 1
+    or vim.fn.executable('haskell-language-server') == 1
+end
+
 return vim.list_contains(DyNeo.enabled_languages, 'haskell')
     and {
       {
@@ -26,20 +33,21 @@ return vim.list_contains(DyNeo.enabled_languages, 'haskell')
             hls = {
               auto_attach = function()
                 if require('util.untrusted').held(0) then return false end
-                return vim.fn.executable('haskell-language-server-wrapper') == 1
-                  or vim.fn.executable('haskell-language-server') == 1
+                return has_hls()
               end,
             },
           })
         end,
         -- Its ftplugin is what starts the server, and it does not run again
-        -- for a buffer already open when its directory is let go. A cabal
-        -- file gets it only from the hls versions that read one, which the
+        -- for a buffer already open when its directory is let go. It starts
+        -- here only as `auto_attach` would: with hls on `$PATH`, and for a
+        -- cabal file only from the hls versions that read one, which the
         -- ftplugin checks the same way.
         config = function()
           require('util.untrusted').on_release('haskell-tools', function(bufnr)
             local filetype = vim.bo[bufnr].filetype
             if not vim.list_contains(filetypes, filetype) then return end
+            if not has_hls() then return end
             if
               not vim.list_contains(language.filetypes, filetype)
               and not require('haskell-tools.lsp.helpers').is_hls_version_with_cabal_support()
