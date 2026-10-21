@@ -18,6 +18,14 @@
 --   skipped instead -- and the names they were asked for are checked, since a
 --   name nothing can install is the one mistake the real install would find.
 -- - Headless there is nobody to answer a prompt, so prompts are cancelled.
+-- - Headless no UI attaches, so `UIEnter` never fires, and neither does
+--   lazy.nvim's `VeryLazy`, which waits for it: the plugins that load on
+--   either, and the keymaps and autocmds `config.lazy` holds back for
+--   `VeryLazy`, would never be loaded. The check fires `UIEnter` itself, as
+--   attaching a UI does, before it opens a file.
+-- - A plugin that loads only on a command or a key is never loaded by opening
+--   files. Once they are open, every plugin still not loaded is, but for the
+--   ones `samples.never_load` names.
 -- - `config.languages` covers about a hundred languages, and a fixture file
 --   for each would be a hundred files to keep in step with it. A tiny file per
 --   filetype is written to a scratch directory instead, named so that
@@ -32,7 +40,7 @@
 -- only one file each of a spread of languages is, so the pre-commit hook
 -- stays quick. `CHECK_STARTUP_WORKDIR` is where the generated files go, and
 -- `CHECK_STARTUP_TRACE=1` names each file on stderr as it is opened, to find
--- the one a hang is stuck on.
+-- the one a hang is stuck on, and each plugin as it is loaded.
 
 local sweep_all = vim.env.CHECK_STARTUP_ALL == '1'
 
@@ -114,6 +122,17 @@ local function quiet_sidekick()
   end)
 end
 
+--- Keep noice from taking the check's own `vim.notify` for a rival plugin
+---
+--- noice checks every so often that `vim.notify` is still its own, and
+--- reports an error when it is not. Here it never is: the check wraps it to
+--- record errors.
+local function quiet_noice()
+  samples.before_config('noice.nvim', function()
+    require('noice.health').checker = function() end
+  end)
+end
+
 --- Report the recorded installs no real install could carry out
 local function check_installs()
   local ok, registry = pcall(require, 'mason-registry')
@@ -140,9 +159,58 @@ local function check_installs()
   end
 end
 
+--- Do what attaching a UI does, and wait for `VeryLazy` to have run
+local function enter_ui()
+  watch_notify()
+  vim.api.nvim_exec_autocmds('UIEnter', { modeline = false })
+  -- lazy.nvim fires `VeryLazy` from a scheduled callback, and sets this
+  -- before it does
+  local fired = vim.wait(
+    5000,
+    function() return vim.g.did_very_lazy == true end,
+    10
+  )
+  if not fired then report('VeryLazy did not fire within 5s of UIEnter') end
+  watch_notify()
+end
+
+--- Load every plugin that is not loaded yet, in sorted order
+---@return integer loaded How many were loaded here
+---@return string[] missing Plugins not installed, so not loaded
+local function load_rest()
+  local plugins = require('lazy.core.config').plugins
+  local names = vim.tbl_keys(plugins)
+  table.sort(names)
+  local loaded, missing = 0, {}
+  for _, name in ipairs(names) do
+    local plugin = plugins[name]
+    if
+      plugin._.loaded
+      or plugin._.cond == false
+      or samples.never_load[name]
+    then
+      -- Loaded already, disabled on this machine, or unable to load headless
+    elseif not plugin._.installed then
+      table.insert(missing, name)
+    else
+      watch_notify()
+      if vim.env.CHECK_STARTUP_TRACE then
+        io.stderr:write('load ' .. name .. '\n')
+      end
+      local ok, err = pcall(require('lazy').load, { plugins = { name } })
+      if not ok then report(name .. ': ' .. tostring(err)) end
+      loaded = loaded + 1
+    end
+  end
+  watch_notify()
+  return loaded, missing
+end
+
 installs = samples.skip_installs()
 local prompts = samples.skip_prompts()
 quiet_sidekick()
+quiet_noice()
+enter_ui()
 
 local files = {} ---@type { path: string, filetype?: string, language?: string }[]
 local config = vim.fn.stdpath('config') --[[@as string]]
@@ -183,6 +251,7 @@ for _, file in ipairs(files) do
   vim.wait(wait)
 end
 watch_notify()
+local loaded, not_installed = load_rest()
 vim.wait(1000)
 check_installs()
 
@@ -195,6 +264,16 @@ io.stdout:write(
     sweep_all and '' or ', CHECK_STARTUP_ALL=1 for all'
   )
 )
+io.stdout:write(
+  string.format('check-startup: loaded %d plugins nothing had loaded\n', loaded)
+)
+if #not_installed > 0 then
+  io.stdout:write(
+    'check-startup: not installed, so not loaded '
+      .. table.concat(not_installed, ', ')
+      .. '\n'
+  )
+end
 if #unmapped > 0 then
   io.stdout:write(
     'check-startup: no file name for ' .. table.concat(unmapped, ', ') .. '\n'

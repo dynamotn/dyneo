@@ -90,6 +90,11 @@ M.unopened = {
   ['yaml/yaml.openapi'] = 'told by the `openapi:` key of an `openapi*.yaml`',
 }
 
+--- Plugins `check-startup.lua` leaves unloaded when it loads every plugin
+--- nothing else did, and why: each one cannot load headless
+---@type table<string, string>
+M.never_load = {}
+
 --- Files a filetype is only given beside, written ahead of its sample:
 --- `ftdetect` anchors these patterns to their project
 ---@type table<string, string[]>
@@ -257,6 +262,14 @@ function M.skip_installs()
     if vim.fn.executable('mcp-hub') == 1 then return end
     table.insert(installs.download, 'mcp-hub')
     require('mcphub').setup = function() end
+  end)
+  -- Its `setup` loads the diff engine, which downloads the `libvscode-diff`
+  -- library when the one beside it is missing or out of date.
+  M.before_config('codediff.nvim', function()
+    local installer = require('codediff.core.installer.libvscode_diff')
+    if not installer.needs_update() then return end
+    table.insert(installs.download, 'libvscode-diff')
+    require('codediff').setup = function() end
   end)
   return installs
 end

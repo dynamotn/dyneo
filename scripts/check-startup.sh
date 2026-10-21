@@ -82,4 +82,5 @@ if [[ ${status} -ne 0 ]] || grep -qE '^(E[0-9]+:|Error)' "${output}"; then
   exit 1
 fi
 # What was opened and what would have been installed, for a log to show.
-grep '^check-startup:' "${output}" || true
+# Not anchored: a plugin's message without a newline can run into a line.
+grep -o 'check-startup: .*' "${output}" || true
