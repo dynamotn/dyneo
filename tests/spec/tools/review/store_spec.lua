@@ -16,6 +16,64 @@ describe('tools.review.store', function()
     cleanup()
   end)
 
+  describe('lock', function()
+    --- A pid alive on this host that is not this Neovim
+    local ALIVE = 1
+    --- A pid above any the kernel hands out
+    local DEAD = 4194305
+
+    local function lock_file()
+      return state_dir .. '/dyneo/review/github.com/o/r/pr-1.lock'
+    end
+
+    local function held_by(pid, host)
+      vim.fn.mkdir(vim.fs.dirname(lock_file()), 'p')
+      vim.fn.writefile(
+        { tostring(pid), host or vim.uv.os_gethostname() },
+        lock_file()
+      )
+    end
+
+    it('takes a free lock, private, naming this Neovim', function()
+      assert.is_true(store.lock(remote, 'pr-1'))
+      assert.same(
+        { tostring(vim.uv.os_getpid()), vim.uv.os_gethostname() },
+        vim.fn.readfile(lock_file())
+      )
+      assert.equals('rw-------', vim.fn.getfperm(lock_file()))
+      -- Taking it again is this Neovim's own
+      assert.is_true(store.lock(remote, 'pr-1'))
+      store.unlock(remote, 'pr-1')
+      assert.is_nil(vim.uv.fs_stat(lock_file()))
+    end)
+
+    it('refuses a lock a live Neovim holds', function()
+      held_by(ALIVE)
+      local ok, why = store.lock(remote, 'pr-1')
+      assert.is_false(ok)
+      assert.equals('This review is open in another Neovim (pid 1)', why)
+      -- Unlocking leaves another's lock alone
+      store.unlock(remote, 'pr-1')
+      assert.is_not_nil(vim.uv.fs_stat(lock_file()))
+    end)
+
+    it('takes over a lock whose Neovim is gone', function()
+      held_by(DEAD)
+      assert.is_true(store.lock(remote, 'pr-1'))
+      assert.equals(
+        tostring(vim.uv.os_getpid()),
+        vim.fn.readfile(lock_file())[1]
+      )
+    end)
+
+    it('refuses a lock of another host', function()
+      held_by(DEAD, 'elsewhere')
+      local ok, why = store.lock(remote, 'pr-1')
+      assert.is_false(ok)
+      assert.matches('pid 4194305 on elsewhere', why, 1, true)
+    end)
+  end)
+
   it('starts empty', function()
     local state = store.load(remote, 'pr-1')
     assert.same({}, state.reviewed)

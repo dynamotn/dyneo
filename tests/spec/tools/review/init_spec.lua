@@ -155,6 +155,8 @@ describe('tools.review', function()
     stub(panel, 'close', function() rec('panel.close') end)
     stub(store, 'load', function() return { reviewed = {}, drafts = {} } end)
     stub(store, 'save', function() rec('save') end)
+    stub(store, 'lock', function() return true end)
+    stub(store, 'unlock', function() rec('unlock') end)
     stub(
       plugin,
       'safe_keymap_set',
@@ -208,6 +210,36 @@ describe('tools.review', function()
         assert.is_nil(s.blocked)
       end
     )
+
+    it('refuses a review another Neovim has open', function()
+      stub(
+        store,
+        'lock',
+        function() return false, 'This review is open in another Neovim (pid 1)' end
+      )
+      review.open(remote, pull())
+      assert.is_nil(review.current())
+      assert.same({}, calls)
+      assert.is_truthy(
+        said(vim.log.levels.ERROR)[1]:find('another Neovim (pid 1)', 1, true)
+      )
+    end)
+
+    it('lets the lock go when the open fails', function()
+      stub(git, 'fetch', function(_, _, _, cb) cb(false, 'no network') end)
+      review.open(remote, pull())
+      assert.is_nil(review.current())
+      assert.same({ 'unlock' }, calls)
+    end)
+
+    it('lets the lock go on close and when Neovim leaves', function()
+      review.open(remote, pull())
+      vim.api.nvim_exec_autocmds('VimLeavePre', {})
+      assert.equals('unlock', calls[#calls])
+      calls = {}
+      review.close()
+      assert.is_true(vim.tbl_contains(calls, 'unlock'))
+    end)
 
     it('shows the panel and gives the keys once the diff is up', function()
       review.open(remote, pull())

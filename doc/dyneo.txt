@@ -1805,7 +1805,10 @@ requests of every forge remote of the repository.  `<leader>pvb`
 remote, and asks which remote when the branch tracks none.  A pull request
 pushed to since you last opened it reopens on its new head.  One whose code
 cannot be fetched (the source branch lives in a fork, say) is opened for
-reading only and says why; sending is refused.
+reading only and says why; sending is refused.  A pull request is open in
+one Neovim at a time: a lock beside its state names the process holding
+it, and another Neovim refuses to open it until that one closes the review
+or exits.  A lock left by a Neovim no longer running is taken over.
 
 Subcommands ~
 `pick`      Pick a pull request.                         `<leader>pvv`

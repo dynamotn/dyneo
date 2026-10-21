@@ -76,6 +76,98 @@ function M.path(remote, id)
   return vim.fs.joinpath(unpack(parts))
 end
 
+--- Make the directory of `path` and every one up to `review/` private:
+--- `mkdir` sets the mode of new directories only, and comment text is
+--- private
+---@param path string
+local function private_dir(path)
+  local dir = vim.fs.dirname(path)
+  vim.fn.mkdir(dir, 'p', '0700')
+  local top = root()
+  local current = dir
+  while #current >= #top and vim.startswith(current, top) do
+    vim.uv.fs_chmod(current, tonumber('700', 8))
+    if current == top then break end
+    current = vim.fs.dirname(current)
+  end
+end
+
+--- Where the lock of review `id` of `remote` lives, beside its state
+---@param remote DyForgeRemote
+---@param id string
+---@return string
+local function lock_path(remote, id)
+  return (M.path(remote, id):gsub('%.json$', '.lock'))
+end
+
+--- Whether process `pid` of this host is alive; one of another user, which
+--- cannot be signalled, is
+---@param pid integer
+---@return boolean
+local function alive(pid)
+  local ok, err = vim.uv.kill(pid, 0)
+  return ok == 0
+    or (type(err) == 'string' and err:find('EPERM', 1, true) ~= nil)
+end
+
+--- Take the lock of review `id` of `remote` for this Neovim
+---
+--- One Neovim at a time reviews a pull request: two would each send the
+--- drafts the other sent too. The lock is a private file holding the pid
+--- and host of its owner; a lock whose owner is no longer alive on this
+--- host is taken over. One of another host is never judged from here.
+---@param remote DyForgeRemote
+---@param id string
+---@return boolean ok
+---@return string? why Who holds it, when not
+function M.lock(remote, id)
+  local path = lock_path(remote, id)
+  private_dir(path)
+  local me, host = vim.uv.os_getpid(), vim.uv.os_gethostname()
+  for _ = 1, 2 do
+    local fd = vim.uv.fs_open(path, 'wx', tonumber('600', 8))
+    if fd then
+      vim.uv.fs_write(fd, ('%d\n%s\n'):format(me, host))
+      vim.uv.fs_close(fd)
+      return true
+    end
+    local read, lines = pcall(vim.fn.readfile, path)
+    local pid = read and tonumber(lines[1]) or nil
+    local owner = read and lines[2] or nil
+    if pid == me and owner == host then return true end
+    if pid and owner and owner ~= host then
+      return false,
+        ('This review is open in another Neovim (pid %d on %s): remove %s if it is not'):format(
+          pid,
+          owner,
+          path
+        )
+    end
+    if pid and alive(pid) then
+      return false,
+        ('This review is open in another Neovim (pid %d)'):format(pid)
+    end
+    -- Its owner is gone, or it holds nothing to tell one: taken over
+    vim.uv.fs_unlink(path)
+  end
+  return false, 'Could not take the lock of this review: ' .. path
+end
+
+--- Let the lock of review `id` of `remote` go, if this Neovim holds it
+---@param remote DyForgeRemote
+---@param id string
+function M.unlock(remote, id)
+  local path = lock_path(remote, id)
+  local read, lines = pcall(vim.fn.readfile, path)
+  if
+    read
+    and tonumber(lines[1]) == vim.uv.os_getpid()
+    and lines[2] == vim.uv.os_gethostname()
+  then
+    vim.uv.fs_unlink(path)
+  end
+end
+
 --- A state with nothing marked and nothing drafted
 ---@return DyReviewState
 local function empty() return { reviewed = {}, drafts = {} } end
@@ -145,17 +237,7 @@ function M.save(remote, id, state)
       or vim.empty_dict(),
     drafts = state.drafts or {},
   })
-  local dir = vim.fs.dirname(path)
-  vim.fn.mkdir(dir, 'p', '0700')
-  -- `mkdir` sets the mode of new directories only, so tighten the whole
-  -- subtree from `review/` down, comment text being private
-  local top = root()
-  local current = dir
-  while #current >= #top and vim.startswith(current, top) do
-    vim.uv.fs_chmod(current, tonumber('700', 8))
-    if current == top then break end
-    current = vim.fs.dirname(current)
-  end
+  private_dir(path)
   local temp = ('%s.tmp.%d'):format(path, vim.uv.os_getpid())
   if vim.fn.writefile({ vim.json.encode(out) }, temp) ~= 0 then
     vim.fn.delete(temp)

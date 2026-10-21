@@ -345,10 +345,15 @@ local function load_forge(s, cb)
   end)
 end
 
---- Say once that servers run without the project's dependencies
+--- Say once that servers run without the project's dependencies, and let
+--- the review's lock go when Neovim leaves
 ---@param s DyReviewSession
 local function autocmds(s)
   local group = vim.api.nvim_create_augroup('dy_review', { clear = true })
+  vim.api.nvim_create_autocmd('VimLeavePre', {
+    group = group,
+    callback = function() pcall(store.unlock, s.remote, s.pull.id) end,
+  })
   vim.api.nvim_create_autocmd('LspAttach', {
     group = group,
     callback = function(args)
@@ -417,6 +422,17 @@ end
 ---@param fail fun(what: string, reason?: string)
 function M.start(remote, pull, adapter, fail)
   local review = require('tools.review')
+  -- One Neovim at a time reviews a pull request: two would each send what
+  -- the other sent
+  local called, locked, lock_err = pcall(store.lock, remote, pull.id)
+  if not (called and locked) then
+    return fail('Not opened', called and lock_err or tostring(locked))
+  end
+  local give_up = fail
+  fail = function(what, reason)
+    pcall(store.unlock, remote, pull.id)
+    give_up(what, reason)
+  end
   M.repo_root(function(root, root_err)
     if not root then return fail('Cannot review here', root_err) end
     local head = pull.head_sha
@@ -534,6 +550,7 @@ function M.close(on_done)
   end
   session = nil
   pcall(vim.api.nvim_del_augroup_by_name, 'dy_review')
+  pcall(store.unlock, s.remote, s.pull.id)
   diff.close()
   panel.close(s)
   local keys = require('tools.review.actions').keys()
