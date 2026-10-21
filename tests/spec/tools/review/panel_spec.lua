@@ -170,6 +170,20 @@ describe('tools.review.panel', function()
       assert.equals(' ▾ Source             3 files  +820 -4', lines[2])
     end)
 
+    it('shows the AI summary under the header, wrapped and capped', function()
+      panel.SUMMARY_LINES = 3
+      local lines = panel.render(session({
+        ai_summary = 'Adds a billing export.\n\nThe token check moves to a new module and loses its expiry test. It also renames the config.',
+      }))
+      assert.same({
+        ' AI summary:',
+        '   Adds a billing export.',
+        '   The token check moves to a new',
+        '   …',
+      }, vim.list_slice(lines, 3, 6))
+      assert.equals(' ▾ Source             3 files  +820 -4', lines[7])
+    end)
+
     it('names a binary file as such', function()
       local s = session()
       s.files[3].binary = true

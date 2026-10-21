@@ -8,7 +8,7 @@ require('util.untrusted').hold_pattern('^(.*/%.worktrees/dyreview%-[^/]+)')
 
 -- Kept here, so completing does not load the module
 local SUBCOMMANDS =
-  { 'pick', 'branch', 'submit', 'since', 'drafts', 'trust', 'close' }
+  { 'pick', 'branch', 'ai', 'submit', 'since', 'drafts', 'trust', 'close' }
 
 vim.api.nvim_create_user_command(
   'DyReview',

@@ -859,6 +859,14 @@ describe('tools.review', function()
   end)
 
   describe('command', function()
+    it('hands ai to the AI pass', function()
+      local got = {}
+      local ai = require('tools.review.ai')
+      stub(ai, 'run', function(s) got[#got + 1] = s or 'none' end)
+      review.command({ fargs = { 'ai' } })
+      assert.same({ 'none' }, got)
+    end)
+
     it('hands submit to the submit module', function()
       local got = {}
       local submit = require('tools.review.submit')

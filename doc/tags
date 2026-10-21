@@ -153,6 +153,7 @@ dyneo-rego	dyneo.txt	/*dyneo-rego*
 dyneo-repl	dyneo.txt	/*dyneo-repl*
 dyneo-requirements	dyneo.txt	/*dyneo-requirements*
 dyneo-review	dyneo.txt	/*dyneo-review*
+dyneo-review-ai	dyneo.txt	/*dyneo-review-ai*
 dyneo-review-submit	dyneo.txt	/*dyneo-review-submit*
 dyneo-runbook	dyneo.txt	/*dyneo-runbook*
 dyneo-sbom	dyneo.txt	/*dyneo-sbom*

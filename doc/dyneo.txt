@@ -1813,6 +1813,7 @@ or exits.  A lock left by a Neovim no longer running is taken over.
 Subcommands ~
 `pick`      Pick a pull request.                         `<leader>pvv`
 `branch`    The pull request of the current branch.      `<leader>pvb`
+`ai`        The AI pass, see |dyneo-review-ai|.         `<leader>pva`
 `drafts`    Pick among your drafts and jump to one.      `<leader>pvd`
 `since`     Files changed since your last review.
 `submit`    Send the review, see |dyneo-review-submit|.  `<leader>pvs`
@@ -1834,8 +1835,9 @@ and says where when git refuses.
 The panel ~
 Files are grouped in buckets by what triage makes of them; a file with a
 risk is marked `!`, one you marked reviewed `✓`, and one that changed since
-you marked it `⟳`.  Generated files are collapsed.  Threads that could not
-be read are said as `Threads not read`, never left out silently.
+you marked it `⟳`.  Generated files are collapsed.  The header shows the AI
+summary, once the pass has run.  Threads that could not be read are said as
+`Threads not read`, never left out silently.
 
 In the panel: `<CR>` opens a file or folds a bucket, `m` marks the file
 reviewed, `q` closes the panel.
@@ -1910,6 +1912,15 @@ comment is published as it is sent, the verdict is your vote (10, 5, 0, -5,
 -10), and the thread of the review body is closed unless the vote asks the
 author to act.  A suggested change is a suggestion block on GitHub and
 GitLab, and a code block on Azure DevOps, which has no such syntax.
+
+                                                             *dyneo-review-ai*
+AI pass ~
+`<leader>pva` (`:DyReview ai`) sends the title, description and diff to the
+AI command of |DyNeo.ai| through |dyneo-ai-guard|, which refuses sensitive
+text.  Generated and binary files are left out and named; a large diff is
+split by file.  It answers a summary and a reading order for the panel and
+draft comments as pending AI drafts.  Notices give counts and paths, never
+the diff or the answer.
 
 Requirements and state ~
 git 2.40 or newer, codediff.nvim, `gh`, `glab`, or `az` with its
@@ -2378,7 +2389,7 @@ Project ~
 
                                                                   *:DyReview*
 :DyReview [{sub}]       Review a pull request of any forge remote.  {sub} is
-                        `pick` (the default), `branch`, `drafts`,
+                        `pick` (the default), `branch`, `ai`, `drafts`,
                         `since`, `submit`, `trust` or `close`.  See
                         |dyneo-review|.
 

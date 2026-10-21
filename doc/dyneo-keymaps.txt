@@ -443,6 +443,7 @@ one of the same keys in those buffers.
 ==============================================================================
 <leader>pv  review
 
+`<leader>pva`          n      AI Review Pass
 `<leader>pvb`          n      Review This Branch's Pull Request
 `<leader>pvd`          n      Review Drafts
 `<leader>pvq`          n      Close Review

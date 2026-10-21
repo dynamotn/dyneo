@@ -17,7 +17,7 @@ local session = require('tools.review.session')
 local notify = require('util.notify').titled('Review')
 
 M.SUBCOMMANDS =
-  { 'pick', 'branch', 'submit', 'since', 'drafts', 'trust', 'close' }
+  { 'pick', 'branch', 'ai', 'submit', 'since', 'drafts', 'trust', 'close' }
 
 M.current = session.current
 M.open = session.open
@@ -37,6 +37,11 @@ M.list_drafts = pickers.drafts
 --- Send the open review: `tools.review.submit`, loaded when asked
 ---@param s? DyReviewSession
 function M.submit(s) require('tools.review.submit').run(s) end
+
+--- Run the AI pass over the open review: `tools.review.ai`, loaded when
+--- asked
+---@param s? DyReviewSession
+function M.ai(s) require('tools.review.ai').run(s) end
 
 --- Put the cursor where the session was asked to go, once `side` of `path`
 --- is shown
@@ -112,6 +117,7 @@ function M.command(args)
   end
   local run = {
     pick = M.pick,
+    ai = function() M.ai() end,
     branch = M.branch,
     since = M.since,
     drafts = M.list_drafts,

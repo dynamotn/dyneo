@@ -12,6 +12,9 @@ M.WIDTH = 40
 --- Longest path column, so one very deep path does not push the counts away
 M.PATH_WIDTH = 48
 
+--- Lines of the AI summary shown, the last one `…` when it is longer
+M.SUMMARY_LINES = 8
+
 --- The name of each bucket in the panel
 ---@type table<DyReviewKind, string>
 M.LABELS = {
@@ -97,6 +100,30 @@ local function pad(text, width)
   return text .. (' '):rep(math.max(width - vim.fn.strdisplaywidth(text), 0))
 end
 
+--- The words of `text` in lines of at most `width` columns; a blank line
+--- of it is let go, a word wider than `width` gets a line of its own
+---@param text string
+---@param width integer
+---@return string[]
+local function wrap(text, width)
+  local lines = {}
+  for paragraph in text:gmatch('[^\n]+') do
+    local line = ''
+    for word in paragraph:gmatch('%S+') do
+      if line == '' then
+        line = word
+      elseif vim.fn.strdisplaywidth(line .. ' ' .. word) <= width then
+        line = line .. ' ' .. word
+      else
+        lines[#lines + 1] = line
+        line = word
+      end
+    end
+    if line ~= '' then lines[#lines + 1] = line end
+  end
+  return lines
+end
+
 --- The panel's lines, and what each line stands for
 ---@param session DyReviewSession
 ---@return string[] lines
@@ -141,6 +168,17 @@ function M.render(session)
     )
   end
   if #summary > 0 then add(' ' .. table.concat(summary, '   ')) end
+  if session.ai_summary then
+    local text = wrap(session.ai_summary, M.WIDTH - 4)
+    if #text > M.SUMMARY_LINES then
+      text = vim.list_slice(text, 1, M.SUMMARY_LINES - 1)
+      text[#text + 1] = '…'
+    end
+    add(' AI summary:')
+    for _, line in ipairs(text) do
+      add('   ' .. line)
+    end
+  end
   if session.blocked then add(' Read only: ' .. session.blocked) end
   if session.threads_error then
     add(' Threads not read: ' .. session.threads_error)

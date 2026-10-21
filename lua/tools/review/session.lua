@@ -49,6 +49,8 @@ M.FORGE_NAMES = { github = 'GitHub', gitlab = 'GitLab', azure = 'Azure DevOps' }
 ---@field keyed table<integer, boolean> Buffers given the review's keys
 ---@field jump? { path: string, side: DyReviewSide, line: integer }
 ---@field told_deps? boolean
+---@field ai_summary? string What the last AI pass said of the change
+---@field ai_order? string[] The reading order of the last AI pass
 
 ---@class DyReviewFile
 ---@field blob? string Its id at the head, nil when the head deletes it
