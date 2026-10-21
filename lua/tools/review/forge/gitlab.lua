@@ -48,7 +48,7 @@ local APPROVED = { approve = true, revoke = false }
 
 --- Why a review cannot be sent as the draft notes on GitLab stand
 local CHANGED = 'the pending review on GitLab no longer matches the drafts '
-  .. 'here; open the merge request again'
+  .. 'here; close the review (`:DyReview close`) and open it again'
 
 --- The signed-in user, by host, asked once a session
 ---@type table<string, { id: integer, username: string }>
@@ -866,6 +866,33 @@ function M.import_id(posted)
   return note and forge_draft_id(note) or nil
 end
 
+--- Whether draft note `note` of mine is what `draft` sends: a draft note
+--- created after its call timed out
+---
+--- A reply matches by its thread, a comment by its file and the line on its
+--- side; a comment that went on the file names its line in its text.
+---@param note table
+---@param draft DyReviewDraft
+---@param me { id: integer }
+---@return boolean
+local function made_by(note, draft, me)
+  if int(note.author_id) and note.author_id ~= me.id then return false end
+  local said = text(note.note, '')
+  if draft.reply_to then
+    return note.discussion_id == draft.reply_to and said == body_of(draft)
+  end
+  local position = tbl(note.position)
+  local at = where(position)
+  if not (position and at and at.path == draft.path) then return false end
+  if at.file then
+    local on_file = vim.tbl_extend('force', draft, { file_level = true })
+    return said == body_of(on_file)
+  end
+  local line = draft.side == 'old' and int(position.old_line)
+    or int(position.new_line)
+  return not draft.file_level and line == draft.line and said == body_of(draft)
+end
+
 --- The note of mine in `rows` each draft was published as, by draft id
 ---
 --- A note matches by its text and its place: the thread a reply went into,
@@ -1107,6 +1134,10 @@ end
 --- and is never tried again here: one that timed out may still have reached
 --- GitLab.
 ---
+--- A draft note no draft claims, with the place and text of a draft not
+--- sent yet, is that draft: its POST timed out after it landed. It is
+--- reported and published with the rest, not created again.
+---
 --- Refused before any write: draft notes on GitLab other than the imported
 --- ones and those sent from here, or an imported one gone, since publishing
 --- sends them all; and drafts whose draft note was deleted unpublished,
@@ -1198,9 +1229,32 @@ function M.submit(remote, pull, drafts, review, progress, cb)
           gone[#gone + 1] = item.draft
         end
       end
+      -- A draft note no draft claims may be one whose POST timed out after
+      -- it landed: reported now, and published with the rest
+      local landed = {}
       for _, note in ipairs(notes) do
-        if not accounted[note.id] then return cb(CHANGED) end
+        if not accounted[note.id] then
+          local found
+          for _, draft in ipairs(plan.new) do
+            if not landed[draft] and made_by(note, draft, me) then
+              found = draft
+              break
+            end
+          end
+          if not found then return cb(CHANGED) end
+          landed[found], accounted[note.id] = note.id, true
+        end
       end
+      local rest = {}
+      for _, draft in ipairs(plan.new) do
+        if landed[draft] then
+          plan.publish = true
+          progress(draft, posted_id(landed[draft]))
+        else
+          rest[#rest + 1] = draft
+        end
+      end
+      plan.new = rest
       local nothing_new = #plan.new == 0
         and #plan.imported == 0
         and not plan.publish

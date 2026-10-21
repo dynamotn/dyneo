@@ -636,42 +636,80 @@ end
 
 --- Why a pending review cannot be submitted as it is
 local CHANGED = 'the pending review on GitHub no longer matches the drafts '
-  .. 'here; open the pull request again'
+  .. 'here; close the review (`:DyReview close`) and open it again'
+
+--- Whether pending comment `comment` is what new thread `draft` sends: a
+--- thread added after its call timed out
+---@param comment table
+---@param draft DyReviewDraft
+---@param me string
+---@return boolean
+local function made_by(comment, draft, me)
+  local user = type(comment.user) == 'table' and comment.user
+  if user and text(user.login, ''):lower() ~= me then return false end
+  local seen = to_draft(comment)
+  if seen.path ~= draft.path or text(comment.body, '') ~= body_of(draft) then
+    return false
+  end
+  if draft.file_level then return seen.file_level == true end
+  return not seen.file_level
+    and seen.side == draft.side
+    and seen.line == draft.line
+    and seen.start_line == range_start(draft)
+end
 
 --- Why pending review `review` is not what the drafts say it holds, nil when
 --- it is
 ---
 --- It holds the imported drafts not yet sent and every draft sent into it
---- before; a comment more or one less means the review or the drafts here
---- changed since, and submitting would publish what no one confirmed.
+--- before. A comment no draft claims is first matched to a new thread not
+--- sent yet, with its place and text: the call that added it timed out
+--- after it landed. Any other comment more, or one less, means the review or
+--- the drafts here changed since, and submitting would publish what no one
+--- confirmed.
 ---@param review table
 ---@param comments table[]
 ---@param drafts DyReviewDraft[]
+---@param me string
 ---@return string? err
 ---@return table<string, integer> comment_of Comment id by imported draft id
-local function changed(review, comments, drafts)
-  local imported, sent, comment_of = {}, {}, {}
+---@return { draft: DyReviewDraft, comment: integer }[] landed
+local function changed(review, comments, drafts, me)
+  local imported, sent, comment_of, new = {}, {}, {}, {}
   for _, draft in ipairs(drafts) do
     local in_review, comment = parse_posted(draft.posted)
     if comment and in_review == review.id then
       sent[comment] = true
     elseif not draft.posted and draft.origin == 'forge' then
       imported[draft.id] = true
+    elseif not draft.posted and not draft.reply_to then
+      new[#new + 1] = draft
     end
   end
-  local held = 0
+  local held, landed, taken = 0, {}, {}
   for _, comment in ipairs(comments) do
     local id = forge_draft_id(comment.id)
     if imported[id] then
       comment_of[id] = comment.id
-    elseif not sent[comment.id] then
-      return CHANGED, comment_of
+      held = held + 1
+    elseif sent[comment.id] then
+      held = held + 1
+    else
+      local found
+      for _, draft in ipairs(new) do
+        if not taken[draft] and made_by(comment, draft, me) then
+          found = draft
+          break
+        end
+      end
+      if not found then return CHANGED, comment_of, {} end
+      taken[found] = true
+      landed[#landed + 1] = { draft = found, comment = comment.id }
     end
-    held = held + 1
   end
   local expected = vim.tbl_count(imported) + vim.tbl_count(sent)
-  if held ~= expected then return CHANGED, comment_of end
-  return nil, comment_of
+  if held ~= expected then return CHANGED, comment_of, {} end
+  return nil, comment_of, landed
 end
 
 --- Hand `on_done` a new pending review of `pull`, on the head GitHub knows
@@ -896,6 +934,10 @@ end
 --- never sent. A failed call stops the submit there and is never tried
 --- again here: one that timed out may still have reached GitHub.
 ---
+--- A comment of the pending review no draft claims, with the place and
+--- text of a new thread not sent yet, is that thread: its call timed out
+--- after it landed. It is reported and not added again.
+---
 --- Refused before any write: a pending review holding more or less than the
 --- drafts say, since submitting it publishes all it holds; and drafts sent
 --- into a pending review since deleted, named in `info.lost`, which only
@@ -972,7 +1014,7 @@ function M.submit(remote, pull, drafts, review, progress, cb)
       if #groups.imported > 0 then
         return cb(
           'The pending review on GitHub these drafts came from is gone; '
-            .. 'open the pull request again'
+            .. 'close the review (`:DyReview close`) and open it again'
         )
       end
       if
@@ -990,8 +1032,19 @@ function M.submit(remote, pull, drafts, review, progress, cb)
     end
     review_comments(remote, pull, pending, function(comments, list_err)
       if not comments then return cb(list_err) end
-      local why, comment_of = changed(pending, comments, drafts)
+      local why, comment_of, landed =
+        changed(pending, comments, drafts, me or '')
       if why then return cb(why) end
+      -- Reported now, and left out of what is added
+      local skip = {}
+      for _, item in ipairs(landed) do
+        skip[item.draft] = true
+        progress(item.draft, posted_id(pending.id, item.comment))
+      end
+      groups.new = vim.tbl_filter(
+        function(draft) return not skip[draft] end,
+        groups.new
+      )
       if nothing_new and #comments == 0 and empty_comment then
         return resolve_only(SKIPPED)
       end

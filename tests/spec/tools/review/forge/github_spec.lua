@@ -479,7 +479,7 @@ exit 1
     local COMMENTS =
       'repos_o_r_pulls_7_reviews_302_comments_per_page_100_page_1'
     local CHANGED = 'the pending review on GitHub no longer matches the '
-      .. 'drafts here; open the pull request again'
+      .. 'drafts here; close the review (`:DyReview close`) and open it again'
     --- My review 301, submitted long ago
     local SUBMITTED = {
       id = 301,
@@ -705,6 +705,77 @@ exit 1
       assert.equals(CHANGED, err)
       assert.same({}, reports)
       assert.same({ 'user', REVIEWS, COMMENTS }, keys())
+    end)
+
+    it('takes a thread that went out unreported, adding the rest', function()
+      -- `addPullRequestReviewThread` timed out after GitHub added it
+      answer('user', 'user.json')
+      answer(REVIEWS, 'reviews.json')
+      answer(COMMENTS, {
+        {
+          id = 601,
+          path = 'a.lua',
+          line = 4,
+          side = 'RIGHT',
+          subject_type = 'line',
+          body = 'New.',
+          user = { login = 'me' },
+        },
+        {
+          id = 602,
+          path = 'c.lua',
+          subject_type = 'file',
+          body = 'L40: Outside.',
+        },
+      })
+      writes_succeed()
+      local err, reports = submit({
+        draft({ id = 'landed', line = 4, body = 'New.' }),
+        draft({
+          id = 'file',
+          path = 'c.lua',
+          line = 40,
+          body = 'Outside.',
+          file_level = true,
+        }),
+        draft({ id = 'rest', line = 9, body = 'Rest.' }),
+      }, { verdict = 'comment' })
+      assert.is_nil(err)
+      assert.same({
+        'user',
+        REVIEWS,
+        COMMENTS,
+        'graphql_DyReviewAddThread',
+        'graphql_DyReviewSubmit',
+      }, keys())
+      assert.equals('Rest.', inputs()[4].body)
+      assert.same({
+        { 'landed', '302/601' },
+        { 'file', '302/602' },
+        { 'rest', '302/601' },
+      }, reports)
+    end)
+
+    it('refuses a comment no draft here could have made', function()
+      answer('user', 'user.json')
+      answer(REVIEWS, 'reviews.json')
+      answer(COMMENTS, {
+        {
+          id = 601,
+          path = 'a.lua',
+          line = 4,
+          side = 'RIGHT',
+          subject_type = 'line',
+          body = 'Other words.',
+        },
+      })
+      writes_succeed()
+      local err, reports = submit(
+        { draft({ id = 'new', line = 4, body = 'New.' }) },
+        { verdict = 'comment' }
+      )
+      assert.equals(CHANGED, err)
+      assert.same({}, reports)
     end)
 
     it('refuses a pending review missing a comment sent into it', function()

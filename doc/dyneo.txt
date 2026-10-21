@@ -1877,7 +1877,11 @@ the pull request again and refuses if it moved to a new head or became
 read-only; if the drafts changed while you were asking, it asks again.  The
 body is optional, except for GitHub's Request changes with nothing else
 to say.  A failure part-way is remembered: submit again and only what is
-not out yet is sent; comments already out are not sent twice.  Drafts lost
+not out yet is sent; comments already out are not sent twice, even one
+whose call timed out after it landed: found on the forge with its place
+and text, it is taken as sent.  A pending comment nothing here accounts
+for refuses the submit: close the review (`:DyReview close`) and open it
+again to import it.  Drafts lost
 because the pending review was deleted on the forge are offered to be sent
 again.  Once a review is out whole, its drafts are done: a later round
 sends only its own, whatever happened to the earlier comments on the web,

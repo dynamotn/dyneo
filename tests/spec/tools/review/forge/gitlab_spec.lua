@@ -511,7 +511,7 @@ exit 1
       start_sha = 's7s7s7',
     }
     local CHANGED = 'the pending review on GitLab no longer matches the '
-      .. 'drafts here; open the merge request again'
+      .. 'drafts here; close the review (`:DyReview close`) and open it again'
     local POSITION = {
       base_sha = 'b7b7b7',
       start_sha = 's7s7s7',
@@ -816,6 +816,78 @@ exit 1
       local err, reports = submit(
         { imported(61), draft({ id = 'new' }) },
         { verdict = 'approve' }
+      )
+      assert.equals(CHANGED, err)
+      assert.same({}, reports)
+      assert.same({ 'user', DRAFTS }, keys())
+    end)
+
+    it(
+      'takes a draft note that went out unreported, adding the rest',
+      function()
+        -- The POST of a draft note timed out after GitLab created it
+        answer('user', 'user.json')
+        answer(DRAFTS, {
+          mine(950, 'One.', {
+            author_id = 42,
+            position = {
+              position_type = 'text',
+              new_path = 'a.lua',
+              old_path = 'a.lua',
+              new_line = 3,
+              old_line = 3,
+            },
+          }),
+          mine(951, 'Agreed.', { author_id = 42, discussion_id = 'd1' }),
+          mine(952, 'L50: text', {
+            author_id = 42,
+            position = { position_type = 'file', new_path = 'c.lua' },
+          }),
+        })
+        writes_succeed()
+        local err, reports = submit({
+          draft({ id = 'landed', line = 3, body = 'One.' }),
+          draft({ id = 'reply', reply_to = 'd1', body = 'Agreed.' }),
+          -- A line in no hunk went out on the file, naming the line
+          draft({ id = 'outside', path = 'c.lua', line = 50 }),
+          draft({ id = 'rest', line = 4, body = 'Rest.' }),
+        }, { verdict = 'comment' })
+        assert.is_nil(err)
+        assert.same({ 'user', DRAFTS, DIFFS, NEW_DRAFT, PUBLISH }, keys())
+        assert.equals('Rest.', calls()[4].body.note)
+        assert.same({
+          { 'landed', 'draft:950' },
+          { 'reply', 'draft:951' },
+          { 'outside', 'draft:952' },
+          { 'rest', 'draft:900' },
+        }, reports)
+      end
+    )
+
+    it('publishes a draft note that went out unreported alone', function()
+      answer('user', 'user.json')
+      answer(DRAFTS, {
+        mine(951, 'Agreed.', { author_id = 42, discussion_id = 'd1' }),
+      })
+      writes_succeed()
+      local err, reports = submit(
+        { draft({ id = 'reply', reply_to = 'd1', body = 'Agreed.' }) },
+        { verdict = 'comment' }
+      )
+      assert.is_nil(err)
+      assert.same({ { 'reply', 'draft:951' } }, reports)
+      assert.same({ 'user', DRAFTS, PUBLISH }, keys())
+    end)
+
+    it('refuses a draft note of the same text elsewhere', function()
+      answer('user', 'user.json')
+      answer(DRAFTS, {
+        mine(951, 'Agreed.', { author_id = 42, discussion_id = 'd9' }),
+      })
+      writes_succeed()
+      local err, reports = submit(
+        { draft({ id = 'reply', reply_to = 'd1', body = 'Agreed.' }) },
+        { verdict = 'comment' }
       )
       assert.equals(CHANGED, err)
       assert.same({}, reports)
