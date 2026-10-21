@@ -26,6 +26,10 @@
 -- - a conflict: the same key in the same mode, everywhere, given two
 --   different meanings by two different places, where whichever comes last
 --   silently wins.
+--
+-- And it fails when loading the configuration reported an error, as
+-- `check-startup.sh` does: a mapping a failing plugin never got to set is
+-- missing from the file, and that must not go unnoticed.
 
 -- The tree as Lua names its files: `stdpath('config')` is the link
 -- `keymaps-doc.sh` points at it
@@ -34,6 +38,10 @@ local output = vim.fs.joinpath(root, 'doc', 'dyneo-keymaps.txt')
 -- Modules may be named by the link or by the tree it points at, depending on
 -- which loader found them
 local roots = { root, vim.fs.normalize(vim.fn.stdpath('config')) }
+
+-- Every error notification from here on is kept in `_G._dy_check_errors`
+dofile(vim.fs.joinpath(root, 'scripts/lib/notify-watch.lua'))
+local samples = dofile(vim.fs.joinpath(root, 'scripts/lib/samples.lua'))
 
 --- `source` as a path inside this tree, or nil for a file outside it
 ---@param source string
@@ -188,11 +196,14 @@ vim.keymap.set = function(mode, lhs, rhs, opts)
     if not info then break end
     local file = relative((info.source:gsub('^@', '')))
     -- lazy.nvim's own `keys` stubs come through `config.lazy`, and the
-    -- wrappers of `util.plugin` pass on what they were given
+    -- wrappers of `util.plugin` pass on what they were given. This script
+    -- fires the events plugins load on, so what a plugin maps on its own
+    -- has the script under it, and is not this tree's either.
     if
       file
       and file ~= 'lua/config/lazy.lua'
       and file ~= 'lua/util/plugin.lua'
+      and not vim.startswith(file, 'scripts/')
     then
       if opts.desc and opts.desc ~= '' then
         table.insert(maps, {
@@ -549,9 +560,18 @@ vim.api.nvim_create_autocmd('VimEnter', {
       -- which-key takes its `spec` apart as it sets up, so the groups are
       -- read before `VeryLazy` loads it
       names = groups()
-      -- Headless there is no UI to enter, so `VeryLazy` is fired by hand: it
-      -- is what loads `config.keymaps`
-      vim.api.nvim_exec_autocmds('User', { pattern = 'VeryLazy' })
+      -- Headless there is no UI to enter, so `UIEnter` is fired by hand, as
+      -- attaching one does. lazy.nvim's `VeryLazy` waits for it, and is what
+      -- loads `config.keymaps`.
+      samples.quiet_sidekick()
+      samples.quiet_noice()
+      vim.api.nvim_exec_autocmds('UIEnter', { modeline = false })
+      local fired = vim.wait(
+        5000,
+        function() return vim.g.did_very_lazy == true end,
+        10
+      )
+      if not fired then error('VeryLazy did not fire within 5s of UIEnter') end
       -- The plugins behind `LazyFile` map their toggles as they set up, so a
       -- file is opened for them. It has no filetype, which keeps language
       -- servers and parsers out of it.
@@ -577,6 +597,9 @@ vim.api.nvim_create_autocmd('VimEnter', {
         end
       end)
       if not ok then table.insert(problems, tostring(err)) end
+      for _, msg in ipairs(_G._dy_check_errors) do
+        table.insert(problems, 'error while loading: ' .. msg)
+      end
       for _, line in ipairs(problems) do
         io.stderr:write('keymaps-doc: ' .. line .. '\n')
       end

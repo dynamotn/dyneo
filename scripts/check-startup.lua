@@ -102,37 +102,6 @@ local function watch_notify()
 end
 watch_notify()
 
---- Keep Copilot's sign-in state out of the errors
----
---- `sidekick.nvim` turns Copilot's status into notifications, and an account
---- that is not signed in into an error. That is the state of the machine the
---- check runs on, not of the configuration, and only shows when the server
---- reports it before Neovim quits.
-local function quiet_sidekick()
-  samples.before_config('sidekick.nvim', function()
-    local status = require('sidekick.status')
-    local on_status = status.on_status
-    status.on_status = function(err, res, ctx)
-      if res and res.message and res.message:find('not signed') then
-        res = vim.deepcopy(res)
-        res.message = nil
-      end
-      return on_status(err, res, ctx)
-    end
-  end)
-end
-
---- Keep noice from taking the check's own `vim.notify` for a rival plugin
----
---- noice checks every so often that `vim.notify` is still its own, and
---- reports an error when it is not. Here it never is: the check wraps it to
---- record errors.
-local function quiet_noice()
-  samples.before_config('noice.nvim', function()
-    require('noice.health').checker = function() end
-  end)
-end
-
 --- Report the recorded installs no real install could carry out
 local function check_installs()
   local ok, registry = pcall(require, 'mason-registry')
@@ -208,8 +177,8 @@ end
 
 installs = samples.skip_installs()
 local prompts = samples.skip_prompts()
-quiet_sidekick()
-quiet_noice()
+samples.quiet_sidekick()
+samples.quiet_noice()
 enter_ui()
 
 local files = {} ---@type { path: string, filetype?: string, language?: string }[]

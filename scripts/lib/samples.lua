@@ -20,6 +20,10 @@
 --   them runs its `config`.
 -- * Prompts cancelled: headless there is nobody to answer one asked from a
 --   `FileType` handler, and it would hang the script.
+--
+-- `keymaps-doc.lua` shares the last part, the stubs that keep the state of
+-- the machine (Copilot not signed in) and the scripts' own `vim.notify`
+-- wrapper out of the errors they fail on.
 
 local M = {}
 
@@ -291,6 +295,37 @@ function M.skip_prompts()
     on_confirm(nil)
   end
   return prompts
+end
+
+--- Keep Copilot's sign-in state out of the errors
+---
+--- `sidekick.nvim` turns Copilot's status into notifications, and an account
+--- that is not signed in into an error. That is the state of the machine the
+--- script runs on, not of the configuration, and only shows when the server
+--- reports it before Neovim quits.
+function M.quiet_sidekick()
+  M.before_config('sidekick.nvim', function()
+    local status = require('sidekick.status')
+    local on_status = status.on_status
+    status.on_status = function(err, res, ctx)
+      if res and res.message and res.message:find('not signed') then
+        res = vim.deepcopy(res)
+        res.message = nil
+      end
+      return on_status(err, res, ctx)
+    end
+  end)
+end
+
+--- Keep noice from taking the script's own `vim.notify` for a rival plugin
+---
+--- noice checks every so often that `vim.notify` is still its own, and
+--- reports an error when it is not. Here it never is: the script wraps it to
+--- record errors.
+function M.quiet_noice()
+  M.before_config('noice.nvim', function()
+    require('noice.health').checker = function() end
+  end)
 end
 
 return M

@@ -519,7 +519,6 @@ one of the same keys in those buffers.
 `<leader>sk`           n      Keymaps
 `<leader>sl`           n      Location List
 `<leader>sm`           n      Marks
-`<leader>sn`           n      +noice
 `<leader>sp`           n      Search for Plugin Spec
 `<leader>sq`           n      Quickfix List
 `<leader>sr`           nx     Search and Replace
