@@ -15,6 +15,40 @@ return vim.list_contains(DyNeo.enabled_languages, 'haskell')
         -- would pick. The plugin's README advises a `^10` range instead.
         version = false,
         ft = filetypes,
+        -- Read by its ftplugin, so set before the plugin loads. hls builds
+        -- the project (Template Haskell, `Setup.hs`), so it never starts
+        -- under a directory still held untrusted; otherwise as by default,
+        -- when the server is on `$PATH`.
+        init = function()
+          local config = vim.g.haskell_tools
+          if type(config) == 'function' then config = config() end
+          vim.g.haskell_tools = vim.tbl_deep_extend('keep', config or {}, {
+            hls = {
+              auto_attach = function()
+                if require('util.untrusted').held(0) then return false end
+                return vim.fn.executable('haskell-language-server-wrapper') == 1
+                  or vim.fn.executable('haskell-language-server') == 1
+              end,
+            },
+          })
+        end,
+        -- Its ftplugin is what starts the server, and it does not run again
+        -- for a buffer already open when its directory is let go. A cabal
+        -- file gets it only from the hls versions that read one, which the
+        -- ftplugin checks the same way.
+        config = function()
+          require('util.untrusted').on_release('haskell-tools', function(bufnr)
+            local filetype = vim.bo[bufnr].filetype
+            if not vim.list_contains(filetypes, filetype) then return end
+            if
+              not vim.list_contains(language.filetypes, filetype)
+              and not require('haskell-tools.lsp.helpers').is_hls_version_with_cabal_support()
+            then
+              return
+            end
+            require('haskell-tools').lsp.start(bufnr)
+          end)
+        end,
         keys = {
           {
             '<localleader>e',

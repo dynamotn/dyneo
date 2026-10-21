@@ -52,6 +52,31 @@ describe('util.project_rtp', function()
     assert.is_nil(require('util.project_rtp').current())
   end)
 
+  it("skips a held project's .nvim without asking", function()
+    vim.fn.mkdir(dir .. '/.nvim', 'p')
+    local reads = 0
+    table.insert(
+      restores,
+      h.stub(vim.secure, 'read', function()
+        reads = reads + 1
+        return ''
+      end)
+    )
+    h.unload('util.untrusted')
+    local untrusted = require('util.untrusted')
+    untrusted.hold(dir)
+    table.insert(restores, function() untrusted.forget(dir) end)
+    load()
+    assert.equals(0, reads)
+    assert.is_false(vim.list_contains(vim.opt.rtp:get(), dir .. '/.nvim'))
+    assert.is_nil(require('util.project_rtp').current())
+    -- Not pinned as untrusted: once let go it is asked about as usual
+    untrusted.forget(dir)
+    require('util.project_rtp').startup_path()
+    assert.equals(1, reads)
+    vim.opt.rtp:remove(dir .. '/.nvim')
+  end)
+
   it('names the trusted folder it put on the runtimepath', function()
     vim.fn.mkdir(dir .. '/.nvim', 'p')
     table.insert(restores, h.stub(vim.secure, 'read', function() return '' end))

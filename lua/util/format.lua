@@ -26,6 +26,9 @@ end
 
 --- `formatexpr` going through conform when it is installed
 function M.formatexpr()
+  -- Formatters load the project's own config and plugins (prettier, eslint),
+  -- so a held directory is left to Vim's own `gq`, which a `1` asks for
+  if require('util.untrusted').held(0) then return 1 end
   if Plugin.has('conform.nvim') then return require('conform').formatexpr() end
   return vim.lsp.formatexpr({ timeout_ms = 3000 })
 end
@@ -122,6 +125,10 @@ function M.format(opts)
   opts = opts or {}
   local buf = opts.buf or vim.api.nvim_get_current_buf()
   if not (opts.force or M.enabled(buf)) then return end
+  -- Formatters load the project's own config and plugins (prettier, eslint),
+  -- so nothing formats a buffer under a directory still held untrusted. No
+  -- warning either, as a save there is meant to leave the file as it is.
+  if require('util.untrusted').held(buf) then return end
 
   local done = false
   for _, formatter in ipairs(M.resolve(buf)) do

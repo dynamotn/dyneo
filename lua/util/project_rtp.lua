@@ -41,10 +41,14 @@ local function is_trusted(directory)
 end
 
 local function setup_project_rtp()
-  local directory = require('util.root').get() .. '/.nvim'
+  local root = require('util.root').get()
+  local directory = root .. '/.nvim'
   -- Asked before the folder already on the runtimepath is kept: `:trust`
-  -- may have taken it back
-  local trusted = is_trusted(directory)
+  -- may have taken it back. A held root (a review's worktree) is not even
+  -- asked about, and its verdict is not kept, so it is asked about as usual
+  -- once let go.
+  local trusted = not require('util.untrusted').held(root)
+    and is_trusted(directory)
   if directory == project_rtp and trusted then return end
   if project_rtp then
     vim.opt.rtp:remove(project_rtp)

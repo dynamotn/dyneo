@@ -11,36 +11,50 @@ return vim.list_contains(DyNeo.enabled_languages, 'blade')
       {
         -- Artisan, routes, views and the rest of the project, as pickers
         'adalessa/laravel.nvim',
-        ft = language.filetypes,
         cmd = 'Laravel',
-        -- A PHP buffer loads both plugins only inside a Laravel project, one
-        -- with `artisan` at its root; any other PHP file leaves them be
+        -- A Blade buffer loads both plugins, and a PHP buffer only inside a
+        -- Laravel project, one with `artisan` at its root; any other PHP file
+        -- leaves them be. Laravel runs `artisan` as it loads and on
+        -- `BufEnter`, so a buffer under a held directory loads nothing until
+        -- the directory is let go.
         init = function()
           local group =
             vim.api.nvim_create_augroup('dyneo_laravel', { clear = true })
-          vim.api.nvim_create_autocmd('FileType', {
-            group = group,
-            pattern = 'php',
-            callback = function(args)
-              if not vim.fs.root(args.buf, 'artisan') then return end
-              vim.api.nvim_del_augroup_by_id(group)
+          local loaded = false
+          ---@param bufnr integer
+          local function load(bufnr)
+            local filetype = vim.bo[bufnr].filetype
+            if not vim.list_contains(filetypes, filetype) then return end
+            if filetype == 'php' and not vim.fs.root(bufnr, 'artisan') then
+              return
+            end
+            if require('util.untrusted').held(bufnr) then return end
+            pcall(vim.api.nvim_del_augroup_by_id, group)
+            if not loaded then
+              loaded = true
               require('lazy').load({
                 plugins = { 'laravel.nvim', 'blade-nav.nvim' },
               })
-              -- Their ftplugins, which this buffer has missed: the
-              -- `filetypeplugin` group only, not every `FileType` handler
-              vim.api.nvim_buf_call(
-                args.buf,
-                function()
-                  pcall(
-                    vim.api.nvim_exec_autocmds,
-                    'FileType',
-                    { group = 'filetypeplugin', pattern = 'php' }
-                  )
-                end
-              )
-            end,
+            end
+            -- Their ftplugins, which this buffer has missed: the
+            -- `filetypeplugin` group only, not every `FileType` handler
+            vim.api.nvim_buf_call(
+              bufnr,
+              function()
+                pcall(
+                  vim.api.nvim_exec_autocmds,
+                  'FileType',
+                  { group = 'filetypeplugin', pattern = filetype }
+                )
+              end
+            )
+          end
+          vim.api.nvim_create_autocmd('FileType', {
+            group = group,
+            pattern = filetypes,
+            callback = function(args) load(args.buf) end,
           })
+          require('util.untrusted').on_release('laravel', load)
         end,
         dependencies = {
           'MunifTanjim/nui.nvim',
@@ -102,7 +116,6 @@ return vim.list_contains(DyNeo.enabled_languages, 'blade')
       {
         -- `gf` on a view name, a route or a component
         'ricardoramirezr/blade-nav.nvim',
-        ft = language.filetypes,
         -- Kept off the `blink.cmp` spec: lazy.nvim keeps a single `init` per
         -- plugin, and this one would replace the labels set in completion.lua
         init = function()

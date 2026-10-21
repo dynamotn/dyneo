@@ -24,6 +24,17 @@ describe('plugins.lang.cmake', function()
     cleanup()
   end)
 
+  it('waits for a held directory, then loads for its buffers', function()
+    -- The module `init` registered its release starter with
+    local untrusted = require('util.untrusted')
+    h.write(dir .. '/proj/CMakeLists.txt')
+    untrusted.hold(dir .. '/proj')
+    h.buffer({ name = dir .. '/proj/src/main.cpp', filetype = 'cpp' })
+    assert.same({}, loaded)
+    untrusted.release(dir .. '/proj')
+    assert.same({ 'cmake-tools.nvim' }, loaded)
+  end)
+
   it('loads cmake-tools for a file of a CMake project', function()
     h.write(dir .. '/proj/CMakeLists.txt')
     h.buffer({ name = dir .. '/other/x.c', filetype = 'c' })

@@ -32,6 +32,75 @@ describe('plugins.lang.haskell', function()
     assert.is_true(spec('neovim/nvim-lspconfig').opts.setup.hls())
   end)
 
+  it('holds hls off a held buffer until released', function()
+    local started, executables = {}, { 'haskell-language-server' }
+    table.insert(
+      restores,
+      h.stub(
+        vim.fn,
+        'executable',
+        function(name) return vim.list_contains(executables, name) and 1 or 0 end
+      )
+    )
+    table.insert(
+      restores,
+      h.stub(package.loaded, 'haskell-tools', {
+        lsp = { start = function(bufnr) table.insert(started, bufnr) end },
+      })
+    )
+    table.insert(restores, function() vim.g.haskell_tools = nil end)
+    h.unload('util.untrusted')
+    local untrusted = require('util.untrusted')
+    table.insert(restores, function() untrusted.forget('/work/held') end)
+    vim.g.haskell_tools = { tools = { x = 1 } }
+    local tools = spec('mrcjkb/haskell-tools.nvim')
+    tools.init()
+    tools.config()
+    assert.are.equal(1, vim.g.haskell_tools.tools.x)
+    local auto_attach = vim.g.haskell_tools.hls.auto_attach
+    local held = h.buffer({ name = '/work/held/Main.hs', filetype = 'haskell' })
+    local free = h.buffer({ name = '/work/free/Main.hs', filetype = 'haskell' })
+    untrusted.hold('/work/held')
+    vim.api.nvim_set_current_buf(held)
+    assert.is_false(auto_attach())
+    vim.api.nvim_set_current_buf(free)
+    assert.is_true(auto_attach())
+    executables = {}
+    assert.is_false(auto_attach())
+    untrusted.release('/work/held')
+    assert.same({ held }, started)
+  end)
+
+  it('starts hls for a released cabal file only when hls reads it', function()
+    local started, supported = {}, false
+    table.insert(
+      restores,
+      h.stub(package.loaded, 'haskell-tools', {
+        lsp = { start = function(bufnr) table.insert(started, bufnr) end },
+      })
+    )
+    table.insert(
+      restores,
+      h.stub(package.loaded, 'haskell-tools.lsp.helpers', {
+        is_hls_version_with_cabal_support = function() return supported end,
+      })
+    )
+    h.unload('util.untrusted')
+    local untrusted = require('util.untrusted')
+    table.insert(restores, function() untrusted.forget('/work/held') end)
+    spec('mrcjkb/haskell-tools.nvim').config()
+    local cabal = h.buffer({ name = '/work/held/a.cabal', filetype = 'cabal' })
+    local project =
+      h.buffer({ name = '/work/held/cabal.project', filetype = 'cabalproject' })
+    untrusted.hold('/work/held')
+    untrusted.release('/work/held')
+    assert.same({}, started)
+    untrusted.hold('/work/held')
+    supported = true
+    untrusted.release('/work/held')
+    assert.same({ cabal, project }, started)
+  end)
+
   it('opens the REPL of the package or of the buffer', function()
     local calls = {}
     table.insert(

@@ -32,12 +32,24 @@ describe('plugins.lang.blade', function()
   end)
 
   it('loads on Blade templates, not on every PHP file', function()
-    for _, name in ipairs({
-      'adalessa/laravel.nvim',
-      'ricardoramirezr/blade-nav.nvim',
-    }) do
-      assert.same({ 'blade' }, spec(name).ft)
-    end
+    h.buffer({ name = dir .. '/lib/x.php', filetype = 'php' })
+    assert.same({}, loaded)
+    h.buffer({ name = dir .. '/lib/a.blade.php', filetype = 'blade' })
+    assert.same({ 'laravel.nvim', 'blade-nav.nvim' }, loaded)
+  end)
+
+  it('waits for a held directory, then loads for its buffers', function()
+    -- The module `init` registered its release starter with
+    local untrusted = require('util.untrusted')
+    h.write(dir .. '/app/artisan')
+    untrusted.hold(dir .. '/app')
+    local php =
+      h.buffer({ name = dir .. '/app/routes/web.php', filetype = 'php' })
+    h.buffer({ name = dir .. '/app/views/a.blade.php', filetype = 'blade' })
+    assert.same({}, loaded)
+    vim.api.nvim_set_current_buf(php)
+    untrusted.release(dir .. '/app')
+    assert.same({ 'laravel.nvim', 'blade-nav.nvim' }, loaded)
   end)
 
   it('labels the completion sources of both plugins', function()

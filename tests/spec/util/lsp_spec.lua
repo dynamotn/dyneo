@@ -93,6 +93,29 @@ describe('util.lsp', function()
     end)
   end)
 
+  it('formats nothing under a held directory', function()
+    local dir, cleanup = h.tmpdir()
+    h.unload('util.untrusted')
+    local untrusted = require('util.untrusted')
+    local seen = 0
+    table.insert(
+      restores,
+      h.stub(package.loaded, 'conform', {
+        format = function() seen = seen + 1 end,
+      })
+    )
+    local bufnr = h.buffer({ name = dir .. '/a.lua' })
+    untrusted.hold(dir)
+    lsp.format({ bufnr = bufnr })
+    vim.api.nvim_set_current_buf(bufnr)
+    lsp.format()
+    assert.are.equal(0, seen)
+    untrusted.release(dir)
+    lsp.format({ bufnr = bufnr })
+    assert.are.equal(1, seen)
+    cleanup()
+  end)
+
   it('formats through the LSP itself without conform', function()
     local seen
     table.insert(restores, h.stub(package.loaded, 'conform', nil))

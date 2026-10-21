@@ -135,6 +135,10 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
           end
           ---@param bufnr integer
           local function attach_jdtls(bufnr)
+            -- jdtls imports the build (Gradle scripts, Maven plugins), so not
+            -- under a directory still held untrusted; released, it starts
+            -- from the `on_release` below
+            if require('util.untrusted').held(bufnr) then return end
             local fname = vim.api.nvim_buf_get_name(bufnr)
 
             -- Configuration can be augmented and overridden by opts.jdtls
@@ -168,6 +172,13 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
             pattern = language.filetypes,
             callback = function(args) attach_jdtls(args.buf) end,
           })
+          require('util.untrusted').on_release('jdtls', function(bufnr)
+            if
+              vim.list_contains(language.filetypes, vim.bo[bufnr].filetype)
+            then
+              attach_jdtls(bufnr)
+            end
+          end)
 
           -- The clients whose main classes were scanned: the scan walks the
           -- whole workspace, so it runs once per server, not per buffer

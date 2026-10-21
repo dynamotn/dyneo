@@ -23,6 +23,40 @@ return vim.list_contains(DyNeo.enabled_languages, 'dart')
           -- `:FlutterRun` through nvim-dap, so breakpoints hold
           debugger = { enabled = true },
         },
+        config = function(_, opts)
+          require('flutter-tools').setup(opts)
+          -- Its ftplugin starts dartls through `attach`, with no setting to
+          -- turn a buffer down: wrapped, so a buffer under a directory still
+          -- held untrusted gets no server, whose analyzer plugins are the
+          -- project's code. The original is kept, so configuring again
+          -- (`:Lazy reload`) does not wrap the wrapper.
+          local lsp = require('flutter-tools.lsp')
+          local attach = lsp.dy_attach or lsp.attach
+          lsp.dy_attach = attach
+          lsp.attach = function(...)
+            if require('util.untrusted').held(0) then return end
+            return attach(...)
+          end
+          -- It runs `flutter pub get` when a pubspec is saved, which runs
+          -- the project's build hooks. Its autocmd, `:FlutterPubGet` and its
+          -- menu all look `pub_get` up on the module (the command when the
+          -- first Dart buffer enters), so wrapping the field covers them.
+          local commands = require('flutter-tools.commands')
+          local pub_get = commands.dy_pub_get or commands.pub_get
+          commands.dy_pub_get = pub_get
+          commands.pub_get = function(...)
+            if require('util.untrusted').held(0) then return end
+            return pub_get(...)
+          end
+          require('util.untrusted').on_release('flutter-tools', function(bufnr)
+            if
+              vim.list_contains(language.filetypes, vim.bo[bufnr].filetype)
+            then
+              -- It attaches to the current buffer
+              vim.api.nvim_buf_call(bufnr, function() lsp.attach() end)
+            end
+          end)
+        end,
       },
       {
         -- `flutter-tools` starts `dartls` with its own settings, so keep

@@ -27,6 +27,35 @@ describe('plugins.executor.formatting', function()
     return by_ft['*'](bufnr)
   end
 
+  it('formats injected languages only outside a held directory', function()
+    local dir, cleanup = h.tmpdir()
+    h.unload('util.untrusted')
+    local untrusted = require('util.untrusted')
+    local seen = 0
+    local restore = h.stub(package.loaded, 'conform', {
+      format = function() seen = seen + 1 end,
+    })
+    local key
+    for _, spec in
+      ipairs(dofile(h.root .. '/lua/plugins/executor/formatting.lua'))
+    do
+      if spec[1] == 'stevearc/conform.nvim' then
+        for _, k in ipairs(spec.keys) do
+          if k[1] == '<leader>cF' then key = k end
+        end
+      end
+    end
+    vim.api.nvim_set_current_buf(h.buffer({ name = dir .. '/a.md' }))
+    untrusted.hold(dir)
+    key[2]()
+    assert.are.equal(0, seen)
+    untrusted.forget(dir)
+    key[2]()
+    assert.are.equal(1, seen)
+    restore()
+    cleanup()
+  end)
+
   it('leaves a filetype without a formatter to its language server', function()
     -- `formatting is left to the language server` in config.languages
     assert.same({ lsp_format = 'last' }, by_ft.astro)

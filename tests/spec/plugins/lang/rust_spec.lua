@@ -107,6 +107,36 @@ describe('plugins.lang.rust', function()
     end
   )
 
+  it('holds rust-analyzer off a held buffer until released', function()
+    local started = {}
+    table.insert(
+      restores,
+      h.stub(package.loaded, 'rustaceanvim.lsp', {
+        start = function(bufnr) table.insert(started, bufnr) end,
+      })
+    )
+    h.unload('util.untrusted')
+    local untrusted = require('util.untrusted')
+    table.insert(restores, function() untrusted.forget('/work/held') end)
+    executables = { 'rust-analyzer' }
+    local rustaceanvim = spec('mrcjkb/rustaceanvim')
+    rustaceanvim.config(nil, rustaceanvim.opts)
+    local auto_attach = rustaceanvim.opts.server.auto_attach
+    local held = h.buffer({ name = '/work/held/main.rs', filetype = 'rust' })
+    local free = h.buffer({ name = '/work/free/main.rs', filetype = 'rust' })
+    local scratch = h.buffer({ filetype = 'rust' })
+    vim.bo[scratch].buftype = 'nofile'
+    untrusted.hold('/work/held')
+    assert.is_false(auto_attach(held))
+    assert.is_true(auto_attach(free))
+    assert.is_false(auto_attach(scratch))
+    executables = {}
+    assert.is_false(auto_attach(free))
+    executables = { 'rust-analyzer' }
+    untrusted.release('/work/held')
+    assert.same({ held }, started)
+  end)
+
   it('tests through rustaceanvim only where cargo is', function()
     local opts = {}
     spec('nvim-neotest/neotest').opts(nil, opts)
