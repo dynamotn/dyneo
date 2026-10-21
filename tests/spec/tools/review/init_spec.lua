@@ -596,6 +596,89 @@ describe('tools.review', function()
       assert.equals('late', saved.state.drafts[1].body)
     end)
 
+    --- Open the edit float on the draft at line 2 and hand back its buffer
+    local function edit(draft)
+      review.current().state.drafts = { draft }
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+      review.ai_action('edit')
+      return vim.api.nvim_get_current_buf()
+    end
+
+    it('shows the suggestion of an AI draft when editing it', function()
+      local editor = edit({
+        id = 'a1',
+        origin = 'ai',
+        state = 'pending',
+        path = 'src/auth.lua',
+        side = 'new',
+        line = 2,
+        body = 'Quote it.',
+        suggestion = { 's = "```"' },
+      })
+      -- Fenced longer than any run of backticks it holds
+      assert.same({
+        'Quote it.',
+        '',
+        '````suggestion',
+        's = "```"',
+        '````',
+      }, vim.api.nvim_buf_get_lines(editor, 0, -1, false))
+      vim.api.nvim_buf_set_lines(
+        editor,
+        0,
+        -1,
+        false,
+        { 'Quote it twice.', '', '````suggestion', 's = 1', '````' }
+      )
+      vim.cmd('write')
+      local draft = review.current().state.drafts[1]
+      assert.equals('Quote it twice.', draft.body)
+      assert.same({ 's = 1' }, draft.suggestion)
+      assert.equals('edited', draft.state)
+    end)
+
+    it('drops a suggestion taken out of the float', function()
+      local editor = edit({
+        id = 'a1',
+        origin = 'ai',
+        state = 'pending',
+        path = 'src/auth.lua',
+        side = 'new',
+        line = 2,
+        body = 'Quote it.',
+        suggestion = { 'x' },
+      })
+      vim.api.nvim_buf_set_lines(editor, 0, -1, false, { 'Only words.' })
+      vim.cmd('write')
+      local draft = review.current().state.drafts[1]
+      assert.equals('Only words.', draft.body)
+      assert.is_nil(draft.suggestion)
+    end)
+
+    it('keeps a suggestion typed into a draft of mine', function()
+      local editor = edit({
+        id = 'u1',
+        origin = 'user',
+        state = 'ready',
+        path = 'src/auth.lua',
+        side = 'new',
+        line = 2,
+        body = 'mine',
+      })
+      assert.same({ 'mine' }, vim.api.nvim_buf_get_lines(editor, 0, -1, false))
+      vim.api.nvim_buf_set_lines(
+        editor,
+        0,
+        -1,
+        false,
+        { 'mine', '```suggestion', 'z', '```' }
+      )
+      vim.cmd('write')
+      local draft = review.current().state.drafts[1]
+      assert.equals('mine', draft.body)
+      assert.same({ 'z' }, draft.suggestion)
+    end)
+
     it('stores an edit finished after its review closed', function()
       local draft = {
         id = 'a1',

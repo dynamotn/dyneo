@@ -37,21 +37,31 @@ local function pick_items(title, items, format)
   })
 end
 
+--- How the drafts list names each origin
+local ORIGINS = { ai = 'AI', user = 'me', forge = 'forge' }
+
+--- The columns of a draft in the drafts list: origin, state, severity,
+--- place, and its first line, saying when it carries a suggestion
+---@param d DyReviewDraft
+---@return string[]
+function M.draft_cells(d)
+  local first = vim.split(d.body or '', '\n')[1] or ''
+  return {
+    ORIGINS[d.origin] or d.origin,
+    d.state,
+    d.severity or '',
+    ('%s:%d'):format(d.path, d.line),
+    first .. (d.suggestion and ' + suggestion' or ''),
+  }
+end
+
 --- Every draft, with its origin and state
 function M.drafts()
   local s = session.need()
   if not s then return end
-  local origins = { ai = 'AI', user = 'me', forge = 'forge' }
   local items = {}
   for _, d in ipairs(s.state.drafts) do
-    local first = vim.split(d.body or '', '\n')[1] or ''
-    local cells = {
-      origins[d.origin] or d.origin,
-      d.state,
-      d.severity or '',
-      ('%s:%d'):format(d.path, d.line),
-      first,
-    }
+    local cells = M.draft_cells(d)
     items[#items + 1] = {
       text = table.concat(cells, ' '),
       cells = cells,

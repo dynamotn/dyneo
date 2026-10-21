@@ -70,6 +70,7 @@ end
 ---@field replies integer
 ---@field resolutions integer
 ---@field imported integer Drafts pending on the forge already
+---@field suggestions integer Drafts going out with a suggested change
 ---@field verdict? { id: string, label: string }
 ---@field body? string
 
@@ -77,6 +78,9 @@ end
 ---@param plan DyReviewSendPlan
 local function tally(plan)
   for _, draft in ipairs(plan.unposted) do
+    if draft.suggestion and draft.origin ~= 'forge' then
+      plan.suggestions = plan.suggestions + 1
+    end
     if draft.origin == 'forge' then
       plan.imported = plan.imported + 1
     elseif draft.reply_to then
@@ -153,6 +157,7 @@ local function build(s, cb)
     replies = 0,
     resolutions = 0,
     imported = 0,
+    suggestions = 0,
   }
   for _, draft in ipairs(s.state.drafts) do
     if draft.state == 'dropped' or draft.done then
@@ -221,6 +226,12 @@ function M.summary(s, plan)
       count(plan.resolutions, 'resolution')
     ),
   }
+  if plan.suggestions > 0 then
+    lines[#lines + 1] = ('%s %s a suggested change'):format(
+      count(plan.suggestions, 'draft'),
+      plan.suggestions == 1 and 'carries' or 'carry'
+    )
+  end
   if plan.imported > 0 then
     lines[#lines + 1] = ('%s already pending on %s %s published as %s'):format(
       count(plan.imported, 'draft'),

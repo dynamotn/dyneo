@@ -1856,7 +1856,12 @@ In either side of the diff:
 A draft is drawn as a sign and end-of-line text.  One written by the AI pass
 has its own sign, colour and an `AI` label with its state; the marker lives
 in the editor only, a comment you send carries no AI label.  A pending AI
-draft is never sent: keep it, edit it (which keeps it) or drop it.  Drafts
+draft is never sent: keep it, edit it (which keeps it) or drop it.  A
+draft carrying a suggested change says `+ suggestion` in its label and in
+the drafts list, and the submit confirmation counts them.  Editing a draft
+shows its body and its suggestion block: what the float holds on `:w` is
+what is kept, so taking the block out drops the suggestion and typing one
+in adds it.  Drafts
 already on the forge, imported when the review opens, are read-only here.
 A comment on a line outside the diff is sent as a comment on the file naming
 the line.  Drafts and the files you marked live in the state directory and

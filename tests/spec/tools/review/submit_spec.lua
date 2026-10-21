@@ -359,6 +359,25 @@ describe('tools.review.submit', function()
     assert.same({ 'old', 'a', 'r', 'x', 'f' }, sent[1].ids)
   end)
 
+  it('counts the drafts carrying a suggestion', function()
+    s.state.drafts = {
+      draft({ id = 'a', suggestion = { 'x' } }),
+      draft({
+        id = 'b',
+        line = 3,
+        origin = 'ai',
+        state = 'kept',
+        suggestion = { 'y' },
+      }),
+      draft({ id = 'c', line = 4 }),
+    }
+    submit.run(s)
+    assert.matches('2 drafts carry a suggested change', confirms[1], 1, true)
+    s.state.drafts = { draft({ id = 'd', suggestion = { 'z' } }) }
+    again()
+    assert.matches('1 draft carries a suggested change', confirms[2], 1, true)
+  end)
+
   it('writes and sends nothing when the confirmation is cancelled', function()
     s.state.drafts = { draft({ id = 'a', line = 40 }) }
     confirm_with({ 2 })

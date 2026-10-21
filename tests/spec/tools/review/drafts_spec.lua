@@ -273,6 +273,21 @@ describe('tools.review.drafts', function()
       assert.truthy(m[4][4].virt_text[1][1]:find('2', 1, true))
     end)
 
+    it('says a draft carries a suggestion', function()
+      local buf = h.buffer({ lines = { 'a', 'b' } })
+      local state = {
+        reviewed = {},
+        drafts = {
+          ai({ line = 1, suggestion = { 'x' } }),
+          user({ line = 2, body = 'mine', suggestion = { 'y' } }),
+        },
+      }
+      drafts.draw(buf, 'a.lua', 'new', state, {})
+      local m = marks(buf)
+      assert.truthy(m[1][4].virt_text[1][1]:find('+ suggestion', 1, true))
+      assert.truthy(m[2][4].virt_text[1][1]:find('+ suggestion', 1, true))
+    end)
+
     it('clears earlier marks and ignores an invalid buffer', function()
       local buf = h.buffer({ lines = { 'a' } })
       local state = { reviewed = {}, drafts = { ai() } }

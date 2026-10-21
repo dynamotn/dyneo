@@ -181,11 +181,23 @@ local function first_line(body)
   return line
 end
 
+--- What a draft's label and list entry add when it carries a suggestion
+M.SUGGESTION_MARK = ' + suggestion'
+
+--- The first line of a draft's body, and whether it carries a suggestion,
+--- for a label
+---@param draft DyReviewDraft
+---@return string
+function M.summary(draft)
+  return first_line(draft.body)
+    .. (draft.suggestion and M.SUGGESTION_MARK or '')
+end
+
 --- Sign, label and group of a draft
 ---@param draft DyReviewDraft
 ---@return string sign, string label, string group, string sign_group
 local function style(draft)
-  local text = first_line(draft.body)
+  local text = M.summary(draft)
   if draft.origin == 'ai' then
     local pending = draft.state == 'pending'
     local group = pending and M.HL.ai_pending or M.HL.ai

@@ -158,18 +158,61 @@ local function editor(title, lines, on_save)
   })
 end
 
---- The body and the suggested lines of an editor's text
+--- A fence of backticks longer than any run of them in `lines`
+---@param lines string[]
+---@return string
+local function fence_for(lines)
+  local longest = 2
+  for _, line in ipairs(lines) do
+    for run in line:gmatch('`+') do
+      longest = math.max(longest, #run)
+    end
+  end
+  return ('`'):rep(longest + 1)
+end
+
+--- The lines of `suggestion` as a fenced suggestion block
+---@param suggestion string[]
+---@return string[]
+local function suggestion_block(suggestion)
+  local fence = fence_for(suggestion)
+  local block = { fence .. 'suggestion' }
+  vim.list_extend(block, suggestion)
+  block[#block + 1] = fence
+  return block
+end
+
+--- What an edit float starts from: the body, then the suggestion the draft
+--- carries, so nothing is sent that was not seen
+---@param draft DyReviewDraft
+---@return string[]
+local function seed(draft)
+  local lines = vim.split(draft.body or '', '\n', { plain = true })
+  if draft.suggestion then
+    if #lines == 1 and lines[1] == '' then lines = {} end
+    if #lines > 0 then lines[#lines + 1] = '' end
+    vim.list_extend(lines, suggestion_block(draft.suggestion))
+  end
+  return lines
+end
+
+--- The body and the suggested lines of an editor's text: the first
+--- suggestion block, closed by a fence at least as long as it opened with
 ---@param lines string[]
 ---@return string body
 ---@return string[]? suggestion
 local function parse(lines)
-  local body, suggestion, inside = {}, nil, false
+  local body, suggestion, fence = {}, nil, nil
   for _, line in ipairs(lines) do
-    if not inside and not suggestion and line:match('^```suggestion%s*$') then
-      inside, suggestion = true, {}
-    elseif inside and line:match('^```%s*$') then
-      inside = false
-    elseif inside then
+    local open = not fence
+      and not suggestion
+      and line:match('^(```+)suggestion%s*$')
+    local close = fence and line:match('^(```+)%s*$')
+    if open then
+      fence, suggestion = open, {}
+    elseif close and #close >= #fence then
+      fence = nil
+    elseif fence then
       suggestion[#suggestion + 1] = line
     else
       body[#body + 1] = line
@@ -208,12 +251,13 @@ function M.comment(opts)
     local initial = {}
     if opts.suggest then
       local first = start_line or line
-      initial = { '', '```suggestion' }
+      initial = { '' }
       vim.list_extend(
         initial,
-        vim.api.nvim_buf_get_lines(bufnr, first - 1, line, false)
+        suggestion_block(
+          vim.api.nvim_buf_get_lines(bufnr, first - 1, line, false)
+        )
       )
-      table.insert(initial, '```')
     end
     editor('Comment', initial, function(text)
       fields.body, fields.suggestion = parse(text)
@@ -333,13 +377,16 @@ function M.ai_action(action)
       return notify('A draft pending on the forge cannot be edited here', WARN)
     end
     local id = draft.id
-    return editor('Edit', vim.split(draft.body, '\n'), function(text)
-      local body = parse(text)
+    return editor('Edit', seed(draft), function(text)
+      local body, suggestion = parse(text)
       apply(s, function(state)
         for _, d in ipairs(state.drafts) do
           if d.id == id then
             local ok, why = drafts.set_body(d, body)
-            if not ok then notify(why or 'Cannot edit', WARN) end
+            if not ok then return notify(why or 'Cannot edit', WARN) end
+            -- What the float showed is what is kept: a block taken out
+            -- drops the suggestion, one typed in adds it
+            d.suggestion = suggestion
             return
           end
         end
