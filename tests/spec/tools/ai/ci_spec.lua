@@ -121,6 +121,32 @@ describe('tools.ai.ci', function()
     assert.is_truthy(notes[1]:find('No job failed', 1, true))
   end)
 
+  it('names what a run is of when it has no branch', function()
+    pipeline.jobs[2].conclusion = 'success'
+    table.insert(
+      restores,
+      h.stub(
+        ci,
+        'context',
+        function(_, on_context)
+          on_context({
+            dir = dir,
+            file = workflow,
+            kind = 'argo',
+            where = 'ctx/ns',
+          })
+        end
+      )
+    )
+    table.insert(
+      restores,
+      h.stub(ci, 'fetch_for', function(_, on_done) on_done(pipeline) end)
+    )
+    ai_ci.explain()
+    wait_for(function() return #notes > 0 end)
+    assert.equals('No job failed in the last run on ctx/ns', notes[1])
+  end)
+
   it('refuses a log with a secret in it', function()
     logs[2] = 'token=ghp_' .. ('a'):rep(36)
     ai_ci.explain()

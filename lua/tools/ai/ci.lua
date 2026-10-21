@@ -247,7 +247,9 @@ function M.explain(bufnr)
       local failed = M.failed(pipeline)
       if #failed == 0 then
         return notify(
-          ('No job failed in the last run on %s'):format(ctx.branch)
+          ('No job failed in the last run on %s'):format(
+            ctx.branch or ctx.where or '?'
+          )
         )
       end
       if #failed == 1 then
