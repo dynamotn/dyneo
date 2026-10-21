@@ -1,0 +1,9 @@
+{"data": {"project": {"mergeRequests": {
+  "pageInfo": {"hasNextPage": false, "endCursor": null},
+  "nodes": [
+    {"iid": "8", "title": "From a fork", "description": null,
+     "webUrl": "u8", "state": "opened", "sourceBranch": "fix", "targetBranch": "main",
+     "sourceProjectId": 5, "targetProjectId": 3,
+     "author": null, "reviewers": {"nodes": [{"username": "carol"}]},
+     "diffRefs": {"baseSha": "b8", "headSha": "a8", "startSha": "s8"}}
+  ]}}}}

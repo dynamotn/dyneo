@@ -24,7 +24,7 @@ local WARN, ERROR = vim.log.levels.WARN, vim.log.levels.ERROR
 M.REF_PREFIX = 'refs/dyneo/review/'
 
 --- The forge as the trust question names it
-M.FORGE_NAMES = { github = 'GitHub' }
+M.FORGE_NAMES = { github = 'GitHub', gitlab = 'GitLab' }
 
 ---@class DyReviewSession
 ---@field remote DyForgeRemote

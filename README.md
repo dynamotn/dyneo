@@ -176,7 +176,7 @@ below follow the sections of `:help dyneo`.
   files nobody owns. `:DyHistory` · `:DyOwners`
 - **Forges & trackers** — GitHub (Octo), GitLab merge requests, CI checks,
   Jira issues to branches and worklogs. `<leader>ph` `pl` `pc` `pj`
-- **Pull request review** — GitHub pull requests in one UI: triage panel,
+- **Pull request review** — GitHub and GitLab in one UI: triage panel,
   drafts, resumable submit. `:DyReview` `<leader>pv`
 - **Previews** — D2 diagrams inline on kitty-graphics terminals, Markdown,
   Typst. `<leader>cp`

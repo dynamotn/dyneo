@@ -539,7 +539,7 @@ local function requirements()
   -- only worth knowing about, not a warning
   local on_demand = {
     infracost = '`:DyTfPlan cost`',
-    glab = '`:DyCiStatus` and `:DyCiLint` on GitLab',
+    glab = '`:DyCiStatus`, `:DyCiLint` and `:DyReview` on GitLab',
     prefect = '`:DyCiStatus` on a Prefect flow (`uv tool install prefect`, or in the project `.venv`)',
     az = '`:DyCiStatus` and `:DyProject` on Azure DevOps (with its `azure-devops` extension)',
     jq = '`:DyQuery` on JSON, and the jq filter of `:DyLog`',

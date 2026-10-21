@@ -14,6 +14,7 @@ local M = {}
 ---@field head_ref string
 ---@field base_sha string
 ---@field head_sha string
+---@field start_sha? string          GitLab: the base branch's head the diff starts from
 ---@field fetch string[]            refspecs giving head (and base)
 ---@field fork boolean
 ---@field requested? boolean        my review is requested
@@ -52,7 +53,10 @@ local M = {}
 ---@field import_id? fun(posted: string): string? The id `pending` gives what a posted draft became, so it is not imported twice
 
 --- The module of each forge kind's adapter
-M.ADAPTERS = { github = 'tools.review.forge.github' }
+M.ADAPTERS = {
+  github = 'tools.review.forge.github',
+  gitlab = 'tools.review.forge.gitlab',
+}
 
 --- The adapter answering for `remote`'s forge
 ---@param remote DyForgeRemote

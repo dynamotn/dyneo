@@ -298,6 +298,7 @@ describe('tools.review', function()
 
     for _, case in ipairs({
       { kind = 'github', posted = '302/501', comment = 501 },
+      { kind = 'gitlab', posted = 'draft:61', comment = 61 },
     }) do
       it(
         'imports a draft posted from here only once on ' .. case.kind,

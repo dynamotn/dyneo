@@ -1,0 +1,36 @@
+[
+  {"id": "d1", "individual_note": false, "notes": [
+    {"id": 101, "type": "DiffNote", "system": false, "body": "Why?",
+     "author": {"id": 7, "username": "alice"}, "created_at": "2026-10-01T10:00:00Z",
+     "resolvable": true, "resolved": false,
+     "position": {"position_type": "text", "old_path": "a.lua", "new_path": "a.lua",
+       "old_line": null, "new_line": 10,
+       "line_range": {"start": {"type": "new", "old_line": null, "new_line": 8},
+                      "end": {"type": "new", "old_line": null, "new_line": 10}}}},
+    {"id": 102, "type": "DiffNote", "system": false, "body": "Because.",
+     "author": null, "created_at": "2026-10-01T11:00:00Z",
+     "resolvable": true, "resolved": false,
+     "position": {"position_type": "text", "old_path": "a.lua", "new_path": "a.lua", "new_line": 10}}
+  ]},
+  {"id": "d2", "individual_note": false, "notes": [
+    {"id": 201, "type": "DiffNote", "system": false, "body": "Gone now.",
+     "author": {"id": 8, "username": "bob"}, "created_at": "2026-10-02T10:00:00Z",
+     "resolvable": true, "resolved": true,
+     "position": {"position_type": "text", "old_path": "b.lua", "new_path": "b.lua",
+       "old_line": 4, "new_line": null, "line_range": null}}
+  ]},
+  {"id": "d3", "individual_note": false, "notes": [
+    {"id": 301, "type": "DiffNote", "system": false, "body": "Whole file.",
+     "author": {"id": 9, "username": "carol"}, "created_at": "2026-10-03T10:00:00Z",
+     "resolvable": true, "resolved": false,
+     "position": {"position_type": "file", "old_path": "c.lua", "new_path": "c.lua"}}
+  ]},
+  {"id": "d4", "individual_note": true, "notes": [
+    {"id": 401, "type": null, "system": true, "body": "added 1 commit",
+     "author": {"id": 9, "username": "carol"}, "created_at": "2026-10-03T11:00:00Z"}
+  ]},
+  {"id": "d5", "individual_note": true, "notes": [
+    {"id": 501, "type": null, "system": false, "body": "Looks fine overall.",
+     "author": {"id": 9, "username": "carol"}, "created_at": "2026-10-03T12:00:00Z"}
+  ]}
+]

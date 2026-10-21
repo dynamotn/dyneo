@@ -1793,9 +1793,9 @@ section summed.
 9.16 Pull request review                                       *dyneo-review*
 
 `:DyReview` (|:DyReview|, under `<leader>pv`) reviews a pull request of
-GitHub in one place: a panel of the files changed, the diff beside it,
-your draft comments and the threads already there.  Use it for a review
-you mean to send as one piece; the forge plugins of
+GitHub or GitLab in one place: a panel of the files changed, the diff
+beside it, your draft comments and the threads already there.  Use it for
+a review you mean to send as one piece; the forge plugins of
 |dyneo-integrations| stay for browsing and chores.
 
 Opening ~
@@ -1895,15 +1895,20 @@ and the same body or verdict said again on a new head goes out again.
 Verdicts:
 
     GitHub        Approve, Request changes, Comment
+    GitLab        Approve, Revoke approval, Comment
 
 GitHub keeps your comments in one pending review, submitted with the
 verdict; resolving a thread is public at once, before the review is
-submitted.  A suggested change is sent as a suggestion block.
+submitted.  GitLab keeps them as draft notes and publishes every draft note
+of yours on the merge request in one call, so drafts made on the web are
+imported and must match what you confirm.  A suggested change is a
+suggestion block on GitHub and GitLab.
 
 Requirements and state ~
-git 2.40 or newer, codediff.nvim and `gh`.  `:checkhealth dyneo` reports
-them.  State lives in `stdpath('state')/dyneo/review/` (directories 0700,
-files 0600), and the commits it needs in private refs `refs/dyneo/review/`.
+git 2.40 or newer, codediff.nvim, and `gh` or `glab` for the forge in use.
+`:checkhealth dyneo` reports them.  State lives in
+`stdpath('state')/dyneo/review/` (directories 0700, files 0600), and the
+commits it needs in private refs `refs/dyneo/review/`.
 
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
