@@ -1,0 +1,40 @@
+{
+  "count": 3,
+  "value": [
+    {
+      "pullRequestId": 7,
+      "status": "active",
+      "title": "Add a parser",
+      "description": "Parses things.",
+      "createdBy": {"displayName": "Alice"},
+      "sourceRefName": "refs/heads/feat/parser",
+      "targetRefName": "refs/heads/main",
+      "mergeStatus": "succeeded",
+      "lastMergeSourceCommit": {"commitId": "a7a7a7"},
+      "lastMergeTargetCommit": {"commitId": "b7b7b7"},
+      "lastMergeCommit": {"commitId": "m7m7m7"},
+      "reviewers": [{"id": "11111111-aaaa-bbbb-cccc-000000000001", "vote": 0}]
+    },
+    {
+      "pullRequestId": 8,
+      "status": "active",
+      "title": "From a fork",
+      "createdBy": null,
+      "sourceRefName": "refs/heads/fix",
+      "targetRefName": "refs/heads/main",
+      "mergeStatus": "conflicts",
+      "lastMergeSourceCommit": {"commitId": "a8a8a8"},
+      "lastMergeTargetCommit": {"commitId": "b8b8b8"},
+      "forkSource": {"name": "refs/heads/fix", "repository": {"id": "f1", "name": "web-fork"}},
+      "reviewers": []
+    },
+    {
+      "pullRequestId": 9,
+      "status": "active",
+      "title": "Merge not computed yet",
+      "sourceRefName": "refs/heads/new",
+      "targetRefName": "refs/heads/main",
+      "mergeStatus": "queued"
+    }
+  ]
+}

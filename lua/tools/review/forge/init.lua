@@ -19,6 +19,7 @@ local M = {}
 ---@field fork boolean
 ---@field requested? boolean        my review is requested
 ---@field read_only? string         why nothing can be sent, when it cannot
+---@field unfetchable? string       why the head cannot be fetched, when it cannot: nothing to show, so it does not open
 
 ---@class DyReviewComment
 ---@field author string
@@ -56,6 +57,7 @@ local M = {}
 M.ADAPTERS = {
   github = 'tools.review.forge.github',
   gitlab = 'tools.review.forge.gitlab',
+  azure = 'tools.review.forge.azure',
 }
 
 --- The adapter answering for `remote`'s forge

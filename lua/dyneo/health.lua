@@ -541,7 +541,7 @@ local function requirements()
     infracost = '`:DyTfPlan cost`',
     glab = '`:DyCiStatus`, `:DyCiLint` and `:DyReview` on GitLab',
     prefect = '`:DyCiStatus` on a Prefect flow (`uv tool install prefect`, or in the project `.venv`)',
-    az = '`:DyCiStatus` and `:DyProject` on Azure DevOps (with its `azure-devops` extension)',
+    az = '`:DyCiStatus`, `:DyProject` and `:DyReview` on Azure DevOps (with its `azure-devops` extension)',
     jq = '`:DyQuery` on JSON, and the jq filter of `:DyLog`',
     yq = '`:DyQuery` on YAML, `:DyOpenApiRequest` and `:DyArchitecture`',
     openssl = '`:DyInspect` and `:DyCert` on a certificate, and `:DyCert host`',

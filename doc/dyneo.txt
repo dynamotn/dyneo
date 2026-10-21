@@ -1793,9 +1793,9 @@ section summed.
 9.16 Pull request review                                       *dyneo-review*
 
 `:DyReview` (|:DyReview|, under `<leader>pv`) reviews a pull request of
-GitHub or GitLab in one place: a panel of the files changed, the diff
-beside it, your draft comments and the threads already there.  Use it for
-a review you mean to send as one piece; the forge plugins of
+GitHub, GitLab or Azure DevOps in one place: a panel of the files changed,
+the diff beside it, your draft comments and the threads already there.  Use
+it for a review you mean to send as one piece; the forge plugins of
 |dyneo-integrations| stay for browsing and chores.
 
 Opening ~
@@ -1803,10 +1803,12 @@ Opening ~
 requests of every forge remote of the repository.  `<leader>pvb`
 (`:DyReview branch`) opens the one of the branch, looked up on the tracked
 remote, and asks which remote when the branch tracks none.  A pull request
-pushed to since you last opened it reopens on its new head.  A pull request
-is open in one Neovim at a time: a lock beside its state names the process
-holding it, and another Neovim refuses to open it until that one closes the
-review or exits.  A lock left by a Neovim no longer running is taken over.
+pushed to since you last opened it reopens on its new head.  One whose code
+cannot be fetched (the source branch lives in a fork, say) is opened for
+reading only and says why; sending is refused.  A pull request is open in
+one Neovim at a time: a lock beside its state names the process holding
+it, and another Neovim refuses to open it until that one closes the review
+or exits.  A lock left by a Neovim no longer running is taken over.
 
 Subcommands ~
 `pick`      Pick a pull request.                         `<leader>pvv`
@@ -1896,19 +1898,24 @@ Verdicts:
 
     GitHub        Approve, Request changes, Comment
     GitLab        Approve, Revoke approval, Comment
+    Azure DevOps  Approve, Approve with suggestions, Wait for author,
+                  Reject, No vote
 
 GitHub keeps your comments in one pending review, submitted with the
 verdict; resolving a thread is public at once, before the review is
 submitted.  GitLab keeps them as draft notes and publishes every draft note
 of yours on the merge request in one call, so drafts made on the web are
-imported and must match what you confirm.  A suggested change is a
-suggestion block on GitHub and GitLab.
+imported and must match what you confirm.  Azure DevOps has no drafts: each
+comment is published as it is sent, the verdict is your vote (10, 5, 0, -5,
+-10), and the thread of the review body is closed unless the vote asks the
+author to act.  A suggested change is a suggestion block on GitHub and
+GitLab, and a code block on Azure DevOps, which has no such syntax.
 
 Requirements and state ~
-git 2.40 or newer, codediff.nvim, and `gh` or `glab` for the forge in use.
-`:checkhealth dyneo` reports them.  State lives in
-`stdpath('state')/dyneo/review/` (directories 0700, files 0600), and the
-commits it needs in private refs `refs/dyneo/review/`.
+git 2.40 or newer, codediff.nvim, `gh`, `glab`, or `az` with its
+`azure-devops` extension, for the forge in use.  `:checkhealth dyneo` reports
+them.  State lives in `stdpath('state')/dyneo/review/` (directories 0700,
+files 0600), and the commits it needs in private refs `refs/dyneo/review/`.
 
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
