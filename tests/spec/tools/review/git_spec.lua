@@ -441,6 +441,34 @@ describe('tools.review.git', function()
       clean()
     end)
 
+    it('fetches no submodule, writes no FETCH_HEAD, runs no gc', function()
+      local argv
+      local restore = h.stub(require('util.system'), 'run', function(cmd, _, cb)
+        argv = cmd
+        cb({ code = 0, stdout = '', stderr = '' })
+      end)
+      local ok = await(
+        function(cb) git.fetch(root, 'up', { 'refs/x:refs/y' }, cb) end
+      )
+      restore()
+      assert.is_true(ok)
+      assert.same({
+        'git',
+        '--no-pager',
+        '--literal-pathspecs',
+        '-c',
+        'gc.auto=0',
+        'fetch',
+        '--no-tags',
+        '--no-recurse-submodules',
+        '--no-write-fetch-head',
+        '--quiet',
+        '--end-of-options',
+        'up',
+        'refs/x:refs/y',
+      }, argv)
+    end)
+
     it('says why a fetch failed', function()
       local ok, err = await(
         function(cb) git.fetch(root, 'nowhere', { 'refs/x:refs/y' }, cb) end

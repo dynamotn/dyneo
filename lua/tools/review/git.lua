@@ -61,7 +61,9 @@ local function run(root, args, opts, on_done)
   sys.run(cmd, opts, function(result)
     local err
     if result.code ~= 0 or result.cut or result.timed_out or result.missing then
-      err = sys.failure(result, 'git ' .. (args[1] or ''))
+      -- Named by its command, past any `-c name=value`
+      local command = args[1] == '-c' and args[3] or args[1]
+      err = sys.failure(result, 'git ' .. (command or ''))
     end
     on_done(result, err)
   end)
@@ -125,7 +127,9 @@ end
 ---
 --- `refspecs` bring objects (and may name private refs); the work tree and
 --- the branches are not touched. No tags, and no prompt: a fetch that needs a
---- password fails with a reason instead of taking the terminal.
+--- password fails with a reason instead of taking the terminal. Nor does
+--- it fetch submodules (the pull request names their URLs), write
+--- `FETCH_HEAD` over the user's, or start a gc in the background.
 ---@param root string
 ---@param remote string
 ---@param refspecs string[]
@@ -133,7 +137,17 @@ end
 function M.fetch(root, remote, refspecs, cb)
   local bad = refuse(remote)
   if bad then return answer(cb, false, bad) end
-  local args = { 'fetch', '--no-tags', '--quiet', '--end-of-options', remote }
+  local args = {
+    '-c',
+    'gc.auto=0',
+    'fetch',
+    '--no-tags',
+    '--no-recurse-submodules',
+    '--no-write-fetch-head',
+    '--quiet',
+    '--end-of-options',
+    remote,
+  }
   vim.list_extend(args, refspecs)
   run(root, args, {
     timeout = M.FETCH_TIMEOUT,
