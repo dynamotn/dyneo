@@ -49,6 +49,8 @@ function M.now() return os.time() end
 ---@field line integer 1-based
 ---@field col integer 1-based byte where `version` starts on its line
 ---@field pinned? boolean An action pinned to a commit: shown, never bumped
+---@field range? boolean A spec with a bound past its version: shown, never
+---bumped
 
 ---@class DyOutdatedRelease
 ---@field version string
@@ -87,6 +89,21 @@ local function version_in(text)
   return (version:gsub('[%.%-%+]+$', '')), start
 end
 
+--- Whether `spec` bounds its version from above or with a second
+--- comparator: `>= 4.0, < 6.0`, `>=1.0.0 <2.0.0`, `1.0.0 - 2.0.0`,
+--- `^1.0 || ^2.0`, `<2`. Writing one release over its first version would
+--- leave the other bound behind, `>= 6.2, < 6.0`.
+---@param spec string
+---@return boolean
+local function is_range(spec)
+  spec = vim.trim(spec)
+  if spec:match('^<') then return true end
+  local version, start = version_in(spec)
+  if not version then return false end
+  local rest = spec:sub(start + #version)
+  return rest:find('[,<>=!~|^]') ~= nil or rest:find('%s%-%s') ~= nil
+end
+
 --- `line` with every string literal blanked, for counting what is code
 ---@param line string
 ---@return string
@@ -101,6 +118,7 @@ end
 ---@return string? name
 ---@return string? version
 ---@return integer? start Where the version starts in `text`
+---@return boolean? range Whether more than one comparison bounds it
 local function pep508(text)
   local name, rest_at = text:match('^%s*([%a%d][%w%._%-]*)()')
   if not name or text:find('://', 1, true) or text:find('%s@%s') then
@@ -111,7 +129,10 @@ local function pep508(text)
   if not op_at then return nil end
   local version, start = version_in(rest:sub(op_at))
   if not version then return nil end
-  return name:lower():gsub('[%._]+', '-'), version, rest_at + op_at + start - 2
+  return (name:lower():gsub('[%._]+', '-')),
+    version,
+    rest_at + op_at + start - 2,
+    is_range(rest:sub(op_at))
 end
 
 local readers = {}
@@ -148,6 +169,7 @@ function readers.npm(lines)
               version = version,
               line = number,
               col = spec_at + start,
+              range = is_range(spec),
             })
           end
         end
@@ -194,7 +216,7 @@ function readers.pypi(lines)
   for number, line in ipairs(lines) do
     local text = line:gsub('%s+#.*$', '')
     if not text:match('^%s*[#%-]') then
-      local name, version, start = pep508(text)
+      local name, version, start, range = pep508(text)
       if name then
         table.insert(deps, {
           kind = 'pypi',
@@ -202,6 +224,7 @@ function readers.pypi(lines)
           version = version,
           line = number,
           col = start,
+          range = range,
         })
       end
     end
@@ -228,13 +251,14 @@ end
 
 function readers.pyproject(lines)
   local deps, kind, in_array = {}, nil, false
-  local function add(name, version, number, col)
+  local function add(name, version, number, col, range)
     table.insert(deps, {
       kind = 'pypi',
       name = name,
       version = version,
       line = number,
       col = col,
+      range = range,
     })
   end
   for number, line in ipairs(lines) do
@@ -250,8 +274,10 @@ function readers.pyproject(lines)
       if in_array then
         local from = key and line:find('[', 1, true) or 1
         for at, text in line:sub(from):gmatch('()"([^"]*)"') do
-          local name, version, start = pep508(text)
-          if name then add(name, version, number, from + at + start - 1) end
+          local name, version, start, range = pep508(text)
+          if name then
+            add(name, version, number, from + at + start - 1, range)
+          end
         end
         if code_of(line):find(']', 1, true) then in_array = false end
       end
@@ -269,7 +295,8 @@ function readers.pyproject(lines)
               name:lower():gsub('[%._]+', '-'),
               version,
               number,
-              value_at + spec_at + start - 1
+              value_at + spec_at + start - 1,
+              is_range(spec)
             )
           end
         end
@@ -306,6 +333,7 @@ function readers.terraform(lines)
         version = entry.version,
         line = entry.line,
         col = entry.col,
+        range = entry.range,
       })
     end
   end
@@ -335,6 +363,7 @@ function readers.terraform(lines)
         if version then
           -- `at` counts the space put in front
           entry.version, entry.line, entry.col = version, number, at + start - 2
+          entry.range = is_range(spec)
         end
       end
     end
@@ -843,6 +872,9 @@ local function virt_text(found)
   if found.aged and found.dep.pinned then
     table.insert(chunks, { '  (pinned: :DyActionsPin)', 'Comment' })
   end
+  if found.aged and found.dep.range then
+    table.insert(chunks, { '  (a range: edit by hand)', 'Comment' })
+  end
   return #chunks > 0 and chunks or nil
 end
 
@@ -960,6 +992,12 @@ function M.bump(bufnr)
   if found.dep.pinned then
     return notify(
       'Pinned to a commit: move the tag, then pin it again with :DyActionsPin',
+      vim.log.levels.WARN
+    )
+  end
+  if found.dep.range then
+    return notify(
+      ('%s is a range: write its bounds by hand'):format(found.dep.name),
       vim.log.levels.WARN
     )
   end

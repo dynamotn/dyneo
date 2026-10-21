@@ -217,6 +217,71 @@ describe('tools.outdated', function()
         assert.is_true(deps[2].pinned)
       end
     )
+
+    it('tells a range with a second bound from one version', function()
+      local function ranges(reader, lines)
+        return vim.tbl_map(
+          function(dep) return { dep.name, dep.version, dep.range == true } end,
+          read(reader, lines)
+        )
+      end
+      assert.are.same(
+        {
+          { 'a', '1.0.0', true },
+          { 'b', '1.0.0', true },
+          { 'c', '1.0', true },
+          { 'd', '1.2.0', false },
+          { 'e', '1.0', false },
+        },
+        ranges('npm', {
+          '{',
+          '  "dependencies": {',
+          '  "a": ">=1.0.0 <2.0.0",',
+          '  "b": "1.0.0 - 2.0.0",',
+          '  "c": "^1.0 || ^2.0",',
+          '  "d": "~1.2.0",',
+          '  "e": ">=1.0"',
+          '  }',
+          '}',
+        })
+      )
+      assert.are.same(
+        {
+          { 'django', '3.2', true },
+          { 'httpx', '2.0', true },
+          { 'rich', '13.7.1', false },
+          { 'h2', '4.0', false },
+        },
+        ranges('pypi', {
+          'django>=3.2,<4',
+          'httpx<2.0',
+          'rich==13.7.1',
+          'h2[http2]>=4.0',
+        })
+      )
+      assert.are.same(
+        { { 'pydantic', '2.0', true }, { 'boto3', '1.34', false } },
+        ranges('pyproject', {
+          '[tool.poetry.dependencies]',
+          'pydantic = ">=2.0,<3.0"',
+          'boto3 = "^1.34"',
+        })
+      )
+      assert.are.same(
+        {
+          { 'hashicorp/aws', '4.0', true },
+          { 'hashicorp/random', '3.5', false },
+        },
+        ranges('terraform', {
+          'terraform {',
+          '  required_providers {',
+          '    aws = { source = "hashicorp/aws", version = ">= 4.0, < 6.0" }',
+          '    random = { source = "hashicorp/random", version = "~> 3.5" }',
+          '  }',
+          '}',
+        })
+      )
+    end)
   end)
 
   describe('versions', function()
@@ -531,6 +596,27 @@ describe('tools.outdated', function()
       vim.api.nvim_win_set_cursor(0, { 4, 0 })
       outdated.bump(bufnr)
       assert.matches('Nothing to bump', notes[#notes])
+    end)
+
+    it('shows a range its release but never writes it in', function()
+      vim.cmd.edit(vim.fn.fnameescape(dir .. '/package.json'))
+      local bufnr = vim.api.nvim_get_current_buf()
+      local range = '    "left-pad": ">=1.1.0 <1.2.0"'
+      vim.api.nvim_buf_set_lines(
+        bufnr,
+        0,
+        -1,
+        false,
+        { '{', '  "dependencies": {', range, '  }', '}' }
+      )
+      local done = false
+      outdated.check(bufnr, function() done = true end)
+      assert.is_true(vim.wait(5000, function() return done end))
+      assert.matches('1%.3%.0.*a range', marks(bufnr)[3])
+      vim.api.nvim_win_set_cursor(0, { 3, 0 })
+      outdated.bump(bufnr)
+      assert.are.equal(range, vim.api.nvim_buf_get_lines(bufnr, 2, 3, false)[1])
+      assert.matches('is a range', notes[#notes])
     end)
 
     it('says when the buffer is no manifest it reads', function()

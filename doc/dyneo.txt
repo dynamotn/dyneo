@@ -675,7 +675,10 @@ of the dependencies leave the machine; answers are kept for an hour.
 `<leader>kU` (`:DyOutdated bump`) writes the release shown into the line
 under the cursor, its operator kept.  An action pinned to a commit is shown
 but not bumped: move its tag comment, then pin it again with
-|:DyActionsPin|.  `:DyOutdated clear` takes the releases off the lines.
+|:DyActionsPin|.  Nor is a range with a bound past its version,
+`>= 4.0, < 6.0`, `>=1.0.0 <2.0.0`, `<2`: one release written over its first
+version would leave the other bound behind, so its bounds are edited by
+hand.  `:DyOutdated clear` takes the releases off the lines.
 
 ------------------------------------------------------------------------------
 6. INFRASTRUCTURE                                                *dyneo-infra*
