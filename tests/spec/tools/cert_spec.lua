@@ -162,6 +162,15 @@ describe('tools.cert', function()
         { subject = 'other', issuer = 'ca' },
       })
     )
+    -- Two certificates openssl could not read are no chain in order
+    assert.same({
+      'Certificate 1 could not be read: its subject or issuer is missing',
+      'Certificate 2 could not be read: its subject or issuer is missing',
+    }, cert.links({ {}, {} }))
+    assert.same(
+      { 'Certificate 2 could not be read: its subject or issuer is missing' },
+      cert.links({ { subject = 'leaf', issuer = 'ca' }, { issuer = 'ca' } })
+    )
   end)
 
   it('refuses a PKCS#12 bundle without running openssl', function()

@@ -259,13 +259,26 @@ function M.fields(lines)
 end
 
 --- Where a chain, leaf first, is out of order: each certificate is to be
---- issued by the next
+--- issued by the next. One whose names could not be read links to nothing,
+--- and says so.
 ---@param certs { subject: string?, issuer: string? }[]
 ---@return string[]
 function M.links(certs)
   local problems = {}
+  if #certs < 2 then return problems end
+  for i, cert in ipairs(certs) do
+    if not cert.subject or not cert.issuer then
+      table.insert(
+        problems,
+        ('Certificate %d could not be read: its subject or issuer is missing'):format(
+          i
+        )
+      )
+    end
+  end
   for i = 1, #certs - 1 do
-    if certs[i].issuer ~= certs[i + 1].subject then
+    local issuer, next_subject = certs[i].issuer, certs[i + 1].subject
+    if issuer and next_subject and issuer ~= next_subject then
       table.insert(
         problems,
         ('Certificate %d is not issued by certificate %d: its issuer is `%s`'):format(
