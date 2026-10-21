@@ -154,7 +154,8 @@ end
 --- Swap the pending AI drafts for `new`, keeping kept and edited ones
 ---@param state DyReviewState
 ---@param new DyReviewDraft[]
-function M.replace_ai(state, new)
+---@param head? string The head the pass read, for a draft that names none
+function M.replace_ai(state, new, head)
   local result = {}
   for _, draft in ipairs(state.drafts) do
     if not (draft.origin == 'ai' and draft.state == 'pending') then
@@ -163,6 +164,7 @@ function M.replace_ai(state, new)
   end
   for _, draft in ipairs(new) do
     draft.id = draft.id or new_id()
+    draft.head = draft.head or head
     draft.origin = 'ai'
     draft.state = 'pending'
     result[#result + 1] = draft

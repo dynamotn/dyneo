@@ -209,6 +209,17 @@ describe('tools.review.drafts', function()
       assert.same({ 'k', 'u', 'e', 'new' }, bodies)
       assert.equals(12, #state.drafts[4].id)
     end)
+
+    it('writes down the head new AI drafts were made on', function()
+      local state = { reviewed = {}, drafts = {} }
+      drafts.replace_ai(
+        state,
+        { ai({ body = 'new' }), ai({ body = 'kept', head = 'old' }) },
+        'h2'
+      )
+      assert.equals('h2', state.drafts[1].head)
+      assert.equals('old', state.drafts[2].head)
+    end)
   end)
 
   describe('draw', function()

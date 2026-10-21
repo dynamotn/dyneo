@@ -332,6 +332,24 @@ describe('tools.review', function()
       )
     end
 
+    it('writes down the head a draft was imported on', function()
+      adapter.pending = function(_, _, cb)
+        cb({
+          {
+            id = 'f',
+            origin = 'forge',
+            state = 'ready',
+            path = 'a.lua',
+            side = 'new',
+            line = 1,
+            body = 'x',
+          },
+        })
+      end
+      review.open(remote, pull())
+      assert.equals(head, review.current().state.drafts[1].head)
+    end)
+
     it('keeps why the pull request is read only', function()
       review.open(remote, pull({ read_only = 'The pull request is merged' }))
       assert.equals('The pull request is merged', review.current().blocked)
@@ -479,6 +497,7 @@ describe('tools.review', function()
       vim.cmd('write')
       local draft = review.current().state.drafts[1]
       assert.is_nil(draft.file_level)
+      assert.equals(head, draft.head)
       assert.equals('user', draft.origin)
     end)
 

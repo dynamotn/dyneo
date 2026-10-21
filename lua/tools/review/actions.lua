@@ -241,6 +241,8 @@ function M.comment(opts)
   with_hunks(s, path, function(hunks)
     local fields = { path = path, side = side, line = line }
     fields.start_line = start_line
+    -- The line numbers are those of this head
+    fields.head = s.pull.head_sha
     if not drafts.in_hunk(hunks, side, line, start_line) then
       notify(
         ('Outside the diff: sent as a file comment naming line %d'):format(line),
@@ -303,6 +305,7 @@ function M.reply()
           line = thread.line,
           body = body,
           reply_to = thread.id,
+          head = s.pull.head_sha,
         })
       end
     )
@@ -337,6 +340,7 @@ function M.toggle_resolve()
     body = '',
     reply_to = thread.id,
     resolve = true,
+    head = s.pull.head_sha,
   })
   notify('Resolves with the review')
   session.changed(s)

@@ -458,7 +458,7 @@ local function finish(s, chunks, results, failed)
       new[#new + 1] = draft
     end
   end
-  drafts.replace_ai(s.state, new)
+  drafts.replace_ai(s.state, new, s.pull.head_sha)
   s.ai_summary = #summaries > 0 and table.concat(summaries, '\n\n') or nil
   s.ai_order = match_order(s.files, order)
   s.buckets = require('tools.review.triage').buckets(s.files, s.ai_order)

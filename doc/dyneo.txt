@@ -1867,7 +1867,10 @@ what is kept, so taking the block out drops the suggestion and typing one
 in adds it.  Drafts
 already on the forge, imported when the review opens, are read-only here.
 A comment on a line outside the diff is sent as a comment on the file naming
-the line.  Drafts and the files you marked live in the state directory and
+the line.  So is one written on an older push of the pull request whose
+file changed since: its line may now name other code, and the submit
+confirmation lists it.  One whose file is the same at both heads keeps its
+line.  Drafts and the files you marked live in the state directory and
 survive a restart.
 
 Since your last review ~

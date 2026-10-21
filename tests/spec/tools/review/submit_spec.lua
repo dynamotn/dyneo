@@ -378,6 +378,68 @@ describe('tools.review.submit', function()
     assert.matches('1 draft carries a suggested change', confirms[2], 1, true)
   end)
 
+  describe('drafts written on an older push', function()
+    local asked
+
+    before_each(function()
+      asked = {}
+      s.files = { { path = 'src/a.lua', blob = 'B2' } }
+      -- `old1` had another version of the file, `old2` the same one
+      stub(git, 'blobs', function(_, rev, paths, cb)
+        asked[#asked + 1] = { rev = rev, paths = paths }
+        if rev == 'gone' then return cb(nil, 'bad object') end
+        cb({ ['src/a.lua'] = rev == 'old2' and 'B2' or 'B1' })
+      end)
+    end)
+
+    it('sends them as file comments naming the line', function()
+      s.state.drafts = {
+        draft({ id = 'stale', head = 'old1', line = 3 }),
+        draft({ id = 'now', head = head }),
+        draft({ id = 'unknown' }),
+        draft({ id = 'reply', head = 'old1', reply_to = 'T1' }),
+        draft({ id = 'forge', head = 'old1', origin = 'forge' }),
+      }
+      submit.run(s)
+      assert.matches(
+        '1 draft was written on an older push: sent as a file comment naming the line',
+        confirms[1],
+        1,
+        true
+      )
+      assert.matches('src/a.lua:3', confirms[1], 1, true)
+      assert.is_true(s.state.drafts[1].file_level)
+      assert.is_nil(s.state.drafts[2].file_level)
+      assert.is_nil(s.state.drafts[3].file_level)
+      assert.is_nil(s.state.drafts[4].file_level)
+      assert.is_nil(s.state.drafts[5].file_level)
+    end)
+
+    it('keeps the line when the file is the same at both heads', function()
+      s.state.drafts = { draft({ id = 'stale', head = 'old2' }) }
+      submit.run(s)
+      assert.is_nil(confirms[1]:find('older push', 1, true))
+      assert.is_nil(s.state.drafts[1].file_level)
+      assert.same({ 'src/a.lua' }, asked[1].paths)
+    end)
+
+    it('takes a head it cannot read as another version', function()
+      s.state.drafts = {
+        draft({ id = 'a', head = 'gone' }),
+        draft({ id = 'b', head = 'gone', line = 3 }),
+      }
+      submit.run(s)
+      assert.matches(
+        '2 drafts were written on an older push',
+        confirms[1],
+        1,
+        true
+      )
+      assert.is_true(s.state.drafts[1].file_level)
+      assert.is_true(s.state.drafts[2].file_level)
+    end)
+  end)
+
   it('writes and sends nothing when the confirmation is cancelled', function()
     s.state.drafts = { draft({ id = 'a', line = 40 }) }
     confirm_with({ 2 })

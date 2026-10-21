@@ -26,6 +26,7 @@ local notify = require('util.notify').titled('Review')
 ---@field file_level? boolean  line outside every hunk
 ---@field posted? string       forge id once sent
 ---@field done? string         head SHA of the whole submit it went out with
+---@field head? string         head SHA it was written or imported on
 
 ---@class DyReviewState
 ---@field reviewed table<string, string>  path -> blob SHA

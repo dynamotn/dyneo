@@ -336,6 +336,9 @@ local function load_forge(s, cb)
           and s.adapter.import_id(d.posted)
         if id then sent[id] = true end
       end
+      for _, d in ipairs(pending) do
+        d.head = d.head or s.pull.head_sha
+      end
       s.state.drafts = vim.list_extend(
         kept,
         vim.tbl_filter(function(d) return not sent[d.id] end, pending)

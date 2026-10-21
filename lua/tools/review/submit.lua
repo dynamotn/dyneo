@@ -66,6 +66,7 @@ end
 ---@field unposted DyReviewDraft[] What goes out now
 ---@field skipped integer Pending AI drafts left out
 ---@field outside DyReviewDraft[] Line drafts no hunk of the head holds
+---@field older DyReviewDraft[] Line drafts of an older head whose file changed
 ---@field comments integer
 ---@field replies integer
 ---@field resolutions integer
@@ -142,6 +143,70 @@ local function revalidate(s, plan, cb)
   )
 end
 
+--- Find the line drafts of `plan` written on an older head whose file is
+--- not the same at the head now: their lines may name other code, so they
+--- go out as file comments naming the line. A head that cannot be read
+--- counts as another version.
+---@param s DyReviewSession
+---@param plan DyReviewSendPlan
+---@param cb fun()
+local function older(s, plan, cb)
+  local by_head, heads = {}, {}
+  for _, draft in ipairs(plan.unposted) do
+    if
+      draft.origin ~= 'forge'
+      and not draft.reply_to
+      and not draft.file_level
+      and draft.head
+      and draft.head ~= s.pull.head_sha
+    then
+      if not by_head[draft.head] then
+        by_head[draft.head] = {}
+        heads[#heads + 1] = draft.head
+      end
+      table.insert(by_head[draft.head], draft)
+    end
+  end
+  if #heads == 0 then return cb() end
+  table.sort(heads)
+  local found = {}
+  require('util.system').each(
+    heads,
+    git.CONCURRENCY,
+    function(head, done)
+      local paths, seen = {}, {}
+      for _, draft in ipairs(by_head[head]) do
+        if not seen[draft.path] then
+          seen[draft.path] = true
+          paths[#paths + 1] = draft.path
+        end
+      end
+      git.blobs(s.root, head, paths, function(blobs)
+        for _, draft in ipairs(by_head[head]) do
+          local now = session.file_of(s, draft.path)
+          local old_blob = blobs and blobs[draft.path]
+          if not (now and now.blob and old_blob == now.blob) then
+            found[draft] = true
+          end
+        end
+        done()
+      end)
+    end,
+    main(function()
+      local outside = {}
+      for _, draft in ipairs(plan.unposted) do
+        if found[draft] then plan.older[#plan.older + 1] = draft end
+      end
+      -- Named once, as written on an older push
+      for _, draft in ipairs(plan.outside) do
+        if not found[draft] then outside[#outside + 1] = draft end
+      end
+      plan.outside = outside
+      cb()
+    end)
+  )
+end
+
 --- The plan of what the state holds now: every draft but dropped and
 --- pending AI ones for the adapter, the unposted ones counted
 ---@param s DyReviewSession
@@ -153,6 +218,7 @@ local function build(s, cb)
     unposted = {},
     skipped = 0,
     outside = {},
+    older = {},
     comments = 0,
     replies = 0,
     resolutions = 0,
@@ -172,7 +238,7 @@ local function build(s, cb)
   tally(plan)
   revalidate(s, plan, function(err)
     if err then return cb(nil, err) end
-    cb(plan)
+    older(s, plan, function() cb(plan) end)
   end)
 end
 
@@ -184,6 +250,9 @@ local function signature(plan)
   local parts = { tostring(plan.skipped), tostring(#plan.send) }
   local outside = {}
   for _, draft in ipairs(plan.outside) do
+    outside[draft] = true
+  end
+  for _, draft in ipairs(plan.older) do
     outside[draft] = true
   end
   for _, draft in ipairs(plan.unposted) do
@@ -253,6 +322,16 @@ function M.summary(s, plan)
       #plan.outside == 1 and 'it is' or 'they are'
     )
     for _, draft in ipairs(plan.outside) do
+      lines[#lines + 1] = ('  %s:%d'):format(draft.path, draft.line)
+    end
+  end
+  if #plan.older > 0 then
+    lines[#lines + 1] = ('%s on an older push: sent as %s naming the line'):format(
+      #plan.older == 1 and '1 draft was written'
+        or (#plan.older .. ' drafts were written'),
+      #plan.older == 1 and 'a file comment' or 'file comments'
+    )
+    for _, draft in ipairs(plan.older) do
       lines[#lines + 1] = ('  %s:%d'):format(draft.path, draft.line)
     end
   end
@@ -371,10 +450,12 @@ end
 ---@param plan DyReviewSendPlan
 ---@param finish fun()
 local function send(s, plan, finish)
-  for _, draft in ipairs(plan.outside) do
-    draft.file_level = true
+  for _, list in ipairs({ plan.outside, plan.older }) do
+    for _, draft in ipairs(list) do
+      draft.file_level = true
+    end
   end
-  if #plan.outside > 0 then session.save(s) end
+  if #plan.outside + #plan.older > 0 then session.save(s) end
   local called, raised = pcall(
     s.adapter.submit,
     s.remote,
