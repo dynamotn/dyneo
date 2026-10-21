@@ -30,7 +30,7 @@ describe('tools.ci_dagster', function()
       dir .. '/bin/' .. name,
       vim.list_extend({
         '#!/bin/sh',
-        'echo "$@" >> "' .. dir .. '/calls"',
+        'printf "%s\\n" "$*" >> "' .. dir .. '/calls"',
         'cat >> "' .. dir .. '/stdin"',
       }, lines)
     )

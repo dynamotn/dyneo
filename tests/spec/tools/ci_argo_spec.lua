@@ -37,7 +37,7 @@ describe('tools.ci_argo', function()
     h.write(
       dir .. '/bin/' .. name,
       vim.list_extend(
-        { '#!/bin/sh', 'echo "$@" >> "' .. dir .. '/calls"' },
+        { '#!/bin/sh', 'printf "%s\\n" "$*" >> "' .. dir .. '/calls"' },
         lines
       )
     )

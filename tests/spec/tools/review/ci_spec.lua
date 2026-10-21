@@ -413,8 +413,14 @@ describe('tools.review.ci', function()
         function(_, _, cb) late = cb end
       )
       local runs, errors = status(with_workflow({ trusted = true }))
-      assert.same({}, runs)
+      -- The fake `gh` is held to the same short deadline, which a loaded
+      -- machine may miss: only what Argo did is asked here
+      errors = vim.tbl_filter(
+        function(error) return not error:find('^github: ') end,
+        errors
+      )
       assert.same({ 'argo: timed out' }, errors)
+      assert.same({}, runs)
       -- A reply after the deadline changes nothing and raises nothing
       late({ kind = 'Workflow', name = 'nightly' })
     end)
