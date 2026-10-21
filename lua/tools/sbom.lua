@@ -204,8 +204,13 @@ end
 
 --- What the text of a license says, in order: the first rule whose phrases
 --- are all in it names it. A GPL names its version, and the later version
---- comes first, since "version 2" is in "version 2.1" too.
+--- comes first, since "version 2" is in "version 2.1" too. The MPL and the
+--- EPL come before the GPL family, which their bodies name as secondary
+--- licenses.
 local LICENSE_RULES = {
+  { 'MPL-2.0', { 'mozilla public license', '2.0' } },
+  { 'EPL-2.0', { 'eclipse public license', '2.0' } },
+  { 'EPL-1.0', { 'eclipse public license', '1.0' } },
   { 'AGPL-3.0', { 'gnu affero general public license' } },
   {
     'LGPL-3.0',
@@ -220,7 +225,6 @@ local LICENSE_RULES = {
   { 'GPL-3.0', { 'gnu general public license', 'version 3' } },
   { 'GPL-2.0', { 'gnu general public license', 'version 2' } },
   { 'Apache-2.0', { 'apache license', 'version 2.0' } },
-  { 'MPL-2.0', { 'mozilla public license', '2.0' } },
   { 'MIT', { 'permission is hereby granted, free of charge' } },
   {
     'BSD-3-Clause',
@@ -254,6 +258,9 @@ local LICENSE_RULES = {
   { 'Vim', { 'same terms as vim' } },
 }
 
+--- Non-blank lines at the top of a license read as its title
+M.LICENSE_TITLE_LINES = 3
+
 --- The SPDX license `text` is, from a `SPDX-License-Identifier` line or else
 --- from what it says; nil when it says nothing known
 ---@param text string
@@ -262,16 +269,25 @@ function M.detect_license(text)
   local spdx = text:match('SPDX%-License%-Identifier:%s*([^\n]-)%s*%*?/?%s*\n')
     or text:match('SPDX%-License%-Identifier:%s*([^\n]-)%s*$')
   if spdx and spdx ~= '' then return spdx end
-  local plain = text:lower():gsub('%s+', ' ')
-  for _, rule in ipairs(LICENSE_RULES) do
-    local all = true
-    for _, phrase in ipairs(rule[2]) do
-      if not plain:find(phrase, 1, true) then
-        all = false
-        break
+  -- A license names itself in its title; its body may name others, as the
+  -- GPLv2 does the Library GPL
+  local head = {}
+  for line in text:gmatch('[^\n]+') do
+    if line:find('%S') then table.insert(head, line) end
+    if #head == M.LICENSE_TITLE_LINES then break end
+  end
+  for _, part in ipairs({ table.concat(head, ' '), text }) do
+    local plain = part:lower():gsub('%s+', ' ')
+    for _, rule in ipairs(LICENSE_RULES) do
+      local all = true
+      for _, phrase in ipairs(rule[2]) do
+        if not plain:find(phrase, 1, true) then
+          all = false
+          break
+        end
       end
+      if all then return rule[1] end
     end
-    if all then return rule[1] end
   end
   return nil
 end

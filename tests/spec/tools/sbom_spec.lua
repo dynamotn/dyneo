@@ -195,6 +195,45 @@ describe('tools.sbom', function()
       assert.is_nil(sbom.detect_license('All rights reserved.'))
     end)
 
+    it('names a license by its title before the others it names', function()
+      local cases = {
+        ['MPL-2.0'] = {
+          'Mozilla Public License Version 2.0',
+          '==================================',
+          '',
+          '1. Definitions',
+          '1.12. "Secondary License"',
+          '    means either the GNU General Public License, Version 2.0, the',
+          '    GNU Lesser General Public License, Version 2.1, the GNU Affero',
+          '    General Public License, Version 3.0, or any later versions of',
+          '    those licenses.',
+        },
+        ['EPL-2.0'] = {
+          'Eclipse Public License - v 2.0',
+          '',
+          '    THE ACCOMPANYING PROGRAM IS PROVIDED UNDER THE TERMS OF THIS',
+          '    ECLIPSE PUBLIC LICENSE ("AGREEMENT").',
+          '"Secondary License" means either the GNU General Public License,',
+          'Version 2.0, or any later versions of that license.',
+        },
+        ['GPL-2.0'] = {
+          '                    GNU GENERAL PUBLIC LICENSE',
+          '                       Version 2, June 1991',
+          '',
+          ' Copyright (C) 1989, 1991 Free Software Foundation, Inc.,',
+          '(Some other Free Software Foundation software is covered by',
+          'the GNU Library General Public License instead.)',
+        },
+      }
+      for spdx, lines in pairs(cases) do
+        assert.equals(
+          spdx,
+          sbom.detect_license(table.concat(lines, '\n')),
+          spdx
+        )
+      end
+    end)
+
     it('reads the license file of a directory', function()
       h.write(dir .. '/a/LICENSE', MIT)
       h.write(
