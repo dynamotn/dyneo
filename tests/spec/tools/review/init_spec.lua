@@ -461,6 +461,16 @@ describe('tools.review', function()
       end
     )
 
+    it('shows nothing when closed before the forge answered', function()
+      local answer
+      adapter.threads = function(_, _, cb) answer = cb end
+      review.open(remote, pull())
+      review.close()
+      calls = {}
+      answer({})
+      assert.same({}, calls)
+    end)
+
     it('keeps a worktree git refuses to remove, and says where', function()
       stub(
         git,

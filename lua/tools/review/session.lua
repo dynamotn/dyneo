@@ -524,6 +524,8 @@ function M.start(remote, pull, adapter, fail)
                 autocmds(s)
                 diff.on_buffer(review.on_diff_buffer)
                 load_forge(s, function()
+                  -- Closed while the forge answered: nothing left to show
+                  if session ~= s then return end
                   M.save(s)
                   review.show()
                   -- Never waited for: the review is usable without it
