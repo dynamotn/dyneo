@@ -69,7 +69,7 @@ describe('tools.ci_prefect', function()
     )
   end)
 
-  it('runs the Python beside prefect, or the project venv', function()
+  it('runs the Python beside prefect, or a trusted project venv', function()
     python({})
     assert.equals(bin .. '/python', prefect.python(nil))
     vim.env.PATH = path
@@ -78,7 +78,22 @@ describe('tools.ci_prefect', function()
       h.write(venv .. '/' .. name, { '#!/bin/sh' })
       vim.fn.setfperm(venv .. '/' .. name, 'rwxr-xr-x')
     end
+    local asked = {}
+    local trusted = false
+    local restore = h.stub(require('util.trust'), 'ask', function(purpose, root)
+      table.insert(asked, { purpose, root })
+      return trusted
+    end)
+    vim.env.PATH = bin .. ':' .. path
+    assert.equals(bin .. '/python', prefect.python(dir .. '/project'))
+    vim.env.PATH = path
+    trusted = true
     assert.equals(venv .. '/python', prefect.python(dir .. '/project'))
+    restore()
+    assert.same({
+      { 'prefect', dir .. '/project' },
+      { 'prefect', dir .. '/project' },
+    }, asked)
     local none, err = prefect.python(dir .. '/elsewhere')
     if vim.fn.exepath('prefect') == '' then
       assert.is_nil(none)

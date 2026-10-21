@@ -1069,12 +1069,12 @@ buffer, and only ever speak of Airflow code.
                                                           *dyneo-ci-prefect*
 Prefect: a flow of `@flow`, named after its function with `_` turned to
 `-` unless it says `name=`, its tasks by `@task`.  Prefect's own client
-asks, run by the Python beside `prefect` (the project's `.venv`, else
-`$PATH`), so the API URL and key come from the active profile or
-`PREFECT_*` and are never read here.  It runs outside the project, so a
-`.env` or `prefect.toml` of the tree cannot send the key elsewhere, and it
-never starts a server of its own.  The last run that ran is shown, a run
-only scheduled skipped.
+asks, run by the Python beside `prefect` (the project's `.venv` once you
+let the project run its code, else `$PATH`), so the API URL and key come
+from the active profile or `PREFECT_*` and are never read here.  It runs
+outside the project, so a `.env` or `prefect.toml` of the tree cannot send
+the key elsewhere, and it never starts a server of its own.  The last run
+that ran is shown, a run only scheduled skipped.
 
                                                           *dyneo-ci-dagster*
 Dagster: a job of `@job` or `define_asset_job("name")`, else the asset job

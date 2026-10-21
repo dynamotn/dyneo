@@ -114,15 +114,25 @@ function M.job_lines(lines)
   return jobs
 end
 
---- The Python that runs `prefect`: the project's `.venv`, else the one
---- beside the `prefect` on `$PATH`, wherever that links to
+--- The Python that runs `prefect`: the project's `.venv` once the user
+--- lets the project run its code, else the one beside the `prefect` on
+--- `$PATH`, wherever that links to
+---
+--- The `.venv` is the clone's own: its Python and packages run with the
+--- user's Prefect key, so they are not run unasked.
 ---@param root? string The project
 ---@return string? python
 ---@return string? err
 function M.python(root)
   local candidates = {}
-  if root then
-    table.insert(candidates, vim.fs.joinpath(root, '.venv', 'bin', 'prefect'))
+  local venv = root and vim.fs.joinpath(root, '.venv', 'bin', 'prefect')
+  if venv and vim.fn.executable(venv) == 1 then
+    local question = ('Ask Prefect with the .venv of %s?\nIt runs the Python and packages of the project as you, with your Prefect key.'):format(
+      vim.fn.fnamemodify(root, ':~')
+    )
+    if require('util.trust').ask('prefect', root, question) then
+      table.insert(candidates, venv)
+    end
   end
   local found = vim.fn.exepath('prefect')
   if found ~= '' then table.insert(candidates, found) end
