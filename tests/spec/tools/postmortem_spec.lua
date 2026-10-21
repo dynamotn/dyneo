@@ -149,6 +149,9 @@ describe('tools.postmortem', function()
     -- A repository with no commit: its root is this folder, never the
     -- working directory, and `git log` has nothing to read
     require('util.system').sync({ 'git', 'init', '-q' }, { cwd = dir })
+    -- Only git on the path: a CI runner ships kubectl in /usr/bin
+    vim.uv.fs_symlink(vim.fn.exepath('git'), dir .. '/bin/git')
+    vim.env.PATH = dir .. '/bin'
     h.write(dir .. '/notes.md', {})
     vim.cmd.edit(vim.fn.fnameescape(dir .. '/notes.md'))
     local file
