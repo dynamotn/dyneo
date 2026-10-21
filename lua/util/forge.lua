@@ -219,21 +219,25 @@ end
 --- without the tokens of `M.TOKEN_VARS`
 ---
 --- The host comes from a repository's remote, which anyone can set: the
---- tokens in the environment belong to the default host or the one the user
---- named, and are not handed to any other. The CLI's own login for the
---- host is still used.
+--- tokens in the environment belong to the host the user named, or to the
+--- default host when none is named, and are not handed to any other. The
+--- CLI's own login for the host is still used.
 ---@param remote DyForgeRemote
 ---@return table<string, string>? env
 function M.cli_env(remote)
   local host = remote.host:lower()
-  if host == M.DEFAULT_HOSTS[remote.kind] then return nil end
+  local named_any = false
   for _, var in ipairs(M.HOST_VARS[remote.kind] or {}) do
     local value = vim.env[var]
     if value and value ~= '' then
+      named_any = true
       local named = M.parse_url(value .. '/x') or value
       if named:lower() == host then return nil end
     end
   end
+  -- A host named in the environment owns its tokens, so the default host is
+  -- one more host they must not reach
+  if not named_any and host == M.DEFAULT_HOSTS[remote.kind] then return nil end
   local env = vim.fn.environ()
   local dropped = false
   for _, var in ipairs(M.TOKEN_VARS[remote.kind] or {}) do

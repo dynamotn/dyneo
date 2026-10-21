@@ -334,6 +334,14 @@ describe('util.forge', function()
         )
         assert.equals('token=', seen('gitlab', 'gitlab.attacker.example'))
       end)
+
+      it("keeps a named host's tokens from the default host", function()
+        vim.env.GITLAB_HOST = 'gitlab.corp.example'
+        assert.equals('token=', seen('gitlab', 'gitlab.com'))
+        vim.env.GITLAB_HOST = nil
+        vim.env.GL_HOST = 'https://gitlab.corp.example'
+        assert.equals('token=', seen('gitlab', 'gitlab.com'))
+      end)
     end)
 
     it('says when the CLI is not installed', function()
