@@ -1027,15 +1027,16 @@ exit 1
     end)
   end)
 
-  it(
-    'writes a suggestion in a fenced block',
-    function()
-      assert.equals(
-        '```suggestion\na\n\nb\n```',
-        github.suggestion({ 'a', '', 'b' })
-      )
-    end
-  )
+  it('writes a suggestion in a fence longer than any it holds', function()
+    assert.equals(
+      '```suggestion\na\n\nb\n```',
+      github.suggestion({ 'a', '', 'b' })
+    )
+    assert.equals(
+      '````suggestion\n```lua\nx\n```\n````',
+      github.suggestion({ '```lua', 'x', '```' })
+    )
+  end)
 
   it('offers the verdicts GitHub has', function()
     assert.same(

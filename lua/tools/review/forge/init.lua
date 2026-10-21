@@ -60,6 +60,20 @@ M.ADAPTERS = {
   azure = 'tools.review.forge.azure',
 }
 
+--- A fence of backticks longer than any run of them in `lines`, so no line
+--- of a block closes it early
+---@param lines string[]
+---@return string
+function M.fence(lines)
+  local longest = 2
+  for _, line in ipairs(lines) do
+    for run in line:gmatch('`+') do
+      longest = math.max(longest, #run)
+    end
+  end
+  return ('`'):rep(longest + 1)
+end
+
 --- The adapter answering for `remote`'s forge
 ---@param remote DyForgeRemote
 ---@return DyReviewForge? adapter

@@ -1053,11 +1053,17 @@ function M.submit(remote, pull, drafts, review, progress, cb)
   end)
 end
 
---- GitHub's suggested change of the lines commented on
+--- GitHub's suggested change of the lines commented on, fenced longer than
+--- any run of backticks it holds
 ---@param lines string[]
 ---@return string
 function M.suggestion(lines)
-  return '```suggestion\n' .. table.concat(lines, '\n') .. '\n```'
+  local fence = require('tools.review.forge').fence(lines)
+  return ('%ssuggestion\n%s\n%s'):format(
+    fence,
+    table.concat(lines, '\n'),
+    fence
+  )
 end
 
 return M

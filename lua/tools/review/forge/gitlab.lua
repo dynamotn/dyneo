@@ -590,13 +590,7 @@ end
 ---@param above integer
 ---@return string
 local function fenced(lines, above)
-  local longest = 2
-  for _, line in ipairs(lines) do
-    for run in line:gmatch('`+') do
-      longest = math.max(longest, #run)
-    end
-  end
-  local fence = ('`'):rep(longest + 1)
+  local fence = require('tools.review.forge').fence(lines)
   return ('%ssuggestion:-%d+0\n%s\n%s'):format(
     fence,
     above,

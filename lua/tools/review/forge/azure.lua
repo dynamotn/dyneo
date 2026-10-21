@@ -541,13 +541,7 @@ end
 ---@param lines string[]
 ---@return string
 local function fenced(lines)
-  local longest = 2
-  for _, line in ipairs(lines) do
-    for run in line:gmatch('`+') do
-      longest = math.max(longest, #run)
-    end
-  end
-  local fence = ('`'):rep(longest + 1)
+  local fence = require('tools.review.forge').fence(lines)
   return ('%s\n%s\n%s'):format(fence, table.concat(lines, '\n'), fence)
 end
 

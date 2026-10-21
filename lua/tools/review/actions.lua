@@ -162,24 +162,11 @@ local function editor(title, lines, on_save)
   })
 end
 
---- A fence of backticks longer than any run of them in `lines`
----@param lines string[]
----@return string
-local function fence_for(lines)
-  local longest = 2
-  for _, line in ipairs(lines) do
-    for run in line:gmatch('`+') do
-      longest = math.max(longest, #run)
-    end
-  end
-  return ('`'):rep(longest + 1)
-end
-
 --- The lines of `suggestion` as a fenced suggestion block
 ---@param suggestion string[]
 ---@return string[]
 local function suggestion_block(suggestion)
-  local fence = fence_for(suggestion)
+  local fence = require('tools.review.forge').fence(suggestion)
   local block = { fence .. 'suggestion' }
   vim.list_extend(block, suggestion)
   block[#block + 1] = fence
