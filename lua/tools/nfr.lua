@@ -395,20 +395,24 @@ function M.slo_report(slo)
     '| Severity | Long | Short | Burn rate | Error ratio above | Budget spent | Budget gone in |',
     '| --- | --- | --- | ---: | ---: | ---: | --- |',
   }
-  local alerts, dropped = {}, {}
+  local alerts, dropped, unreachable = {}, {}, {}
   for _, alert in ipairs(M.SLO_ALERTS) do
     -- The workbook's rates are for 30 days; the same share of the budget
     -- in the same time is a rate in proportion to the window
     local burn = alert.budget * slo.window / alert.long
     -- A long window past the SLO window would read history it never holds,
     -- and a rate below 1 never spends the budget at all
+    local threshold = burn * allowed
+    local name = ('the %s over %s'):format(
+      alert.severity,
+      prom_span(alert.long)
+    )
     if alert.long >= slo.window or burn < 1 - 1e-9 then
-      table.insert(
-        dropped,
-        ('the %s over %s'):format(alert.severity, prom_span(alert.long))
-      )
+      table.insert(dropped, name)
+    elseif threshold >= 1 then
+      -- No error ratio passes 100%: the rule would never fire
+      table.insert(unreachable, name)
     else
-      local threshold = burn * allowed
       table.insert(
         alerts,
         { alert = alert, burn = burn, threshold = threshold }
@@ -433,6 +437,15 @@ function M.slo_report(slo)
       ('Left out, as it would burn under 1x over a %s window: %s.'):format(
         slo.window_text,
         table.concat(dropped, ', ')
+      ),
+    })
+  end
+  if #unreachable > 0 then
+    vim.list_extend(lines, {
+      '',
+      ('Left out, as its line is past 100%% of errors for an objective of %s: %s.'):format(
+        as_percent(slo.objective),
+        table.concat(unreachable, ', ')
       ),
     })
   end

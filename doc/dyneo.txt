@@ -1649,8 +1649,9 @@ SRE workbook: a page when 2% of the budget burns in an hour or 5% in six,
 a ticket when 10% burns in a day or in three, each also still burning over
 its short window so it stops soon after the burn does.  For each, the burn
 rate, the error ratio it fires above and how soon the budget would be gone;
-the rates are scaled to the window, and an alert whose rate falls below 1
-is left out, and named.  Then the Prometheus rules of those alerts, on
+the rates are scaled to the window, and an alert whose rate falls below 1,
+or whose error ratio is past 100% (a page at 90%), is left out, and named.
+Then the Prometheus rules of those alerts, on
 recording rules `slo:sli_error:ratio_rate<window>` of your own: >vim
 
     :DyNfr slo 99.9 window=28d

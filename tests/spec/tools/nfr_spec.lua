@@ -290,6 +290,21 @@ describe('tools.nfr slo', function()
     assert.is_falsy(short:find('```yaml', 1, true))
   end)
 
+  it('leaves out an alert whose line no error ratio can pass', function()
+    local lines = nfr.slo_report(assert(nfr.parse_slo({ '90' })))
+    local text = table.concat(lines, '\n')
+    -- 14.4 times a budget of 10% is 144% of the requests failing
+    assert.is_falsy(text:find('| page | 1h |', 1, true))
+    assert.is_falsy(text:find('ratio_rate1h', 1, true))
+    assert.is_truthy(text:find('| page | 6h | 30m | 6 | 60% |', 1, true))
+    assert.is_truthy(
+      vim.tbl_contains(
+        lines,
+        'Left out, as its line is past 100% of errors for an objective of 90%: the page over 1h.'
+      )
+    )
+  end)
+
   it(':DyNfr slo opens the report, and says what it cannot read', function()
     local notes = {}
     local restore = h.stub(
