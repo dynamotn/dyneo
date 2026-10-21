@@ -487,6 +487,26 @@ describe('tools.ci_inline', function()
       end
     )
 
+    it('says why glab ci lint gave no answer, and marks nothing', function()
+      git('remote', 'add', 'origin', 'https://gitlab.com/g/p')
+      cli('glab', { 'exit 3' })
+      h.write(repo .. '/.gitlab-ci.yml', GITLAB)
+      vim.cmd.edit(repo .. '/.gitlab-ci.yml')
+      local bufnr = vim.api.nvim_get_current_buf()
+      vim.bo.filetype = 'yaml.gitlab'
+      ci.lint(bufnr)
+      assert.is_true(vim.wait(5000, function() return #notes > 0 end, 20))
+      assert.same({ 'glab ci lint exited 3' }, notes)
+      assert.same({}, vim.diagnostic.get(bufnr))
+
+      require('util.forge').TIMEOUT = 200
+      cli('glab', { 'exec sleep 5' })
+      ci.lint(bufnr)
+      assert.is_true(vim.wait(5000, function() return #notes > 1 end, 20))
+      assert.equals('glab ci lint gave no answer in time', notes[2])
+      assert.same({}, vim.diagnostic.get(bufnr))
+    end)
+
     it('lints without the env token on a host it is not for', function()
       local saved = {}
       for _, var in ipairs({ 'GITLAB_TOKEN', 'GITLAB_HOST', 'GL_HOST' }) do

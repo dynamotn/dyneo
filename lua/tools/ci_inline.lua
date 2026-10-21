@@ -851,6 +851,19 @@ function M.lint(bufnr)
       function(result)
         if not vim.api.nvim_buf_is_valid(bufnr) then return end
         local output = (result.stdout or '') .. '\n' .. (result.stderr or '')
+        -- An answer that never came, came cut, or came empty says nothing
+        -- about the file: it is reported as a failure, not as a problem in it
+        if
+          result.timed_out
+          or result.cut
+          or result.missing
+          or (result.code ~= 0 and vim.trim(output) == '')
+        then
+          return notify(
+            require('util.system').failure(result, 'glab ci lint'),
+            vim.log.levels.ERROR
+          )
+        end
         local diagnostics = M.lint_diagnostics(
           output,
           vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
