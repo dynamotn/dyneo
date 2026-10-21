@@ -89,6 +89,17 @@ function M.setup()
     group = vim.api.nvim_create_augroup('dy_project_rtp', { clear = true }),
     callback = function() vim.schedule(setup_project_rtp) end,
   })
+  -- A held root is let go without the directory moving: the look it was
+  -- denied is taken then, once for all of its buffers
+  local pending = false
+  require('util.untrusted').on_release('project_rtp', function()
+    if pending then return end
+    pending = true
+    vim.schedule(function()
+      pending = false
+      setup_project_rtp()
+    end)
+  end)
 end
 
 return M

@@ -77,6 +77,37 @@ describe('util.project_rtp', function()
     vim.opt.rtp:remove(dir .. '/.nvim')
   end)
 
+  it("asks about a held project's .nvim once it is let go", function()
+    vim.fn.mkdir(dir .. '/.nvim', 'p')
+    local reads = 0
+    table.insert(
+      restores,
+      h.stub(vim.secure, 'read', function()
+        reads = reads + 1
+        return ''
+      end)
+    )
+    -- The `cd` of `before_each` has a look scheduled already
+    vim.wait(20)
+    reads = 0
+    h.unload('util.untrusted')
+    local untrusted = require('util.untrusted')
+    untrusted.hold(dir)
+    table.insert(restores, function() untrusted.forget(dir) end)
+    load()
+    assert.equals(0, reads)
+    -- Two buffers there ask once
+    h.buffer({ name = dir .. '/a.lua' })
+    h.buffer({ name = dir .. '/b.lua' })
+    untrusted.release(dir)
+    assert.is_true(vim.wait(1000, function() return reads > 0 end, 10))
+    vim.wait(50)
+    assert.equals(1, reads)
+    assert.equals(dir .. '/.nvim', require('util.project_rtp').current())
+    vim.opt.rtp:remove(dir .. '/.nvim')
+    vim.cmd('silent! %bwipeout!')
+  end)
+
   it('names the trusted folder it put on the runtimepath', function()
     vim.fn.mkdir(dir .. '/.nvim', 'p')
     table.insert(restores, h.stub(vim.secure, 'read', function() return '' end))
