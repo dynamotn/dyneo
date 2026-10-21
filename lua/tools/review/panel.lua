@@ -28,6 +28,7 @@ M.LABELS = {
 ---@class DyReviewPanelRow
 ---@field kind? DyReviewKind A bucket's line
 ---@field path? string A file's line
+---@field ci? boolean The CI line
 
 --- `+added -removed`, each only when there is some
 ---@param added integer
@@ -124,6 +125,45 @@ local function wrap(text, width)
   return lines
 end
 
+--- The CI line of the header: the runs counted by state, `(by branch)` when
+--- any run is keyed on the branch rather than the head commit, and the sources
+--- that could not be asked. Nil before any fetch was asked for.
+---@param session DyReviewSession
+---@return string?
+function M.ci_line(session)
+  local ci = session.ci
+  if not ci then return session.ci_loading and ' CI: asking…' or nil end
+  local counts_of, keyed = {}, {}
+  for _, run in ipairs(ci.runs) do
+    counts_of[run.state] = (counts_of[run.state] or 0) + 1
+    if run.by ~= 'commit' then keyed[run.by] = true end
+  end
+  local parts = {}
+  for _, state in ipairs(require('tools.review.ci').STATES) do
+    if counts_of[state] then
+      parts[#parts + 1] = ('%d %s'):format(counts_of[state], state)
+    end
+  end
+  local line = table.concat(parts, ' · ')
+  local by = vim.tbl_filter(function(key) return keyed[key] end, {
+    'branch',
+    'name',
+  })
+  if #by > 0 then line = line .. ' (by ' .. table.concat(by, ', ') .. ')' end
+  local pieces = { line ~= '' and line or nil }
+  if #ci.errors > 0 then
+    local names = vim.tbl_map(
+      function(err) return err:match('^[^:]+') end,
+      ci.errors
+    )
+    pieces[#pieces + 1] = 'could not ask ' .. table.concat(names, ', ')
+  end
+  if #pieces == 0 then pieces[1] = 'no runs' end
+  -- Sources held back until the code may be trusted: not a failure
+  vim.list_extend(pieces, ci.waiting or {})
+  return ' CI: ' .. table.concat(pieces, ' · ')
+end
+
 --- The panel's lines, and what each line stands for
 ---@param session DyReviewSession
 ---@return string[] lines
@@ -156,6 +196,8 @@ function M.render(session)
       #session.files
     )
   )
+  local ci_line = M.ci_line(session)
+  if ci_line then add(ci_line, { ci = true }) end
   local summary = {}
   if ai_total > 0 then
     summary[#summary + 1] = ('AI: %s to look at'):format(
@@ -237,11 +279,13 @@ local function row_under_cursor(session)
   return (session.panel_rows or {})[vim.api.nvim_win_get_cursor(0)[1]]
 end
 
---- Open the file under the cursor, or fold or unfold its bucket
+--- Open the file under the cursor, fold or unfold its bucket, or list the
+--- CI runs from the CI line
 ---@param session DyReviewSession
 function M.select(session)
   local row = row_under_cursor(session)
   if not row then return end
+  if row.ci then return require('tools.review.ci').pick(session) end
   if row.kind then
     session.collapsed = session.collapsed or {}
     session.collapsed[row.kind] = not folded(session, row.kind)
@@ -266,7 +310,11 @@ local function buffer(session)
   local map = require('util.plugin').safe_keymap_set
   map('n', '<CR>', function() M.select(session) end, {
     buffer = bufnr,
-    desc = 'Open File or Fold Bucket',
+    desc = 'Open File, Fold Bucket or List CI Runs',
+  })
+  map('n', 'r', function() require('tools.review.ci').load(session) end, {
+    buffer = bufnr,
+    desc = 'Refresh CI Status',
   })
   map('n', 'm', function()
     local row = row_under_cursor(session)

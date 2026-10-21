@@ -190,5 +190,94 @@ describe('tools.review.panel', function()
       local lines = panel.render(s)
       assert.equals('     ⟳ src/billing/export.go        binary', lines[6])
     end)
+    describe('CI line', function()
+      local function run(state, by)
+        return {
+          provider = 'github',
+          name = state,
+          state = state,
+          by = by or 'commit',
+        }
+      end
+
+      it('is left out until a fetch has been asked for', function()
+        local lines = panel.render(session())
+        for _, line in ipairs(lines) do
+          assert.is_nil(line:find('CI:', 1, true))
+        end
+      end)
+
+      it('says it is asking while the first fetch runs', function()
+        local s = session({ ci_loading = true })
+        local lines, rows = panel.render(s)
+        assert.equals(' CI: asking…', lines[2])
+        assert.is_true(rows[2].ci)
+      end)
+
+      it('counts the runs by state', function()
+        local runs = {}
+        for _ = 1, 12 do
+          runs[#runs + 1] = run('pass')
+        end
+        runs[#runs + 1] = run('fail')
+        runs[#runs + 1] = run('running')
+        runs[#runs + 1] = run('running')
+        local lines, rows =
+          panel.render(session({ ci = { runs = runs, errors = {} } }))
+        assert.equals(' CI: 12 pass · 1 fail · 2 running', lines[2])
+        assert.is_true(rows[2].ci)
+      end)
+
+      it('marks runs keyed on the branch', function()
+        local lines = panel.render(session({
+          ci = { runs = { run('pass'), run('fail', 'branch') }, errors = {} },
+        }))
+        assert.equals(' CI: 1 pass · 1 fail (by branch)', lines[2])
+      end)
+
+      it('names the sources it could not ask', function()
+        local lines = panel.render(session({
+          ci = {
+            runs = {},
+            errors = { 'github: boom: x', 'jenkins: HTTP 403' },
+          },
+        }))
+        assert.equals(' CI: could not ask github, jenkins', lines[2])
+      end)
+
+      it('shows what other sources found beside a failed one', function()
+        local lines = panel.render(session({
+          ci = { runs = { run('pass') }, errors = { 'jenkins: HTTP 403' } },
+        }))
+        assert.equals(' CI: 1 pass · could not ask jenkins', lines[2])
+      end)
+
+      it('says a run is keyed by name, and what waits for trust', function()
+        local lines = panel.render(session({
+          ci = {
+            runs = { run('running', 'name') },
+            errors = {},
+            waiting = { 'argo: after you trust the PR' },
+          },
+        }))
+        assert.equals(
+          ' CI: 1 running (by name) · argo: after you trust the PR',
+          lines[2]
+        )
+        lines = panel.render(session({
+          ci = {
+            runs = {},
+            errors = {},
+            waiting = { 'argo: after you trust the PR' },
+          },
+        }))
+        assert.equals(' CI: no runs · argo: after you trust the PR', lines[2])
+      end)
+
+      it('says when a head has no run', function()
+        local lines = panel.render(session({ ci = { runs = {}, errors = {} } }))
+        assert.equals(' CI: no runs', lines[2])
+      end)
+    end)
   end)
 end)
