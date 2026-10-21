@@ -170,7 +170,13 @@ describe('tools.ci_argo', function()
         true
       )
     )
-    assert.is_truthy(calls[2]:find('get workflows.argoproj.io ci-new', 1, true))
+    assert.is_truthy(
+      calls[2]:find(
+        'get workflows.argoproj.io --output json -- ci-new',
+        1,
+        true
+      )
+    )
 
     -- Each run is marked on the step that ran it
     local ci = require('tools.ci_inline')
@@ -219,7 +225,11 @@ describe('tools.ci_argo', function()
       calls[1]:find('--selector workflows.argoproj.io/workflow=ci-new', 1, true)
     )
     assert.is_truthy(
-      calls[2]:find('logs ci-new-compile-2 --container main --tail 3', 1, true)
+      calls[2]:find(
+        'logs --container main --tail 3 -- ci-new-compile-2',
+        1,
+        true
+      )
     )
 
     got = await(
@@ -229,5 +239,64 @@ describe('tools.ci_argo', function()
     )
     assert.is_nil(got[1])
     assert.is_truthy(got[3]:find('The pod of x is gone', 1, true))
+  end)
+  it('never lets a manifest name reach kubectl as a flag', function()
+    cli('kubectl', { 'exit 0' })
+    local function target_of(name, namespace)
+      local lines = { 'kind: Workflow', 'metadata:', '  name: ' .. name }
+      if namespace then lines[#lines + 1] = '  namespace: ' .. namespace end
+      return await(function(cb) argo.target(dir, lines, cb) end)
+    end
+    for _, bad in ipairs({
+      '--server=https://x',
+      '--kubeconfig=/tmp/k',
+      'UPPER',
+      '-lead',
+      'trail-',
+      ('a'):rep(254),
+    }) do
+      assert.same(
+        { nil, 'This workflow names something Kubernetes could not' },
+        target_of(bad)
+      )
+    end
+    assert.same(
+      { nil, 'This workflow names something Kubernetes could not' },
+      target_of('ok', '--token=x')
+    )
+    assert.same(
+      { nil, 'This workflow names something Kubernetes could not' },
+      await(
+        function(cb)
+          argo.target(dir, {
+            'kind: Workflow',
+            'metadata:',
+            '  generateName: --server=x',
+          }, cb)
+        end
+      )
+    )
+    assert.equals('a.b-c', target_of('a.b-c', 'ns-1')[1].name)
+    assert.is_nil(vim.uv.fs_stat(dir .. '/calls'))
+  end)
+
+  it('puts `--` before the name of a run, whatever it looks like', function()
+    cli('kubectl', {
+      'case "$*" in',
+      [[  *jsonpath*) printf -- '--server=x\t2026-10-18T09:00:00Z\n';;]],
+      'esac',
+    })
+    await(
+      function(cb)
+        argo.fetch({
+          kind = 'WorkflowTemplate',
+          name = 'ci',
+          namespace = 'builds',
+          context = 'kind-dev',
+        }, cb)
+      end
+    )
+    local calls = vim.fn.readfile(dir .. '/calls')
+    assert.is_truthy(calls[2]:find(' -- --server=x', 1, true))
   end)
 end)

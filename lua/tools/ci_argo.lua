@@ -69,6 +69,29 @@ function M.read(lines)
   return found
 end
 
+--- Whether `name` can be the name of a Kubernetes object: a DNS-1123
+--- subdomain. A `generateName` is a prefix, so it may end in `-`.
+---@param name string
+---@param prefix? boolean
+---@return boolean
+local function is_object_name(name, prefix)
+  if #name > 253 then return false end
+  if prefix then return name:match('^[a-z0-9][-a-z0-9.]*$') ~= nil end
+  return name:match('^[a-z0-9]$') ~= nil
+    or name:match('^[a-z0-9][-a-z0-9.]*[a-z0-9]$') ~= nil
+end
+
+--- Whether `name` can be a namespace: a DNS-1123 label
+---@param name string
+---@return boolean
+local function is_namespace(name)
+  return #name <= 63
+    and (
+      name:match('^[a-z0-9]$') ~= nil
+      or name:match('^[a-z0-9][-a-z0-9]*[a-z0-9]$') ~= nil
+    )
+end
+
 --- Hand `on_done` the runs `lines` defines are looked for by, in the current
 --- context, or why there are none
 ---@param dir string
@@ -77,6 +100,15 @@ end
 function M.target(dir, lines, on_done)
   local found = M.read(lines)
   if not found.kind then return on_done(nil, 'No kind in this file') end
+  -- The names come from a file anyone may have written and end up in
+  -- kubectl's arguments: only what Kubernetes itself would name
+  if
+    (found.name and not is_object_name(found.name))
+    or (found.generate_name and not is_object_name(found.generate_name, true))
+    or (found.namespace and not is_namespace(found.namespace))
+  then
+    return on_done(nil, 'This workflow names something Kubernetes could not')
+  end
   if not (found.name or found.generate_name) then
     return on_done(nil, 'This workflow has no name or generateName')
   end
@@ -206,7 +238,8 @@ function M.fetch(target, on_done)
   local function show(name)
     get_json(
       target,
-      { 'get', 'workflows.argoproj.io', name, '--output', 'json' },
+      -- `--` last: whatever a name looks like, it is not a flag
+      { 'get', 'workflows.argoproj.io', '--output', 'json', '--', name },
       function(workflow, err)
         if not workflow then return on_done(nil, err) end
         on_done(M.pipeline(workflow))
@@ -343,11 +376,12 @@ function M.log(target, pipeline, job, on_done)
     system.run(
       M.kubectl(target, {
         'logs',
-        pod,
         '--container',
         M.CONTAINER,
         '--tail',
         tostring(M.LOG_LINES + 1),
+        '--',
+        pod,
       }),
       {
         timeout = (M.REQUEST_TIMEOUT + 5) * 1000,
