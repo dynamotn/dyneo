@@ -111,6 +111,69 @@ describe('util.forge', function()
     }, command)
   end)
 
+  describe('an Azure call', function()
+    local remote = {
+      kind = 'azure',
+      host = 'dev.azure.com',
+      slug = 'o/p/r',
+      name = 'origin',
+      org = 'o',
+      project = 'p',
+      repo = 'r',
+    }
+
+    --- The word after `flag` in `command`
+    local function after(command, flag)
+      for i, word in ipairs(command) do
+        if word == flag then return command[i + 1] end
+      end
+    end
+
+    it('builds an Azure call with its method and body file', function()
+      local command, _, done = forge.command(remote, {
+        area = 'git',
+        resource = 'pullRequestThreads',
+        method = 'POST',
+        body = { a = 1 },
+      })
+      assert.equals('POST', after(command, '--http-method'))
+      local file = after(command, '--in-file')
+      assert.is_string(file)
+      assert.same(
+        { a = 1 },
+        vim.json.decode(table.concat(vim.fn.readfile(file), '\n'))
+      )
+      assert.is_function(done)
+      done()
+      assert.equals(0, vim.fn.filereadable(file))
+    end)
+
+    it('keeps GET when no method is given', function()
+      local command, _, done = forge.command(
+        remote,
+        { area = 'build', resource = 'builds', route = { project = 'p' } }
+      )
+      assert.equals('GET', after(command, '--http-method'))
+      assert.is_nil(after(command, '--in-file'))
+      assert.is_nil(done)
+    end)
+
+    it('asks the API version a call names, else the default', function()
+      local pinned = forge.command(remote, {
+        area = 'Location',
+        resource = 'connectionData',
+        route = {},
+        api_version = '7.1-preview',
+      })
+      assert.equals('7.1-preview', after(pinned, '--api-version'))
+      local plain = forge.command(
+        remote,
+        { area = 'build', resource = 'builds', route = { project = 'p' } }
+      )
+      assert.equals(forge.AZURE_API_VERSION, after(plain, '--api-version'))
+    end)
+  end)
+
   it('takes the first remote on a known forge, in order', function()
     local function git(...)
       vim.system(vim.list_extend({ 'git' }, { ... }), { cwd = dir }):wait()
@@ -399,6 +462,119 @@ describe('util.forge', function()
         local data, err = call(remote, logs)
         assert.is_nil(data)
         assert.equals('az is not installed', err)
+      end)
+    end)
+
+    describe('write', function()
+      local github =
+        { kind = 'github', host = 'github.com', slug = 'o/r', name = 'gh' }
+      local azure = {
+        kind = 'azure',
+        host = 'dev.azure.com',
+        slug = 'o/p/r',
+        name = 'origin',
+        org = 'o',
+        project = 'p',
+        repo = 'r',
+      }
+
+      local function write(remote, method, endpoint, body)
+        local done, data, err = false, nil, nil
+        forge.write(remote, method, endpoint, body, function(d, e)
+          done, data, err = true, d, e
+        end)
+        assert.is_true(vim.wait(5000, function() return done end, 10))
+        return data, err
+      end
+
+      it('writes through gh with the body on stdin', function()
+        cli('gh', {
+          'echo "$@" > "' .. dir .. '/gh.args"',
+          'cat > "' .. dir .. '/gh.stdin"',
+          [[echo '{"id":7}']],
+        })
+        local data, err = write(
+          github,
+          'POST',
+          'repos/o/r/pulls/1/reviews',
+          { event = 'COMMENT' }
+        )
+        assert.is_nil(err)
+        assert.same({ id = 7 }, data)
+        assert.same({
+          'api --hostname github.com --method POST --input - '
+            .. 'repos/o/r/pulls/1/reviews',
+        }, vim.fn.readfile(dir .. '/gh.args'))
+        assert.same(
+          { '{"event":"COMMENT"}' },
+          vim.fn.readfile(dir .. '/gh.stdin')
+        )
+      end)
+
+      it('takes an empty answer for an empty object', function()
+        cli('gh', { 'echo "$@" > "' .. dir .. '/gh.args"' })
+        local data, err = write(github, 'DELETE', 'repos/o/r/x', nil)
+        assert.is_nil(err)
+        assert.same({}, data)
+        -- Nothing to send: no body is read
+        assert.same(
+          { 'api --hostname github.com --method DELETE repos/o/r/x' },
+          vim.fn.readfile(dir .. '/gh.args')
+        )
+        cli('az', { 'echo null' })
+        data, err = write(
+          azure,
+          'PATCH',
+          { area = 'git', resource = 'pullRequests', route = {} },
+          nil
+        )
+        assert.is_nil(err)
+        assert.same({}, data)
+      end)
+
+      it('removes the Azure body file after the call', function()
+        local call = {
+          area = 'git',
+          resource = 'pullRequestThreads',
+          route = { project = 'p' },
+        }
+        for _, exit in ipairs({ 0, 1 }) do
+          -- The body is kept aside, to see the file existed and is gone
+          cli('az', {
+            'while [ "$1" != "--in-file" ]; do shift; done',
+            'echo "$2" > "' .. dir .. '/az.file"',
+            'cat "$2" > "' .. dir .. '/az.body"',
+            [[echo '{"id":1}']],
+            'exit ' .. exit,
+          })
+          local data, err = write(azure, 'POST', call, { b = 2 })
+          if exit == 0 then
+            assert.same({ id = 1 }, data)
+          else
+            assert.is_nil(data)
+            assert.is_string(err)
+          end
+          assert.same(
+            { b = 2 },
+            vim.json.decode(vim.fn.readfile(dir .. '/az.body')[1])
+          )
+          local file = vim.fn.readfile(dir .. '/az.file')[1]
+          assert.equals(0, vim.fn.filereadable(file))
+        end
+        -- The caller's call is left as it was
+        assert.is_nil(call.method)
+        assert.is_nil(call.body)
+      end)
+
+      it('fails closed', function()
+        cli('gh', { 'cat > /dev/null', 'echo "HTTP 422" >&2', 'exit 1' })
+        local data, err = write(github, 'POST', 'x', { a = 1 })
+        assert.is_nil(data)
+        assert.equals('HTTP 422', err)
+        cli('gh', { 'cat > /dev/null', 'echo "<html>"' })
+        data, err = write(github, 'POST', 'x', { a = 1 })
+        assert.is_nil(data)
+        assert.equals('gh api answered with something not JSON', err)
       end)
     end)
 

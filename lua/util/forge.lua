@@ -57,6 +57,9 @@ M.TIMEOUT = 30 * 1000
 ---@field resource string `builds`, `timeline`, `pullRequests`, ...
 ---@field route table<string, string|integer>
 ---@field query? table<string, string|integer>
+---@field method? 'GET'|'POST'|'PATCH'|'PUT'|'DELETE' `GET` unless given
+---@field body? table Sent as JSON, from a file `az` reads
+---@field api_version? string `M.AZURE_API_VERSION` unless given: an area with no released version asks a preview
 
 --- The host and the path of a clone URL: `https://host/a/b(.git)`,
 --- `ssh://git@host:22/a/b`, `git@host:a/b`
@@ -271,12 +274,14 @@ local function params(map)
   return words
 end
 
---- The command that calls `endpoint` of the API of `remote`, and the name
---- it goes by in messages
+--- The command that calls `endpoint` of the API of `remote`, the name it
+--- goes by in messages, and what removes the file holding an Azure call's
+--- body once the command is done
 ---@param remote DyForgeRemote
 ---@param endpoint string|DyForgeAzureCall A path for `gh` and `glab`, a call for `az`
 ---@return string[] command
 ---@return string name
+---@return fun()? cleanup
 function M.command(remote, endpoint)
   if remote.kind ~= 'azure' then
     local cli = M.CLIS[remote.kind]
@@ -305,9 +310,9 @@ function M.command(remote, endpoint)
     '--resource',
     call.resource,
     '--api-version',
-    M.AZURE_API_VERSION,
+    call.api_version or M.AZURE_API_VERSION,
     '--http-method',
-    'GET',
+    call.method or 'GET',
     '--output',
     'json',
     '--only-show-errors',
@@ -321,44 +326,80 @@ function M.command(remote, endpoint)
     table.insert(command, '--query-parameters')
     vim.list_extend(command, query)
   end
-  return command, 'az devops invoke'
+  local cleanup
+  if call.body ~= nil then
+    -- `az devops invoke` takes a body from a file alone; one in Neovim's own
+    -- temporary directory, which only the user can read
+    local file = vim.fn.tempname()
+    vim.fn.writefile({ vim.json.encode(call.body) }, file)
+    vim.list_extend(command, { '--in-file', file })
+    cleanup = function() vim.fn.delete(file) end
+  end
+  return command, 'az devops invoke', cleanup
 end
+
+---@class DyForgeCallOpts
+---@field max_bytes? integer
+---@field method? 'POST'|'PATCH'|'PUT'|'DELETE' A write, rather than a read
+---@field body? table What a write sends, as JSON
 
 --- Run `endpoint` of the API of `remote` and decode its JSON answer
 ---@param remote DyForgeRemote
 ---@param endpoint string|DyForgeAzureCall
----@param max_bytes? integer
+---@param opts DyForgeCallOpts
 ---@param on_done fun(data: any?, err: string?)
-local function json_call(remote, endpoint, max_bytes, on_done)
+local function json_call(remote, endpoint, opts, on_done)
   local cli = M.CLIS[remote.kind]
   if not cli then return on_done(nil, 'No CLI answers for ' .. remote.kind) end
   if vim.fn.executable(cli) ~= 1 then
     return on_done(nil, cli .. ' is not installed')
   end
-  local command, name = M.command(remote, endpoint)
-  local system = require('util.system')
-  system.run(
-    command,
-    cli_opts(remote, { timeout = M.TIMEOUT, max_bytes = max_bytes }),
-    function(result)
-      if result.code ~= 0 and not result.cut then
-        return on_done(nil, system.failure(result, name))
-      end
-      -- Half a JSON document is no answer
-      if result.cut then
-        return on_done(nil, name .. ' answered with more than can be read')
-      end
-      local decoded, data = pcall(
-        vim.json.decode,
-        result.stdout or '',
-        { luanil = { object = true, array = true } }
-      )
-      if not decoded then
-        return on_done(nil, name .. ' answered with something not JSON')
-      end
-      on_done(data)
+  local run_opts = { timeout = M.TIMEOUT, max_bytes = opts.max_bytes }
+  if opts.method and remote.kind == 'azure' then
+    endpoint = vim.tbl_extend('force', endpoint --[[@as table]], {
+      method = opts.method,
+      body = opts.body,
+    })
+  end
+  local command, name, cleanup = M.command(remote, endpoint)
+  if opts.method and remote.kind ~= 'azure' then
+    -- Before the endpoint, which stays the last word
+    local flags = { '--method', opts.method }
+    if opts.body ~= nil then
+      vim.list_extend(flags, { '--input', '-' })
+      run_opts.stdin = vim.json.encode(opts.body)
     end
-  )
+    for _, flag in ipairs(flags) do
+      table.insert(command, #command, flag)
+    end
+  end
+  local system = require('util.system')
+  system.run(command, cli_opts(remote, run_opts), function(result)
+    -- The body file goes first, whatever the answer
+    if cleanup then cleanup() end
+    if result.code ~= 0 and not result.cut then
+      return on_done(nil, system.failure(result, name))
+    end
+    -- Half a JSON document is no answer
+    if result.cut then
+      return on_done(nil, name .. ' answered with more than can be read')
+    end
+    -- A write may answer `204 No Content`, or `null`: done, with nothing to
+    -- say, never a nil that reads as a failure without a reason
+    if opts.method and vim.trim(result.stdout or '') == '' then
+      return on_done({})
+    end
+    local decoded, data = pcall(
+      vim.json.decode,
+      result.stdout or '',
+      { luanil = { object = true, array = true } }
+    )
+    if not decoded then
+      return on_done(nil, name .. ' answered with something not JSON')
+    end
+    if data == nil and opts.method then data = {} end
+    on_done(data)
+  end)
 end
 
 --- Call `endpoint` of the API of `remote`, through its CLI, and hand
@@ -367,7 +408,22 @@ end
 ---@param endpoint string|DyForgeAzureCall Relative, as `gh` or `glab` takes it (`repos/o/r/pulls`), or a call of Azure DevOps
 ---@param on_done fun(data: any?, err: string?)
 function M.api(remote, endpoint, on_done)
-  json_call(remote, endpoint, nil, on_done)
+  json_call(remote, endpoint, {}, on_done)
+end
+
+--- Send a write -- a comment, a vote -- to `endpoint` of the API of
+--- `remote`, through its CLI, and hand `on_done` the decoded answer or why
+--- there is none
+---
+--- `gh` and `glab` read `body` from their input; `az` from a file, removed
+--- once the call is done.
+---@param remote DyForgeRemote
+---@param method 'POST'|'PATCH'|'PUT'|'DELETE'
+---@param endpoint string|DyForgeAzureCall A path for `gh` and `glab`; for `az` a call, its `method` and `body` taken from here
+---@param body? table Sent as JSON
+---@param on_done fun(data: any?, err: string?) `{}` for an empty answer
+function M.write(remote, method, endpoint, body, on_done)
+  json_call(remote, endpoint, { method = method, body = body }, on_done)
 end
 
 --- Call `endpoint` of the API of `remote`, through its CLI, for text rather
@@ -380,15 +436,20 @@ function M.api_text(remote, endpoint, max_bytes, on_done)
   if remote.kind == 'azure' then
     -- `az devops invoke` answers in JSON alone: a log comes as its lines,
     -- and one cut short cannot be read at all
-    return json_call(remote, endpoint, max_bytes, function(data, err)
-      if data == nil then return on_done(nil, false, err) end
-      if type(data) == 'string' then return on_done(data, false) end
-      local lines = type(data) == 'table' and data.value
-      if type(lines) ~= 'table' then
-        return on_done(nil, false, 'az devops invoke answered with no log')
+    return json_call(
+      remote,
+      endpoint,
+      { max_bytes = max_bytes },
+      function(data, err)
+        if data == nil then return on_done(nil, false, err) end
+        if type(data) == 'string' then return on_done(data, false) end
+        local lines = type(data) == 'table' and data.value
+        if type(lines) ~= 'table' then
+          return on_done(nil, false, 'az devops invoke answered with no log')
+        end
+        on_done(table.concat(vim.tbl_map(tostring, lines), '\n'), false)
       end
-      on_done(table.concat(vim.tbl_map(tostring, lines), '\n'), false)
-    end)
+    )
   end
   local cli = M.CLIS[remote.kind]
   if vim.fn.executable(cli) ~= 1 then
