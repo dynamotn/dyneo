@@ -25,8 +25,11 @@ describe('lint.linters.dyshellint', function()
   end)
 
   it('names a buffer by its path', function()
-    vim.api.nvim_set_current_buf(h.buffer({ name = '/tmp/x/script.sh' }))
-    assert.are.equal('/tmp/x/script.sh', linter.args[4]())
+    -- A folder no machine has: Neovim resolves the name of one that exists,
+    -- and on macOS `/tmp` is a link into `/private`
+    local name = '/nonexistent-dyneo/x/script.sh'
+    vim.api.nvim_set_current_buf(h.buffer({ name = name }))
+    assert.are.equal(name, linter.args[4]())
   end)
 
   describe('parser', function()
