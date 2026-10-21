@@ -366,18 +366,37 @@ local function stay(plugin, target, quiet)
   return ok and Git.info(plugin.dir) or target
 end
 
---- The target lazy.nvim should check out instead of `target`
+--- `held` unless it is older than what is checked out, then the checkout
 ---
---- `releases` is only asked for when the target is a release -- the `stable`
---- channel -- and lists the ones matching the plugin's `version`, newest
---- first, as `{ tag = ..., commit = ... }`.
+--- The window decides what may come in, and what is checked out already came
+--- in: its code has run. Moving it back gains nothing and undoes whatever the
+--- newer commit fixed, such as a plugin kept working with the Neovim it runs
+--- on. A plugin just cloned has nothing of its own to stay on.
 ---@param plugin LazyPlugin
----@param target GitInfo?
+---@param target GitInfo What lazy.nvim resolved
+---@param held GitInfo What the window would check out instead
+---@return GitInfo
+local function no_older(plugin, target, held)
+  if held.commit == target.commit or fresh(plugin) then return held end
+  local ok, Git = pcall(require, 'lazy.manage.git')
+  local current = ok and Git.info(plugin.dir)
+  if not current or not current.commit or current.commit == held.commit then
+    return held
+  end
+  local _, newer = git(
+    plugin.dir,
+    { 'merge-base', '--is-ancestor', held.commit, current.commit }
+  )
+  return newer and current or held
+end
+
+--- The target the window allows, wherever the checkout is
+---@param plugin LazyPlugin
+---@param target GitInfo
 ---@param releases? fun(): { tag: string, commit: string?, version: table? }[]
----@param now? integer Seconds since the epoch, for the specs
----@return GitInfo?
-function M.target(plugin, target, releases, now)
-  if not target or not target.commit then return target end
+---@param now? integer
+---@return GitInfo
+local function hold(plugin, target, releases, now)
   -- A plugin held at a commit, a tag or a pin is already where it was told to
   -- be, and a local one is the user's own working copy.
   if plugin.pin or plugin.commit or plugin.tag then return target end
@@ -445,6 +464,21 @@ function M.target(plugin, target, releases, now)
   return vim.tbl_extend('force', target, { commit = commit })
 end
 
+--- The target lazy.nvim should check out instead of `target`
+---
+--- `releases` is only asked for when the target is a release -- the `stable`
+--- channel -- and lists the ones matching the plugin's `version`, newest
+--- first, as `{ tag = ..., commit = ... }`.
+---@param plugin LazyPlugin
+---@param target GitInfo?
+---@param releases? fun(): { tag: string, commit: string?, version: table? }[]
+---@param now? integer Seconds since the epoch, for the specs
+---@return GitInfo?
+function M.target(plugin, target, releases, now)
+  if not target or not target.commit then return target end
+  return no_older(plugin, target, hold(plugin, target, releases, now))
+end
+
 --- The releases of `plugin` matching the version its spec asks for, newest
 --- first, as `M.target` wants them
 ---
@@ -506,7 +540,7 @@ function M.bootstrap(dir, now)
   local head = git(dir, { 'rev-parse', 'HEAD' })
   if not head then return nil end
   local target = M.target(
-    { dir = dir, name = 'lazy.nvim' },
+    { dir = dir, name = 'lazy.nvim', _ = { cloned = true } },
     { commit = head },
     nil,
     now

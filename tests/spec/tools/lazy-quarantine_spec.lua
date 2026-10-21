@@ -49,6 +49,16 @@ local function repository(ages)
     })
     commits[index] = git(dir, { 'rev-parse', 'HEAD' })
   end
+  -- Installed at the oldest, as a plugin is that lazy.nvim has just fetched
+  -- the newer commits of: they are on `origin/main`, which is where it
+  -- resolves a branch's target
+  git(dir, { 'update-ref', 'refs/remotes/origin/main', 'HEAD' })
+  git(dir, {
+    'symbolic-ref',
+    'refs/remotes/origin/HEAD',
+    'refs/remotes/origin/main',
+  })
+  git(dir, { 'reset', '--quiet', '--hard', commits[1] })
   return dir, commits, cleanup
 end
 
@@ -350,6 +360,8 @@ describe('tools.lazy-quarantine', function()
   describe('bootstrap', function()
     it('walks a fresh clone back to an aged commit', function()
       local dir, commits, cleanup = repository({ 30 * DAY, 8 * DAY, DAY })
+      -- A clone checks out the tip of the default branch
+      git(dir, { 'reset', '--quiet', '--hard', commits[3] })
       h.unload('tools.lazy-quarantine')
       local moved = require('tools.lazy-quarantine').bootstrap(dir, now)
       local head = git(dir, { 'rev-parse', 'HEAD' })
@@ -360,6 +372,7 @@ describe('tools.lazy-quarantine', function()
 
     it('leaves a clone whose tip is old enough', function()
       local dir, commits, cleanup = repository({ 30 * DAY, 8 * DAY })
+      git(dir, { 'reset', '--quiet', '--hard', commits[2] })
       h.unload('tools.lazy-quarantine')
       local moved = require('tools.lazy-quarantine').bootstrap(dir, now)
       local head = git(dir, { 'rev-parse', 'HEAD' })
@@ -616,6 +629,7 @@ describe('tools.lazy-quarantine', function()
 
     it('leaves out a plugin already on its target', function()
       local dir, commits, cleanup = repository({ 30 * DAY, 2 * DAY })
+      git(dir, { 'reset', '--quiet', '--hard', commits[2] })
       Config.plugins = {
         ['spec.nvim'] = {
           name = 'spec.nvim',
@@ -733,7 +747,40 @@ describe('tools.lazy-quarantine', function()
     cleanup()
     assert.are.equal('v2.0.0', moved.tag)
     assert.are.equal(commits[2], moved.commit)
-    assert.are.equal(commits[3], stayed.commit)
+    assert.are.equal(commits[1], stayed.commit)
+  end)
+
+  it('never moves a checkout back past what is installed', function()
+    -- The second commit was seen 10 days ago; the third, dated 15 days back,
+    -- first seen today, is what a clone checked out
+    local dir, commits, cleanup = repository({ 30 * DAY, 20 * DAY, 15 * DAY })
+    h.unload('tools.lazy-quarantine')
+    local quarantine = require('tools.lazy-quarantine')
+    local plugin = { dir = dir, name = 'spec.nvim' }
+    quarantine.target(
+      plugin,
+      { branch = 'main', commit = commits[2] },
+      nil,
+      now - 10 * DAY
+    )
+    git(dir, { 'reset', '--quiet', '--hard', commits[3] })
+    local installed = quarantine.target(
+      plugin,
+      { branch = 'main', commit = commits[3] },
+      nil,
+      now
+    )
+    -- Between the commit the window allows and the target, it stays put too
+    git(dir, { 'reset', '--quiet', '--hard', commits[2] })
+    local behind = quarantine.target(
+      plugin,
+      { branch = 'main', commit = commits[3] },
+      nil,
+      now
+    )
+    cleanup()
+    assert.are.equal(commits[3], installed.commit)
+    assert.are.equal(commits[2], behind.commit)
   end)
 
   it('stays on the checkout when git cannot answer', function()

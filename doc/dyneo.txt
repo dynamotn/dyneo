@@ -461,6 +461,9 @@ is also written down with the time this machine first saw it.  Once a plugin
 has been watched for a whole window, a target first seen inside it gives way
 to the newest one seen before, however old its date claims to be.  When git
 cannot answer at all, a plugin stays on the commit it has, with a warning.
+The window never moves a plugin back past the commit already checked out:
+that code is installed and has run, and an older one may no longer work
+with the Neovim it runs on.
 
 A week of waiting only helps if someone looks.  `<leader>kq` (|:DyQuarantine|)
 lists what is held back and for how long; `<leader>kr` (`:DyQuarantine
