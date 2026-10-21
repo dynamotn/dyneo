@@ -406,6 +406,34 @@ describe('tools.ai', function()
       assert.same({}, audit)
     end)
 
+    it('checks the paths it is given, and says why it failed', function()
+      local paths, failed
+      restores[#restores + 1] = h.stub(package.loaded, 'tools.ai.check', {
+        text = function(_, given, _, on_done)
+          paths = given
+          on_done('a.env is kept from AI')
+        end,
+      })
+      ai.headless('diff', dir, 'review', function(a) answer = a end, {
+        paths = { 'a.env', 'b.lua' },
+        on_fail = function(reason) failed = reason end,
+      })
+      assert.same({ 'a.env', 'b.lua' }, paths)
+      assert.is_nil(answer)
+      assert.equals('Kept from AI: a.env is kept from AI', failed)
+    end)
+
+    it('says when the command failed', function()
+      h.write(DyNeo.ai.commit_command[1], { '#!/bin/sh', 'exit 3' })
+      local failed
+      ai.headless('diff', dir, 'review', function(a) answer = a end, {
+        on_fail = function(reason) failed = reason end,
+      })
+      vim.wait(5000, function() return failed ~= nil end, 10)
+      assert.is_nil(answer)
+      assert.is_truthy(failed)
+    end)
+
     it('says when the command answered nothing', function()
       h.write(
         DyNeo.ai.commit_command[1],

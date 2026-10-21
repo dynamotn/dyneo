@@ -100,6 +100,12 @@ end
 --- Bytes of answer kept from a headless command
 M.MAX_ANSWER = 64 * 1024
 
+---@class DyAiHeadlessOpts
+---@field paths? string[] Files the text was taken from, relative to `root`,
+--- for the sensitive-path check
+---@field on_fail? fun(reason: string) Called, after the notice, whenever
+--- `on_done` will not be
+
 --- Have the command of `util.ai_policy` -- `DyNeo.ai.commit_command`, or
 --- `local_command` where AI stays local -- write from `text` in `root`, and
 --- hand `on_done` its answer
@@ -107,18 +113,27 @@ M.MAX_ANSWER = 64 * 1024
 ---@param root string
 ---@param label string What is being written, for the log and the notices
 ---@param on_done fun(answer: string)
-function M.headless(text, root, label, on_done)
+---@param opts? DyAiHeadlessOpts
+function M.headless(text, root, label, on_done, opts)
+  opts = opts or {}
+  ---@param reason string
+  ---@param level integer
+  local function fail(reason, level)
+    notify(reason, level)
+    if opts.on_fail then opts.on_fail(reason) end
+  end
   local cmd, why = require('util.ai_policy').command(root)
   if not cmd then
     record('refused', root, label)
-    return notify(why --[[@as string]], vim.log.levels.WARN)
+    return fail(why --[[@as string]], vim.log.levels.WARN)
   end
-  -- The diff was checked on its way in; the commits, the branch name and
-  -- whatever else the prompt took in are checked here, as the text goes out
-  require('tools.ai.check').text(root, {}, text, function(reason)
+  -- A diff read by `tools.ai.git` was checked on its way in; the commits,
+  -- the branch name and whatever else the prompt took in are checked here,
+  -- as the text goes out, with the paths a caller names
+  require('tools.ai.check').text(root, opts.paths or {}, text, function(reason)
     if reason then
       record('refused', root, label)
-      return notify('Kept from AI: ' .. reason, vim.log.levels.WARN)
+      return fail('Kept from AI: ' .. reason, vim.log.levels.WARN)
     end
     local system = require('util.system')
     notify(('Writing the %s with %s...'):format(label, cmd[1]))
@@ -137,10 +152,10 @@ function M.headless(text, root, label, on_done)
       end
       -- A cut answer is not a shorter message: it is a broken one
       if failed then
-        return notify(system.failure(result, cmd[1]), vim.log.levels.ERROR)
+        return fail(system.failure(result, cmd[1]), vim.log.levels.ERROR)
       end
       if vim.trim(result.stdout) == '' then
-        return notify(cmd[1] .. ' gave an empty answer', vim.log.levels.WARN)
+        return fail(cmd[1] .. ' gave an empty answer', vim.log.levels.WARN)
       end
       on_done(result.stdout)
     end)
