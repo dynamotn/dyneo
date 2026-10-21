@@ -11,6 +11,10 @@
 --- `:DyRego test` runs `opa test` over the policy's folder: a failing test
 --- goes to the quickfix list, and once every one passes, the lines no test
 --- reached are marked in the open policies, with the coverage of the whole.
+---
+--- A policy may come from any clone, and is run as it is typed: both run
+--- with the capabilities of the `opa` installed, less `M.DENIED_BUILTINS`,
+--- so a policy can neither reach the network nor read the environment.
 local M = {}
 
 local system = require('util.system')
@@ -26,6 +30,94 @@ M.MAX_OUTPUT = 1024 * 1024
 M.DEBOUNCE = 300
 
 M.ns = vim.api.nvim_create_namespace('dy_rego')
+
+--- Builtins a policy is not given: they reach the network or read the
+--- environment. `net.cidr_*` only compute, and stay.
+M.DENIED_BUILTINS = { 'http.send', 'net.lookup_ip_addr', 'opa.runtime' }
+
+--- The capabilities file of this session, once written
+---@type string?
+M.capabilities_file = nil
+--- Why the capabilities could not be written, once tried
+---@type string?
+M.capabilities_error = nil
+--- Who waits for the capabilities being read
+---@type fun(path: string?, err: string?)[]?
+local capabilities_waiting
+
+--- `capabilities`, an `opa capabilities` answer, less `M.DENIED_BUILTINS`
+--- and with no host allowed to the network
+---@param capabilities table
+---@return table
+function M.restrict(capabilities)
+  local denied = {}
+  for _, name in ipairs(M.DENIED_BUILTINS) do
+    denied[name] = true
+  end
+  local builtins = {}
+  for _, builtin in ipairs(capabilities.builtins or {}) do
+    if type(builtin) == 'table' and not denied[builtin.name] then
+      table.insert(builtins, builtin)
+    end
+  end
+  local restricted = vim.deepcopy(capabilities)
+  restricted.builtins = builtins
+  -- An empty list allows no host, should a network builtin remain
+  restricted.allow_net = {}
+  return restricted
+end
+
+--- Hand `on_done` the capabilities file every `opa` run here is given, or
+--- why there is none: then nothing is run. Written once a session, from
+--- what the `opa` installed knows.
+---@param on_done fun(path: string?, err: string?)
+function M.capabilities(on_done)
+  if M.capabilities_file then return on_done(M.capabilities_file) end
+  if M.capabilities_error then return on_done(nil, M.capabilities_error) end
+  if capabilities_waiting then
+    return table.insert(capabilities_waiting, on_done)
+  end
+  capabilities_waiting = { on_done }
+  local function answer(path, err)
+    M.capabilities_file, M.capabilities_error = path, err
+    local waiting = capabilities_waiting or {}
+    capabilities_waiting = nil
+    for _, waiter in ipairs(waiting) do
+      waiter(path, err)
+    end
+  end
+  system.run(
+    { 'opa', 'capabilities', '--current' },
+    { timeout = M.TIMEOUT, max_bytes = M.MAX_OUTPUT },
+    function(result)
+      local ok, data = false, nil
+      if result.code == 0 and not result.cut then
+        ok, data = pcall(vim.json.decode, result.stdout or '')
+      end
+      if not ok or type(data) ~= 'table' or type(data.builtins) ~= 'table' then
+        return answer(
+          nil,
+          'Not run: the capabilities of opa could not be read, '
+            .. 'so a policy cannot be kept off the network: '
+            .. (
+              result.code == 0 and 'no builtins listed'
+              or system.failure(result, 'opa capabilities')
+            )
+        )
+      end
+      -- In the session's own temporary folder, removed when it ends
+      local path = vim.fn.tempname() .. '-opa-capabilities.json'
+      local written = vim.fn.writefile(
+        { vim.json.encode(M.restrict(data)) },
+        path
+      ) == 0
+      if not written then
+        return answer(nil, 'Not run: could not write ' .. path)
+      end
+      answer(path)
+    end
+  )
+end
 
 --- The package `lines` of a policy declare, or nil
 ---@param lines string[]
@@ -55,13 +147,21 @@ end
 
 --- The `opa eval` of `query` over `policies`, the input on stdin when
 --- `stdin` is set, else from `input`
+---@param capabilities string The file of `M.capabilities`
 ---@param policies string[]
 ---@param query string
 ---@param input? string
 ---@param stdin? boolean
 ---@return string[]
-function M.eval_command(policies, query, input, stdin)
-  local command = { 'opa', 'eval', '--format', 'pretty' }
+function M.eval_command(capabilities, policies, query, input, stdin)
+  local command = {
+    'opa',
+    'eval',
+    '--capabilities',
+    capabilities,
+    '--format',
+    'pretty',
+  }
   for _, policy in ipairs(policies) do
     vim.list_extend(command, { '--data', policy })
   end
@@ -98,11 +198,29 @@ local function loaded(file)
   return nil
 end
 
+--- Show `lines` as the answer of `playground`, `status` above them
+---@param playground DyRego
+---@param lines string[]
+---@param status string
+local function show(playground, lines, status)
+  require('util.scratch').set(playground.result, lines)
+  for _, win in ipairs(vim.fn.win_findbuf(playground.result)) do
+    vim.wo[win].winbar = ' ' .. status
+  end
+end
+
 --- Evaluate the query of `playground`, now
 ---@param playground DyRego
 function M.run(playground)
   if not vim.api.nvim_buf_is_valid(playground.policy) then
     return M.close(playground)
+  end
+  if not M.capabilities_file then
+    return M.capabilities(function(path, err)
+      if not M.open_playgrounds[playground.query] then return end
+      if not path then return show(playground, { err }, 'opa: not run') end
+      M.run(playground)
+    end)
   end
   if playground.job then playground.job:kill('sigterm') end
   local file = vim.api.nvim_buf_get_name(playground.policy)
@@ -120,6 +238,7 @@ function M.run(playground)
   if query == '' then query = 'data' end
   local input_buf = playground.input and loaded(playground.input)
   local command = M.eval_command(
+    M.capabilities_file,
     vim.list_extend({ copy }, M.siblings(file)),
     query,
     playground.input,
@@ -156,10 +275,7 @@ function M.run(playground)
     text = text:gsub(vim.pesc(copy), function() return file end)
     local lines = vim.split(text, '\n', { plain = true })
     if lines[#lines] == '' then table.remove(lines) end
-    require('util.scratch').set(playground.result, lines)
-    for _, win in ipairs(vim.fn.win_findbuf(playground.result)) do
-      vim.wo[win].winbar = ' ' .. status
-    end
+    show(playground, lines, status)
   end)
 end
 
@@ -206,9 +322,9 @@ function M.open(input)
   local result = require('util.scratch').open({}, {
     split = 'vertical',
     filetype = 'json',
-    -- A policy reads the whole input, and `opa.runtime()` the environment
+    -- A policy reads the whole input, and the policies of a clone
     sensitive = sensitive and 'what a policy answered of a sensitive input'
-      or 'what a policy answered, which can read the environment',
+      or 'what a policy answered, from policies of a clone',
   })
   vim.cmd('aboveleft 1new')
   local query = vim.api.nvim_get_current_buf()
@@ -403,9 +519,28 @@ function M.test(on_done)
       vim.log.levels.WARN
     )
   end
-  local dir = vim.fs.dirname(file)
+  M.capabilities(function(capabilities, err)
+    if not capabilities then return finish(err, vim.log.levels.ERROR) end
+    M.run_tests(vim.fs.dirname(file), capabilities, finish)
+  end)
+end
+
+--- Run the tests of `dir`, then mark what they leave uncovered
+---@param dir string
+---@param capabilities string The file of `M.capabilities`
+---@param finish fun(msg: string, level?: integer)
+function M.run_tests(dir, capabilities, finish)
+  local function opa_test(...)
+    return vim.list_extend({
+      'opa',
+      'test',
+      '--capabilities',
+      capabilities,
+      ...,
+    }, { '--', dir })
+  end
   system.run(
-    { 'opa', 'test', '--format', 'json', '--', dir },
+    opa_test('--format', 'json'),
     { timeout = M.TEST_TIMEOUT, max_bytes = M.MAX_OUTPUT },
     function(result)
       local results = not result.cut and decode(result.stdout or '')
@@ -443,7 +578,7 @@ function M.test(on_done)
         )
       end
       system.run(
-        { 'opa', 'test', '--coverage', '--format', 'json', '--', dir },
+        opa_test('--coverage', '--format', 'json'),
         { timeout = M.TEST_TIMEOUT, max_bytes = M.MAX_OUTPUT },
         function(covered)
           local report = not covered.cut and decode(covered.stdout or '')

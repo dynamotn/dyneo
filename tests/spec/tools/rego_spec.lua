@@ -40,22 +40,44 @@ describe('tools.rego', function()
     cleanup()
   end)
 
-  --- A fake `opa`: its arguments a line each in `calls`, its input in `stdin`
-  local function opa(lines)
+  --- What the fake `opa capabilities --current` prints
+  local CAPABILITIES = vim.json.encode({
+    builtins = {
+      { name = 'count', decl = { type = 'function' } },
+      { name = 'http.send', decl = { type = 'function' } },
+      { name = 'net.cidr_contains', decl = { type = 'function' } },
+      { name = 'net.lookup_ip_addr', decl = { type = 'function' } },
+      { name = 'opa.runtime', decl = { type = 'function' } },
+    },
+    features = { 'rego_v1' },
+  })
+
+  --- A fake `opa`: its arguments a line each in `calls`, its input in
+  --- `stdin`; `capabilities` answers with `CAPABILITIES` unless `lines`
+  --- answer it first
+  local function opa(lines, capabilities)
     h.write(
       dir .. '/bin/opa',
       vim.list_extend({
         '#!/bin/sh',
         'printf "%s\\n" "$*" >> "' .. dir .. '/calls"',
+        capabilities
+          or ([[case "$1" in capabilities) printf '%%s\n' '%s'; exit 0;; esac]]):format(
+            CAPABILITIES
+          ),
         'case "$*" in *--stdin-input*) cat > "' .. dir .. '/stdin";; esac',
       }, lines)
     )
     vim.fn.setfperm(dir .. '/bin/opa', 'rwxr-xr-x')
   end
 
+  --- The calls of the fake `opa`, but for its capabilities
   local function calls()
     if vim.fn.filereadable(dir .. '/calls') == 0 then return {} end
-    return vim.fn.readfile(dir .. '/calls')
+    return vim.tbl_filter(
+      function(call) return not call:find('^capabilities') end,
+      vim.fn.readfile(dir .. '/calls')
+    )
   end
 
   local function policy()
@@ -99,7 +121,11 @@ describe('tools.rego', function()
       local call = calls()[1]
       local copy = playground.dir .. '/p.rego'
       assert.equals(
-        ('eval --format pretty --data %s --data %s --input %s -- data.k8s.deny'):format(
+        (
+          'eval --capabilities %s --format pretty --data %s --data %s'
+          .. ' --input %s -- data.k8s.deny'
+        ):format(
+          rego.capabilities_file,
           copy,
           dir .. '/policy/lib.rego',
           dir .. '/in.yaml'
@@ -119,6 +145,44 @@ describe('tools.rego', function()
       assert.is_nil(next(rego.open_playgrounds))
     end
   )
+
+  it('keeps a policy off the network and the environment', function()
+    opa({ [[echo '{}']] })
+    policy()
+    rego.open()
+    assert.is_true(vim.wait(5000, function() return #calls() > 0 end, 10))
+    local file = assert(rego.capabilities_file)
+    assert.is_truthy(calls()[1]:find('--capabilities ' .. file, 1, true))
+    local written = vim.json.decode(table.concat(vim.fn.readfile(file), '\n'))
+    assert.same(
+      { 'count', 'net.cidr_contains' },
+      vim.tbl_map(function(builtin) return builtin.name end, written.builtins)
+    )
+    assert.same({}, written.allow_net)
+    assert.same({ 'rego_v1' }, written.features)
+  end)
+
+  it('runs nothing when the capabilities cannot be read', function()
+    opa(
+      { [[echo '{}']] },
+      [[case "$1" in capabilities) echo 'unknown command' >&2; exit 1;; esac]]
+    )
+    local bufnr = policy()
+    local playground = assert(rego.open())
+    assert.is_true(vim.wait(5000, function()
+      local first =
+        vim.api.nvim_buf_get_lines(playground.result, 0, 1, false)[1]
+      return (first or ''):find('^Not run: the capabilities of opa') ~= nil
+    end, 10))
+    assert.same({}, calls())
+
+    local done = false
+    vim.api.nvim_set_current_buf(bufnr)
+    rego.test(function() done = true end)
+    assert.is_true(vim.wait(5000, function() return done end, 10))
+    assert.is_truthy(notes[#notes]:find('^Not run: the capabilities of opa'))
+    assert.same({}, calls())
+  end)
 
   it('reads an input open in a buffer from the buffer', function()
     opa({ [[echo '{}']] })
@@ -225,6 +289,29 @@ describe('tools.rego', function()
       assert.equals(1, #items)
       assert.equals(5, items[1].lnum)
       assert.equals('data.p.test_bad: FAIL', items[1].text)
+    end)
+
+    it('runs the tests with the capabilities of the session', function()
+      opa({ [[echo '[{"package":"data.p","name":"test_ok"}]']] })
+      policy()
+      local done = false
+      rego.test(function() done = true end)
+      assert.is_true(vim.wait(5000, function() return done end, 10))
+      local file = assert(rego.capabilities_file)
+      assert.equals(
+        ('test --capabilities %s --format json -- %s'):format(
+          file,
+          dir .. '/policy'
+        ),
+        calls()[1]
+      )
+      assert.equals(
+        ('test --capabilities %s --coverage --format json -- %s'):format(
+          file,
+          dir .. '/policy'
+        ),
+        calls()[2]
+      )
     end)
 
     it('marks the lines no test reached once every test passes', function()

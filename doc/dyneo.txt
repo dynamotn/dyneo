@@ -883,6 +883,13 @@ when the playground closes, with the other `.rego` files of its folder
 beside it; an input open in a buffer is read from the buffer.  The answer is
 held back from every AI.
 
+A policy may come from any clone and runs as it is typed, so both
+`opa eval` and `opa test` are given the capabilities of the `opa` installed
+less `http.send`, `net.lookup_ip_addr` and `opa.runtime`: a policy can
+neither reach the network nor read the environment, and one that calls them
+does not compile.  The capabilities file is written once a session; when
+`opa capabilities` cannot be read, nothing runs and the answer says why.
+
 `<leader>iR` (`:DyRego test`) runs `opa test` over the policy's folder, as
 written on disk.  A failing test goes to the quickfix list; once every one
 passes, the lines no test reached are marked in the open policies and the
