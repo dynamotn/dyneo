@@ -97,6 +97,28 @@ describe('tools.review.panel', function()
       assert.is_nil(rows[1])
     end)
 
+    it('escapes control characters of a title and a path', function()
+      local s = session({ trusted = false })
+      s.pull.title = 'feat: x\nINJECTED\r\27[31m'
+      s.files[1].path = 'src/a\nb.go'
+      s.blocked = 'merged\nreally'
+      local lines = panel.render(s)
+      for _, line in ipairs(lines) do
+        assert.is_nil(line:find('%c'), line)
+      end
+      assert.matches('feat: x^@INJECTED^M^[[31m', lines[1], 1, true)
+      local row = vim.tbl_filter(
+        function(line) return line:find('src/a^@b.go', 1, true) ~= nil end,
+        lines
+      )
+      assert.equals(1, #row)
+      -- What `nvim_buf_set_lines` refuses never reaches it
+      local bufnr = h.buffer()
+      assert.has_no.errors(
+        function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines) end
+      )
+    end)
+
     it('shows the generated bucket once it is opened', function()
       local lines, rows =
         panel.render(session({ collapsed = { generated = false } }))

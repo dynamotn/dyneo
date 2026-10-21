@@ -84,6 +84,15 @@ local function pending_ai(drafts)
   return by_path
 end
 
+--- `text` with its control characters shown as `^X`: a path or a title is
+--- the author's, and a newline in it would break the line it is drawn on
+---@param text string
+---@return string
+local function shown(text)
+  if not text:find('%c') then return text end
+  return vim.fn.strtrans(text)
+end
+
 --- `text` padded with spaces to `width` display columns
 ---@param text string
 ---@param width integer
@@ -166,7 +175,7 @@ function M.render(session)
     local mark = M.mark(session, file)
     if mark == '✓' then done = done + 1 end
     if mark == '⟳' then changed = changed + 1 end
-    width = math.max(width, vim.fn.strdisplaywidth(file.path))
+    width = math.max(width, vim.fn.strdisplaywidth(shown(file.path)))
   end
   for _, n in pairs(ai) do
     ai_total = ai_total + n
@@ -175,7 +184,7 @@ function M.render(session)
 
   local lines, rows = {}, {}
   local function add(line, row)
-    lines[#lines + 1] = (line:gsub('%s+$', ''))
+    lines[#lines + 1] = (shown(line):gsub('%s+$', ''))
     rows[#lines] = row
   end
 
@@ -241,7 +250,7 @@ function M.render(session)
           ('   %s %s %s%s%s'):format(
             file.risk > 0 and '!' or ' ',
             M.mark(session, file),
-            pad(file.path, width),
+            pad(shown(file.path), width),
             counts(file.added, file.removed, file.binary),
             n_ai and ('   %d AI'):format(n_ai) or ''
           ),
