@@ -669,8 +669,10 @@ release npm deprecated or PyPI yanked, nor one whose date the registry does
 not give.  A release is written as precisely as the version it replaces:
 `~> 5.0` is offered `5.31`, `@v4` is offered `v5`, so a version newer only
 in a part the file does not write is no update.  Each line is filled in as
-its registry answers; one that fails says why on its line.  Only the names
-of the dependencies leave the machine; answers are kept for an hour.
+its registry answers; one that fails says why on its line, and one whose
+registry lists no release at all says so, rather than reading as up to
+date.  Only the names of the dependencies leave the machine; answers are
+kept for an hour.
 
 `<leader>kU` (`:DyOutdated bump`) writes the release shown into the line
 under the cursor, its operator kept.  An action pinned to a commit is shown

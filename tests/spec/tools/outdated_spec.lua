@@ -470,6 +470,7 @@ describe('tools.outdated', function()
         '  https://api.deps.dev/v3/systems/npm/packages/left-pad) cat "'
           .. dir
           .. '/npm/left-pad" ;;',
+        "  https://api.deps.dev/v3/systems/npm/packages/gone) echo '{}' ;;",
         -- Two lines, as curl and jq together print them
         '  *) printf "404 %s\\nmore\\n" "$url" >&2; exit 22 ;;',
         'esac',
@@ -617,6 +618,23 @@ describe('tools.outdated', function()
       outdated.bump(bufnr)
       assert.are.equal(range, vim.api.nvim_buf_get_lines(bufnr, 2, 3, false)[1])
       assert.matches('is a range', notes[#notes])
+    end)
+
+    it('says when a registry lists no release, not up to date', function()
+      vim.cmd.edit(vim.fn.fnameescape(dir .. '/package.json'))
+      local bufnr = vim.api.nvim_get_current_buf()
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        '{',
+        '  "dependencies": {',
+        '    "gone": "^1.0.0"',
+        '  }',
+        '}',
+      })
+      local done = false
+      outdated.check(bufnr, function() done = true end)
+      assert.is_true(vim.wait(5000, function() return done end))
+      assert.matches('no release listed', marks(bufnr)[3])
+      assert.matches('0 of 1 .*, 1 with no release listed', notes[#notes])
     end)
 
     it('says when the buffer is no manifest it reads', function()

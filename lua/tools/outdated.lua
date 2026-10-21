@@ -697,14 +697,23 @@ local function go_releases(path, current, on_done)
   local base = 'https://proxy.golang.org/' .. M.go_escape(path) .. '/@v/'
   fetch(base .. 'list', {}, function(text, err)
     if not text then return on_done(nil, err) end
-    local versions = vim.tbl_filter(
-      function(version)
-        return not M.is_prerelease(version)
-          and M.compare(M.format(version, current), current) > 0
-      end,
+    local listed = vim.tbl_filter(
+      function(version) return not M.is_prerelease(version) end,
       vim.split(text, '\n', { trimempty = true })
     )
+    local versions = vim.tbl_filter(
+      function(version)
+        return M.compare(M.format(version, current), current) > 0
+      end,
+      listed
+    )
     table.sort(versions, function(a, b) return M.compare(a, b) > 0 end)
+    -- An empty answer reads as no release listed: a module up to date
+    -- answers the newest it lists, which is no newer
+    if #versions == 0 and #listed > 0 then
+      table.sort(listed, function(a, b) return M.compare(a, b) > 0 end)
+      return on_done({ { version = listed[1] } })
+    end
     local releases, index = {}, 0
     local window = require('tools.lazy-quarantine').window()
     local function next_version()
@@ -818,6 +827,7 @@ end
 ---@field aged? DyOutdatedRelease
 ---@field held? DyOutdatedRelease
 ---@field err? string
+---@field none? boolean The registry listed no release at all
 
 --- What the last check found, by buffer and by the id of its mark
 ---@type table<integer, table<integer, DyOutdatedFound>>
@@ -851,6 +861,9 @@ local function virt_text(found)
       first = first:sub(1, M.ERROR_WIDTH - 1) .. '…'
     end
     return { { '  ? ' .. first, 'DiagnosticWarn' } }
+  end
+  if found.none then
+    return { { '  ? no release listed', 'DiagnosticWarn' } }
   end
   local chunks = {}
   local current = found.dep.version
@@ -914,7 +927,7 @@ function M.check(bufnr, on_done)
   M.runs[bufnr] = (M.runs[bufnr] or 0) + 1
   local run = M.runs[bufnr]
   local tick = vim.api.nvim_buf_get_changedtick(bufnr)
-  local marks, behind, held, failed = {}, 0, 0, 0
+  local marks, behind, held, failed, unknown = {}, 0, 0, 0, 0
   M.found[bufnr] = marks
   --- Whether what this run heard may still go on the lines it read
   local function current()
@@ -925,10 +938,13 @@ function M.check(bufnr, on_done)
   system.each(deps, M.PARALLEL, function(dep, done)
     cached(dep, function(releases, err)
       local found = { dep = dep, err = err }
-      if releases then
+      if releases and #releases == 0 then
+        found.none = true
+      elseif releases then
         found.aged, found.held = M.pick(dep.version, releases)
       end
       if found.err then failed = failed + 1 end
+      if found.none then unknown = unknown + 1 end
       if found.aged then behind = behind + 1 end
       if found.held then held = held + 1 end
       -- Each line as its registry answers, not when the slowest has
@@ -962,8 +978,11 @@ function M.check(bufnr, on_done)
     if held > 0 then
       summary = summary .. (', %d with newer ones held'):format(held)
     end
+    if unknown > 0 then
+      summary = summary .. (', %d with no release listed'):format(unknown)
+    end
     if failed > 0 then summary = summary .. (', %d failed'):format(failed) end
-    notify(summary, failed > 0 and vim.log.levels.WARN or nil)
+    notify(summary, (failed > 0 or unknown > 0) and vim.log.levels.WARN or nil)
     if on_done then on_done() end
   end)
 end
