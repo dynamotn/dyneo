@@ -56,17 +56,18 @@ describe('util.untrusted', function()
     assert.same({ first }, seen)
   end)
 
-  it('release reruns only the lsp enable group', function()
-    local group = vim.api.nvim_create_augroup('nvim.lsp.enable', {})
-    vim.api.nvim_create_autocmd('FileType', {
-      group = group,
-      callback = function() end,
-    })
+  it('release reruns only the install and lsp enable groups', function()
+    for _, name in ipairs({ 'dy_lazy_install', 'nvim.lsp.enable' }) do
+      vim.api.nvim_create_autocmd('FileType', {
+        group = vim.api.nvim_create_augroup(name, {}),
+        callback = function() end,
+      })
+      table.insert(
+        restores,
+        function() pcall(vim.api.nvim_del_augroup_by_name, name) end
+      )
+    end
     local runs = {}
-    table.insert(
-      restores,
-      function() pcall(vim.api.nvim_del_augroup_by_name, 'nvim.lsp.enable') end
-    )
     table.insert(
       restores,
       h.stub(
@@ -79,10 +80,11 @@ describe('util.untrusted', function()
     local inside = h.buffer({ name = dir .. '/wt/a.lua' })
     h.buffer({ name = dir .. '/wt-other/a.lua' })
     untrusted.release(dir .. '/wt')
-    assert.same(
-      { { 'FileType', { group = 'nvim.lsp.enable', buffer = inside } } },
-      runs
-    )
+    -- The install first: a server missing is queued, then started once there
+    assert.same({
+      { 'FileType', { group = 'dy_lazy_install', buffer = inside } },
+      { 'FileType', { group = 'nvim.lsp.enable', buffer = inside } },
+    }, runs)
     assert.is_false(untrusted.held(inside))
   end)
 

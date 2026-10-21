@@ -449,6 +449,8 @@ return {
                 local lsp_config = vim.lsp.config[server]
                 if lsp_config == nil then return end
                 if enabled and not enabled(args.buf) then return end
+                -- Nothing a held buffer asks for is fetched until it is
+                -- trusted: `util.untrusted.release` runs this group again
                 if require('util.untrusted').held(args.buf) then return end
                 if
                   lsp_config.filetypes == nil

@@ -12,6 +12,10 @@ local M = {}
 --- The augroup `vim.lsp.enable` starts servers from, on nightly and 0.12
 M.LSP_GROUP = 'nvim.lsp.enable'
 
+--- The augroup of `util.lazy_install`, whose server handler queues no
+--- install for a held buffer
+M.INSTALL_GROUP = 'dy_lazy_install'
+
 ---@class DyUntrustedHold
 ---@field on_first? fun(bufnr: integer)
 ---@field asked boolean Whether `on_first` has been scheduled
@@ -90,9 +94,10 @@ local starters = {}
 --- the filetype itself
 function M.on_release(name, start) starters[name] = start end
 
---- Let `dir` go and start the servers of its loaded buffers: the
---- `vim.lsp.enable` group runs again (alone, so ftplugins do not), then the
---- starters of `on_release`.
+--- Let `dir` go and start the servers of its loaded buffers: the lazy
+--- install group runs again, so a server not installed yet is installed and
+--- started once it is there, then the `vim.lsp.enable` group (each alone, so
+--- ftplugins do not), then the starters of `on_release`.
 ---@param dir string
 function M.release(dir)
   dir = resolve(dir)
@@ -110,18 +115,18 @@ function M.release(dir)
       table.insert(buffers, bufnr)
     end
   end
-  local ok, autocmds = pcall(vim.api.nvim_get_autocmds, {
-    group = M.LSP_GROUP,
-    event = 'FileType',
-  })
-  -- No group: `vim.lsp.enable` has no server to start
-  local enabled = ok and #autocmds > 0
+  -- A group not there has nothing to install or start
+  local groups = {} ---@type string[]
+  for _, group in ipairs({ M.INSTALL_GROUP, M.LSP_GROUP }) do
+    local ok, autocmds = pcall(vim.api.nvim_get_autocmds, {
+      group = group,
+      event = 'FileType',
+    })
+    if ok and #autocmds > 0 then table.insert(groups, group) end
+  end
   for _, bufnr in ipairs(buffers) do
-    if enabled then
-      vim.api.nvim_exec_autocmds(
-        'FileType',
-        { group = M.LSP_GROUP, buffer = bufnr }
-      )
+    for _, group in ipairs(groups) do
+      vim.api.nvim_exec_autocmds('FileType', { group = group, buffer = bufnr })
     end
     for name, start in vim.spairs(starters) do
       local started, err = pcall(start, bufnr)
