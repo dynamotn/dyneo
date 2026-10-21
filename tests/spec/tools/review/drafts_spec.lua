@@ -144,52 +144,11 @@ describe('tools.review.drafts', function()
       assert.is_true(drafts.set_state(user({ origin = 'forge' }), 'ready'))
     end)
 
-    it('sends an AI draft again once it is kept after a drop', function()
-      local state = { reviewed = {}, drafts = { ai() } }
-      drafts.set_state(state.drafts[1], 'dropped')
-      assert.equals(0, #drafts.sendable(state))
-      drafts.set_state(state.drafts[1], 'kept')
-      assert.equals(1, #drafts.sendable(state))
-    end)
-  end)
-
-  describe('sendable', function()
-    it(
-      'excludes dropped and counts only pending AI by hand-built state',
-      function()
-        local state = {
-          reviewed = {},
-          drafts = {
-            user({ state = 'pending' }),
-            user({ origin = 'forge', state = 'dropped' }),
-            user({ state = 'dropped' }),
-          },
-        }
-        local send, skipped = drafts.sendable(state)
-        assert.equals(0, #send)
-        assert.equals(0, skipped)
-      end
-    )
-
-    it('skips and counts pending AI drafts, never dropped or posted', function()
-      local state = {
-        reviewed = {},
-        drafts = {
-          ai({ state = 'pending' }),
-          ai({ state = 'kept' }),
-          ai({ state = 'edited' }),
-          ai({ state = 'dropped' }),
-          ai({ state = 'kept', posted = '9' }),
-          user(),
-          user({ origin = 'forge' }),
-          user({ origin = 'forge', posted = '1' }),
-        },
-      }
-      local send, skipped = drafts.sendable(state)
-      assert.equals(4, #send)
-      assert.equals(1, skipped)
-      assert.equals('kept', send[1].state)
-      assert.equals('forge', send[4].origin)
+    it('keeps an AI draft again after a drop', function()
+      local d = ai()
+      assert.is_true(drafts.set_state(d, 'dropped'))
+      assert.is_true(drafts.set_state(d, 'kept'))
+      assert.equals('kept', d.state)
     end)
   end)
 

@@ -1853,7 +1853,7 @@ In either side of the diff:
     `<localleader>c`   n, x   Comment on the line or the lines selected
     `<localleader>s`   n, x   Suggest a change over those lines
     `<localleader>r`   n      Reply to the thread
-    `<localleader>R`   n      Resolve or reopen the thread
+    `<localleader>R`   n      Resolve with the review, or take that back
     `<localleader>m`   n      Mark the file reviewed
     `<localleader>k`   n      Keep the AI draft
     `<localleader>e`   n      Edit the draft

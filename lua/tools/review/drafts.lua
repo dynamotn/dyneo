@@ -127,30 +127,6 @@ function M.in_hunk(hunks, side, line, start_line)
   return false
 end
 
---- Drafts to send, and how many pending AI drafts were left out
----@param state DyReviewState
----@return DyReviewDraft[] drafts
----@return integer skipped
-function M.sendable(state)
-  local send, skipped = {}, 0
-  for _, draft in ipairs(state.drafts) do
-    if draft.posted or draft.state == 'dropped' then
-      -- already on the forge, or not wanted
-    elseif draft.origin == 'forge' then
-      send[#send + 1] = draft
-    elseif draft.origin == 'ai' and draft.state == 'pending' then
-      skipped = skipped + 1
-    elseif
-      draft.state == 'ready'
-      or draft.state == 'kept'
-      or draft.state == 'edited'
-    then
-      send[#send + 1] = draft
-    end
-  end
-  return send, skipped
-end
-
 --- Swap the pending AI drafts for `new`, keeping kept and edited ones
 ---@param state DyReviewState
 ---@param new DyReviewDraft[]
