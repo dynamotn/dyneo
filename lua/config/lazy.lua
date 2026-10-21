@@ -81,6 +81,7 @@ local stale_releases = {
   'gpanders/nvim-parinfer', -- v1.2.0 lacks `vim.text.diff` for Neovim 0.12
   'honza/vim-snippets', -- no release since 1.0.0 (2014-05)
   'marilari88/neotest-vitest', -- no release since v0.2.0 (2022-09)
+  'monaqa/dial.nvim', -- v0.5.1 lacks the `Bool` and `en_weekday` augends
   'mfussenegger/nvim-dap', -- 0.10.0 lacks `listeners.on_session` (dap-view)
   'mfussenegger/nvim-jdtls', -- no release since 0.2.0 (2022-12)
   'nvim-lua/plenary.nvim', -- no release since v0.1.4 (2023-10)
