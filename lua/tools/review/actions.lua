@@ -147,9 +147,13 @@ local function editor(title, lines, on_save)
     callback = function()
       local text = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
       vim.bo[bufnr].modified = false
-      if vim.api.nvim_win_is_valid(win) then
-        vim.api.nvim_win_close(win, true)
-      end
+      -- Closed after the command: the quit of `:wq` or `:x` closes the
+      -- current window, which must still be the float when it runs
+      vim.schedule(function()
+        if vim.api.nvim_win_is_valid(win) then
+          vim.api.nvim_win_close(win, true)
+        end
+      end)
       if vim.trim(table.concat(text, '\n')) == '' then
         return notify('Nothing written: no draft saved')
       end

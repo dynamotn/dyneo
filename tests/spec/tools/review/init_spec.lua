@@ -510,7 +510,29 @@ describe('tools.review', function()
       assert.equals('why?', draft.body)
       assert.equals(10, draft.line)
       assert.is_true(draft.file_level)
+      assert.is_true(
+        vim.wait(
+          1000,
+          function() return not vim.api.nvim_buf_is_valid(editor) end
+        )
+      )
+    end)
+
+    it('closes only the float on :wq, leaving the other windows', function()
+      vim.cmd('vsplit')
+      local wins = vim.api.nvim_tabpage_list_wins(0)
+      local before = vim.api.nvim_get_current_win()
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+      review.comment()
+      local editor = vim.api.nvim_get_current_buf()
+      vim.api.nvim_buf_set_lines(editor, 0, -1, false, { 'ok' })
+      vim.cmd('wq')
+      vim.wait(50)
+      assert.equals('ok', review.current().state.drafts[1].body)
       assert.is_false(vim.api.nvim_buf_is_valid(editor))
+      assert.same(wins, vim.api.nvim_tabpage_list_wins(0))
+      assert.equals(before, vim.api.nvim_get_current_win())
+      vim.cmd('only')
     end)
 
     it('keeps a comment inside a hunk on its line', function()
