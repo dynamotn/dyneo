@@ -265,6 +265,13 @@ function M.locate(bufnr)
   return nil
 end
 
+--- The review's diff tab, while it is open
+---@return integer?
+function M.tab()
+  local tab = current.tab
+  return (tab and vim.api.nvim_tabpage_is_valid(tab)) and tab or nil
+end
+
 --- The window showing `side` of the review's diff
 ---@param side DyReviewSide
 ---@return integer?

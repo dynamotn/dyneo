@@ -75,7 +75,9 @@ function M.on_diff_buffer(bufnr, path, side)
       map(key[1], key[2], key[3], { buffer = bufnr, desc = key[4] })
     end
   end
-  if side == 'new' then
+  -- A redraw after an AI pass or a send comes from any tab: the panel
+  -- belongs beside the diff, not wherever the reviewer is now
+  if side == 'new' and diff.tab() == vim.api.nvim_get_current_tabpage() then
     panel.open(s)
     panel.follow(s, path)
   end
