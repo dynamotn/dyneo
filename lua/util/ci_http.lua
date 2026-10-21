@@ -87,9 +87,18 @@ function M.host(url)
   return host and host:lower() or nil
 end
 
+--- The scheme of `url`, lower-cased: `https` or `http`
+---@param url string
+---@return string?
+function M.scheme(url)
+  local scheme = url:match('^(%a+)://')
+  return scheme and scheme:lower() or nil
+end
+
 --- Hand `on_done` the token `command` prints, for `url`; nil, and why,
 --- when `url` is not on the host of `home` -- the server the token was set
---- up for -- or the command fails. The token is never logged.
+--- up for --, asks over plain `http` a server set up with `https`, or the
+--- command fails. The token is never logged.
 ---@param command? string[] From a `DyNeo` setting, never from a repository
 ---@param home? string The server the token belongs to
 ---@param url string The server about to be asked
@@ -103,6 +112,14 @@ function M.token(command, home, url, on_done)
         home and M.host(home) or 'no server',
         M.host(url) or url
       )
+    )
+  end
+  -- A clone may name the token's own host over plain http: the token would
+  -- then cross the network in clear text
+  if M.scheme(url) ~= 'https' and M.scheme(home) == 'https' then
+    return on_done(
+      nil,
+      ('The token for %s goes only over https'):format(M.host(home))
     )
   end
   -- It may ask for a passphrase or a login

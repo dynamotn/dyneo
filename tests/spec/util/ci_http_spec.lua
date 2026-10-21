@@ -77,6 +77,18 @@ describe('util.ci_http', function()
       end
     )
     assert.same({ nil, 'The token is for a.example, not evil.example' }, got)
+    got = await(
+      function(cb)
+        http.token(command, 'https://a.example', 'http://a.example/x', cb)
+      end
+    )
+    assert.same({ nil, 'The token for a.example goes only over https' }, got)
+    got = await(
+      function(cb)
+        http.token(command, 'http://a.example', 'http://a.example/x', cb)
+      end
+    )
+    assert.same({ 'secret-token' }, got)
     got = await(function(cb) http.token(nil, nil, 'https://x', cb) end)
     assert.same({}, got)
     cli('token', { 'exit 1' })
