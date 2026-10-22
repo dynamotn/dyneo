@@ -35,7 +35,7 @@ describe('tools.envdiff', function()
       dir .. '/bin/dyff',
       vim.list_extend({
         '#!/bin/sh',
-        'echo "$*" >> "' .. dir .. '/calls"',
+        'printf \'%s\\n\' "$*" >> "' .. dir .. '/calls"',
       }, lines)
     )
     vim.fn.setfperm(dir .. '/bin/dyff', 'rwxr-xr-x')
@@ -132,5 +132,119 @@ describe('tools.envdiff', function()
     )
     assert.is_true(vim.wait(5000, function() return done end, 10))
     assert.equals('failed to load input files', notes[#notes])
+  end)
+
+  it('orders the names that share as much with its own by name', function()
+    h.write(dir .. '/flat/dev.yaml', {})
+    h.write(dir .. '/flat/b.yaml', {})
+    h.write(dir .. '/flat/a.yaml', {})
+    assert.same(
+      { dir .. '/flat/a.yaml', dir .. '/flat/b.yaml' },
+      envdiff.candidates(dir .. '/flat/dev.yaml')
+    )
+  end)
+
+  it('warns when the buffer is no file on disk', function()
+    local done = false
+    envdiff.compare(
+      dir .. '/chart/values-prod.yaml',
+      function() done = true end
+    )
+    assert.is_true(done)
+    assert.equals('The buffer is no file on disk', notes[#notes])
+  end)
+
+  it('fails when the other file does not exist', function()
+    vim.cmd.edit(vim.fn.fnameescape(dir .. '/chart/values-dev.yaml'))
+    envdiff.compare(dir .. '/chart/values-qa.yaml')
+    assert.equals(
+      'No such file: ' .. dir .. '/chart/values-qa.yaml',
+      notes[#notes]
+    )
+    assert.equals(1, #vim.api.nvim_tabpage_list_wins(0))
+  end)
+
+  it(
+    'heads what differs with a note on unsaved edits, and says it was cut',
+    function()
+      dyff({ "printf 'replicas\\n  ± value change\\n%04000d\\n' 0" })
+      envdiff.MAX_OUTPUT = 1024
+      vim.cmd.edit(vim.fn.fnameescape(dir .. '/chart/values-dev.yaml'))
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'replicas: 9' })
+      local done = false
+      envdiff.compare(
+        dir .. '/chart/values-prod.yaml',
+        function() done = true end
+      )
+      assert.is_true(vim.wait(5000, function() return done end, 10))
+      local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+      assert.equals('As on disk: unsaved changes are not compared.', lines[3])
+      assert.equals('replicas', lines[5])
+      assert.equals('… cut at 1 KiB', lines[#lines])
+    end
+  )
+
+  it('compares with the file the command is given', function()
+    vim.cmd.edit(vim.fn.fnameescape(dir .. '/chart/values-dev.yaml'))
+    envdiff.command({ fargs = { dir .. '/chart/values-prod.yaml' } })
+    assert.is_true(vim.wo.diff)
+    assert.equals(
+      dir .. '/chart/values-prod.yaml',
+      vim.api.nvim_buf_get_name(0)
+    )
+  end)
+
+  it('warns when the command runs in a buffer with no file', function()
+    local restore = h.stub(vim.ui, 'select', function() error('asked') end)
+    envdiff.command({ fargs = {} })
+    restore()
+    assert.equals('The buffer is no file on disk', notes[#notes])
+  end)
+
+  it('asks for a file to give when none of its kind is beside it', function()
+    h.write(dir .. '/alone/only.yaml', {})
+    vim.cmd.edit(vim.fn.fnameescape(dir .. '/alone/only.yaml'))
+    local restore = h.stub(vim.ui, 'select', function() error('asked') end)
+    envdiff.command({ fargs = {} })
+    restore()
+    assert.equals(
+      'No other file of this kind beside it: give one',
+      notes[#notes]
+    )
+  end)
+
+  it(
+    'offers the files beside it by name, and compares the one picked',
+    function()
+      vim.cmd.edit(vim.fn.fnameescape(dir .. '/chart/values-dev.yaml'))
+      local offered, shown
+      local restore = h.stub(vim.ui, 'select', function(items, opts, on_choice)
+        offered = items
+        shown = vim.tbl_map(opts.format_item, items)
+        on_choice(items[1])
+      end)
+      envdiff.command({ fargs = {} })
+      restore()
+      assert.same({ 'values-prod.yaml', 'Chart.yaml' }, shown)
+      assert.equals(2, #offered)
+      assert.is_true(vim.wo.diff)
+      assert.equals(
+        dir .. '/chart/values-prod.yaml',
+        vim.api.nvim_buf_get_name(0)
+      )
+    end
+  )
+
+  it('does nothing when no file is picked', function()
+    vim.cmd.edit(vim.fn.fnameescape(dir .. '/chart/values-dev.yaml'))
+    local restore = h.stub(
+      vim.ui,
+      'select',
+      function(_, _, on_choice) on_choice(nil) end
+    )
+    envdiff.command({ fargs = {} })
+    restore()
+    assert.equals(1, #vim.api.nvim_tabpage_list_wins(0))
+    assert.same({}, notes)
   end)
 end)
