@@ -121,6 +121,14 @@ package.preload['util.plugin'] = function()
       local args = { ... }
       return as_full_machine(function() return load(unpack(args)) end)
     end
+    -- A plugin this machine has not got, `lazy = false` or not, is left
+    -- unloaded rather than reported missing: its keys come from the spec
+    local Loader = require('lazy.core.loader')
+    local load_plugin = Loader._load
+    Loader._load = function(plugin, ...)
+      if not plugin._.installed then return end
+      return load_plugin(plugin, ...)
+    end
     return setup(opts)
   end
   local Plugin =
