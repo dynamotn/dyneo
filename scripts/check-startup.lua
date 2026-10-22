@@ -178,6 +178,7 @@ end
 installs = samples.skip_installs()
 local prompts = samples.skip_prompts()
 samples.quiet_sidekick()
+samples.quiet_octo()
 samples.quiet_noice()
 enter_ui()
 

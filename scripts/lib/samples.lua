@@ -317,6 +317,26 @@ function M.quiet_sidekick()
   end)
 end
 
+--- Keep the scopes of the `gh` sign-in out of the errors
+---
+--- octo.nvim asks `gh auth status` for the token's scopes as it sets up, and
+--- reports a token without `read:project` -- or no sign-in at all, as on CI --
+--- as an error. Like Copilot's sign-in, that is the state of the machine.
+function M.quiet_octo()
+  M.before_config('octo.nvim', function()
+    local octo = require('octo')
+    local setup = octo.setup
+    octo.setup = function(opts)
+      opts = vim.tbl_deep_extend(
+        'force',
+        opts or {},
+        { suppress_missing_scope = { projects_v2 = true } }
+      )
+      return setup(opts)
+    end
+  end)
+end
+
 --- Keep noice from taking the script's own `vim.notify` for a rival plugin
 ---
 --- noice checks every so often that `vim.notify` is still its own, and
