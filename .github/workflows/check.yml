@@ -108,16 +108,24 @@ jobs:
           restore-keys: lazy-${{ runner.os }}-${{ matrix.channel }}-
       # The first start bootstraps lazy.nvim and installs what is missing;
       # `restore` then puts every plugin on the commit the lockfile names,
-      # which also winds back whatever a stale cache brought in. It exits 0
-      # when a clone fails, so each round is followed by a check that every
-      # plugin is there, and a failed host gets two more tries.
+      # which also winds back whatever a stale cache brought in. Installing
+      # rewrites the lockfile from what the cache had checked out, so it is
+      # put back and the restore run again, now with nothing to install. It
+      # exits 0 when a clone fails, so each round is followed by a check that
+      # every plugin is there and on its commit, and a failed host gets two
+      # more tries.
       - name: Install plugins
         id: install
+        env:
+          LOCKFILE: ${{ matrix.lockfile }}
         run: |
           for attempt in 1 2 3; do
             # A failed round is what the check below is for, not the end of
             # the step under `bash -e`
             nvim --headless '+Lazy! restore' +qa || true
+            git checkout -- "$LOCKFILE"
+            nvim --headless '+Lazy! restore' +qa || true
+            git checkout -- "$LOCKFILE"
             if nvim --headless -c 'luafile scripts/check-plugins.lua'; then
               exit 0
             fi
