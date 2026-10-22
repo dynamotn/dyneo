@@ -142,6 +142,18 @@ describe('tools.ci_jenkins', function()
     assert.same({ nil, 'No build of https://ci.x/job/app/job/main' }, got)
   end)
 
+  it('passes on a failure, and a build with no number', function()
+    cli('curl', { 'echo "curl: (7) Failed to connect" >&2', 'exit 7' })
+    local got = await(function(cb) jenkins.fetch(target, cb) end)
+    assert.is_nil(got[1])
+    assert.is_truthy(got[2]:find('Failed to connect', 1, true))
+    cli('curl', { [[echo '{"result":"SUCCESS"}']] })
+    assert.same(
+      { nil, 'Jenkins named no build number' },
+      await(function(cb) jenkins.fetch(target, cb) end)
+    )
+  end)
+
   it(
     'finds the stages of a Jenkinsfile',
     function()
@@ -211,5 +223,41 @@ describe('tools.ci_jenkins', function()
     assert.is_nil(
       jenkins.lint_diagnostics('Jenkinsfile successfully validated.\n')
     )
+  end)
+
+  it(
+    'shows an answer it cannot place on the first line',
+    function()
+      assert.same({
+        {
+          lnum = 0,
+          col = 0,
+          message = 'java.lang.NullPointerException',
+          severity = vim.diagnostic.severity.ERROR,
+          source = 'jenkins validate',
+        },
+      }, jenkins.lint_diagnostics('  java.lang.NullPointerException\n'))
+    end
+  )
+
+  it('sends no file too large, and says when the server fails', function()
+    jenkins.MAX_FILE = 4
+    cli('curl', { 'cat > /dev/null' })
+    assert.same(
+      { nil, 'The Jenkinsfile is too large to send' },
+      await(function(cb) jenkins.lint('https://ci.x', 'pipeline {}', cb) end)
+    )
+    assert.is_nil(vim.uv.fs_stat(dir .. '/calls'))
+    jenkins.MAX_FILE = 512 * 1024
+    cli('curl', {
+      'cat > /dev/null',
+      'echo "curl: (7) Failed to connect" >&2',
+      'exit 7',
+    })
+    local got = await(
+      function(cb) jenkins.lint('https://ci.x', 'pipeline {}', cb) end
+    )
+    assert.is_nil(got[1])
+    assert.is_truthy(got[2]:find('Failed to connect', 1, true))
   end)
 end)

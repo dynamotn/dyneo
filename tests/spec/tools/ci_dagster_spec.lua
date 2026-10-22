@@ -149,6 +149,50 @@ describe('tools.ci_dagster', function()
     )
   end)
 
+  it('says when Dagster answers with no runs or no data', function()
+    cli('curl', { [[echo '{"other":true}']] })
+    assert.same(
+      { nil, 'Dagster answered with no data' },
+      await(function(cb) dagster.fetch(target, cb) end)
+    )
+    cli('curl', { [[echo '{"data":{}}']] })
+    assert.same(
+      { nil, 'Dagster answered with no runs' },
+      await(function(cb) dagster.fetch(target, cb) end)
+    )
+    cli('curl', {
+      [[echo '{"data":{"runsOrError":{"__typename":"PythonError","message":"boom"}}}']],
+    })
+    assert.same(
+      { nil, 'Dagster: boom' },
+      await(function(cb) dagster.fetch(target, cb) end)
+    )
+    -- An error without a message is named by its type
+    cli('curl', {
+      [[echo '{"data":{"runsOrError":{"__typename":"InvalidPipelineRunsFilterError"}}}']],
+    })
+    assert.same(
+      { nil, 'Dagster: InvalidPipelineRunsFilterError' },
+      await(function(cb) dagster.fetch(target, cb) end)
+    )
+  end)
+
+  it('says why a run has no log', function()
+    local function log()
+      return await(
+        function(cb)
+          dagster.log(target, { id = 'gone' }, { id = 'x', name = 'x' }, 64, cb)
+        end
+      )
+    end
+    cli('curl', {
+      [[echo '{"data":{"logsForRun":{"__typename":"RunNotFoundError","message":"Run gone not found"}}}']],
+    })
+    assert.same({ nil, false, 'Dagster: Run gone not found', false }, log())
+    cli('curl', { [[echo '{"data":{}}']] })
+    assert.same({ nil, false, 'Dagster: no log', false }, log())
+  end)
+
   it('reads what a step logged, page after page', function()
     cli('curl', {
       'case "$*" in',

@@ -280,6 +280,69 @@ describe('tools.ci_argo', function()
     assert.is_nil(vim.uv.fs_stat(dir .. '/calls'))
   end)
 
+  it(
+    'wants a name for a template, a generateName only for a Workflow',
+    function()
+      local got = await(
+        function(cb)
+          argo.target(dir, {
+            'kind: CronWorkflow',
+            'metadata:',
+            '  generateName: nightly-',
+          }, cb)
+        end
+      )
+      assert.same({ nil, 'This CronWorkflow has no name' }, got)
+    end
+  )
+
+  it('passes on a failure of kubectl, and an answer too long', function()
+    local wf = {
+      kind = 'Workflow',
+      name = 'ci-1',
+      namespace = 'builds',
+      context = 'kind-dev',
+    }
+    cli('kubectl', { 'echo "error: You must be logged in" >&2', 'exit 1' })
+    local got = await(function(cb) argo.fetch(target, cb) end)
+    assert.is_nil(got[1])
+    assert.is_truthy(got[2]:find('You must be logged in', 1, true))
+    got = await(function(cb) argo.fetch(wf, cb) end)
+    assert.is_truthy(got[2]:find('You must be logged in', 1, true))
+
+    argo.MAX_BYTES = 8
+    cli('kubectl', {
+      [[printf 'ci-old\t2026-10-01T00:00:00Z\nci-new\t2026-10-18T09:00:00Z\n']],
+    })
+    assert.same(
+      { nil, 'kubectl listed more runs than can be read' },
+      await(function(cb) argo.fetch(target, cb) end)
+    )
+    cli('kubectl', { [[echo '{"metadata":{"name":"ci-1"},"status":{}}']] })
+    assert.same(
+      { nil, 'kubectl answered with more than can be read' },
+      await(function(cb) argo.fetch(wf, cb) end)
+    )
+  end)
+
+  it('passes on a failure to read the log of a pod', function()
+    cli('kubectl', {
+      'case "$*" in',
+      [[  *"get pods"*) echo '{"items":[{"metadata":{"name":"ci-new-compile-1","annotations":{"workflows.argoproj.io/node-id":"n1"}}}]}';;]],
+      [[  *logs*) echo 'Error from server (BadRequest): container "main" is waiting' >&2; exit 1;;]],
+      'esac',
+    })
+    local got = await(
+      function(cb)
+        argo.log(target, { id = 'ci-new' }, { id = 'n1', name = 'build' }, cb)
+      end
+    )
+    assert.is_nil(got[1])
+    assert.is_false(got[2])
+    assert.is_truthy(got[3]:find('is waiting', 1, true))
+    assert.is_false(got[4])
+  end)
+
   it('puts `--` before the name of a run, whatever it looks like', function()
     cli('kubectl', {
       'case "$*" in',

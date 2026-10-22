@@ -60,6 +60,16 @@ describe('util.ci_http', function()
       function(cb) http.server(dir, 'airflowUrl', 'https://d.example', cb) end
     )
     assert.same({ 'https://clone.example' }, got)
+    vim
+      .system(
+        { 'git', 'config', 'dyneo.airflowUrl', 'file:///etc/passwd' },
+        { cwd = dir }
+      )
+      :wait()
+    got = await(
+      function(cb) http.server(dir, 'airflowUrl', 'https://d.example', cb) end
+    )
+    assert.same({ nil, 'Not a server URL: file:///etc/passwd' }, got)
   end)
 
   it('gives a token only for the server it was set up for', function()
@@ -126,6 +136,20 @@ describe('util.ci_http', function()
       { 'Authorization: Bearer secret-token' },
       vim.fn.readfile(dir .. '/stdin')
     )
+  end)
+
+  it('fails an answer too long to read, or one not JSON', function()
+    -- The module is read anew for each spec, so its limit can be lowered
+    http.MAX_BYTES = 8
+    cli('curl', { [[printf '{"items":[1,2,3,4,5,6,7,8]}']] })
+    local got = await(
+      function(cb) http.json({ url = 'https://a.example/x' }, cb) end
+    )
+    assert.same({ nil, 'The server answered with more than can be read' }, got)
+    http.MAX_BYTES = 4 * 1024 * 1024
+    cli('curl', { [[printf '<html>sign in</html>']] })
+    got = await(function(cb) http.json({ url = 'https://a.example/x' }, cb) end)
+    assert.same({ nil, 'The server answered with something not JSON' }, got)
   end)
 
   it('keeps the end of a long answer, saying when its start is gone', function()

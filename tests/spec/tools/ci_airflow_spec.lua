@@ -190,6 +190,34 @@ describe('tools.ci_airflow', function()
     )
   end)
 
+  it('passes on any other failure of the server', function()
+    cli('curl', {
+      'cat > /dev/null',
+      [[echo 'curl: (22) The requested URL returned error: 500' >&2]],
+      'exit 22',
+    })
+    local got = await(function(cb) airflow.fetch(v2, cb) end)
+    assert.is_nil(got[1])
+    assert.is_truthy(got[2]:find('error: 500', 1, true))
+    assert.is_nil(got[2]:find('No DAG', 1, true))
+  end)
+
+  it('gives up on a run with more pages of tasks than it reads', function()
+    airflow.PER_PAGE = 1
+    airflow.MAX_PAGES = 2
+    cli('curl', {
+      'cat > /dev/null',
+      'case "$*" in',
+      [[  *"limit=1&offset"*) echo '{"task_instances":[{"task_id":"say","state":"success"}],"total_entries":5}';;]],
+      [[  *) echo '{"dag_runs":[{"dag_run_id":"manual__1","state":"running"}]}';;]],
+      'esac',
+    })
+    assert.same(
+      { nil, 'More than 2 tasks: not all of them could be read' },
+      await(function(cb) airflow.fetch(v2, cb) end)
+    )
+  end)
+
   it('reads the log of a try, as text or as JSON lines', function()
     local job = { id = 'extract', name = 'extract', try = 2, map_index = -1 }
     cli('curl', {
