@@ -271,6 +271,26 @@ describe('dyneo.health', function()
     assert.is_true(says(entries, 'error', 'Neovim >= 99.0.0 is required'))
   end)
 
+  it('says when git is too old for :DyReview, or cannot tell', function()
+    local bin = dir .. '/bin'
+    local path = vim.env.PATH
+    vim.env.PATH = bin .. ':' .. path
+    local function git(version)
+      h.write(bin .. '/git', { '#!/bin/sh', 'echo "' .. version .. '"' })
+      vim.fn.setfperm(bin .. '/git', 'rwxr-xr-x')
+      return section(report(), 'Requirements')
+    end
+    local old = git('git version 2.39.5')
+    local newer = git('git version 3.0.1')
+    local garbled = git('no version here')
+    vim.env.PATH = path
+    assert.is_true(
+      says(old, 'error', 'git 2.39 is older than 2.40, which `:DyReview` needs')
+    )
+    assert.is_true(says(newer, 'ok', 'git is 2.40 or newer'))
+    assert.is_true(says(garbled, 'warn', 'git version failed: cannot tell'))
+  end)
+
   it('cannot tell which yq it is when --version fails', function()
     local bin = dir .. '/bin'
     h.write(bin .. '/yq', { '#!/bin/sh', 'exit 1' })

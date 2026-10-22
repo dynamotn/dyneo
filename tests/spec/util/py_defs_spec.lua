@@ -67,6 +67,23 @@ describe('util.py_defs', function()
     assert.equals(4, defs[4].indent)
   end)
 
+  it('reads past an escaped quote, and stops at an unclosed call', function()
+    local defs = py.decorated({
+      [[@task(name="say \") hi")]],
+      'def say():',
+      '    pass',
+    }, { 'task' })
+    assert.equals([[name="say \") hi"]], defs[1].args)
+    py.MAX_SPAN = 2
+    local args, last =
+      py.balanced({ 'DAG(', '  "a",', '  "b",', '  "c",' }, 1, 4)
+    assert.equals('   "a",   "b",', args)
+    assert.equals(3, last)
+    args, last = py.balanced({ 'DAG(', '  "a",' }, 1, 4)
+    assert.equals('   "a",', args)
+    assert.equals(2, last)
+  end)
+
   it('reads keyword and first arguments, a word at a time', function()
     assert.equals('a', py.kwarg('task_id="a", group_id="g"', 'task_id'))
     assert.equals('g', py.kwarg('task_id="a", group_id="g"', 'group_id'))

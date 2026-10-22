@@ -21,6 +21,30 @@ describe('tools.logview', function()
     cleanup()
   end)
 
+  it(
+    'drops what a load read once a later one started, or its view went',
+    function()
+      local answers = {}
+      local bufnr = logview.open(
+        'test',
+        function(on_lines) table.insert(answers, on_lines) end
+      )
+      logview.reload(bufnr)
+      assert.equals(2, #answers)
+      answers[1]({ 'stale' })
+      local text =
+        table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
+      assert.is_falsy(text:find('stale', 1, true))
+      answers[2]({ 'fresh' })
+      text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), '\n')
+      assert.is_truthy(text:find('fresh', 1, true))
+      logview.reload(bufnr)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+      answers[3](nil, 'too late')
+      assert.same({}, notes)
+    end
+  )
+
   describe('level', function()
     it('reads words, syslog priorities and pino numbers', function()
       assert.equals('warn', logview.level('WARNING'))

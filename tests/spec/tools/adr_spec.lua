@@ -83,6 +83,15 @@ describe('tools.adr', function()
     assert.equals('`docs/adr` points outside the project', err)
   end)
 
+  it('refuses the default folder under a parent linking outside', function()
+    local elsewhere, clean = h.tmpdir()
+    vim.uv.fs_symlink(elsewhere, dir .. '/docs')
+    local found, err = adr.dir(dir)
+    clean()
+    assert.is_nil(found)
+    assert.equals('`docs/adr` points outside the project', err)
+  end)
+
   it('writes no record over a link put at its name', function()
     local records = dir .. '/docs/adr'
     vim.fn.mkdir(records, 'p')

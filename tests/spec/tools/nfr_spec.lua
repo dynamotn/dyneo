@@ -305,6 +305,17 @@ describe('tools.nfr slo', function()
     )
   end)
 
+  it('writes a span of no whole minute in seconds', function()
+    nfr.SLO_ALERTS = {
+      { severity = 'page', long = 90, short = 30, budget = 0.01 },
+    }
+    local text =
+      table.concat(nfr.slo_report(assert(nfr.parse_slo({ '99.9' }))), '\n')
+    assert.is_truthy(text:find('| page | 90s | 30s |', 1, true))
+    assert.is_truthy(text:find('ratio_rate90s > ', 1, true))
+    assert.is_truthy(text:find('and slo:sli_error:ratio_rate30s > ', 1, true))
+  end)
+
   it(':DyNfr slo opens the report, and says what it cannot read', function()
     local notes = {}
     local restore = h.stub(

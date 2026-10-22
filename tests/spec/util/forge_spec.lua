@@ -463,6 +463,15 @@ describe('util.forge', function()
           'az devops invoke answered with more than can be read',
           err
         )
+
+        cli('az', { [[echo '{"count":0}']] })
+        done = false
+        forge.api_text(remote, logs, 1024, function(t, c, e)
+          done, text, cut, err = true, t, c, e
+        end)
+        assert.is_true(vim.wait(5000, function() return done end, 10))
+        assert.is_nil(text)
+        assert.equals('az devops invoke answered with no log', err)
       end)
 
       it('says when az is not installed', function()

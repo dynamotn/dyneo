@@ -454,6 +454,28 @@ describe('tools.images', function()
       assert.same({ 'cosign', 'image scan' }, sources)
     end)
 
+    it(
+      'says an image signed with a key was verified by it',
+      function()
+        assert.same({ 'verified', 'signed with the key expected' }, {
+          images.verdict(
+            'registry.example/a:1',
+            { code = 0, stdout = '[{"critical":{},"optional":null}]' }
+          ),
+        })
+      end
+    )
+
+    it('checks the current buffer when given none', function()
+      vim.api.nvim_set_current_buf(h.buffer({ lines = { 'FROM scratch' } }))
+      images.verify(0)
+      images.verify()
+      assert.same(
+        { 'No image named in this buffer', 'No image named in this buffer' },
+        notes
+      )
+    end)
+
     it('says when cosign is missing', function()
       local executable = vim.fn.executable
       local restore = h.stub(vim.fn, 'executable', function(name)
