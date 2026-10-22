@@ -152,6 +152,56 @@ describe('tools.owners', function()
     end
   )
 
+  it(
+    'reads a `?` and a `/**/` in a rule with wildcards',
+    function()
+      assert.same(
+        {
+          ['a/abc.md'] = '@q',
+          ['a/ab/c.md'] = '',
+          ['src/x/y/z.test.lua'] = '@t',
+          ['src/z.test.lua'] = '@t',
+          ['lib/z.test.lua'] = '',
+        },
+        owned({ '/a/a?c.md @q', '/src/**/*.test.lua @t' }, {
+          'a/abc.md',
+          'a/ab/c.md',
+          'src/x/y/z.test.lua',
+          'src/z.test.lua',
+          'lib/z.test.lua',
+        })
+      )
+    end
+  )
+
+  it(
+    'walks the glob of a rule with more `/**/` than become patterns',
+    function()
+      local rules = owners.parse({ '/a/**/b/**/c/**/d/**/e/**/f* @deep' })
+      assert.is_nil(rules[1].finds)
+      assert.same(
+        {
+          ['a/b/c/d/e/f1'] = '@deep',
+          ['a/x/b/c/d/e/y/f2'] = '@deep',
+          ['a/b/c/d/e/g'] = '',
+        },
+        owned({ '/a/**/b/**/c/**/d/**/e/**/f* @deep' }, {
+          'a/b/c/d/e/f1',
+          'a/x/b/c/d/e/y/f2',
+          'a/b/c/d/e/g',
+        })
+      )
+      -- A last part with no wildcard owns the folder it names
+      assert.same(
+        { ['a/b/c/d/e/f/g.txt'] = '@deep', ['a/b/c/d/e/fg'] = '' },
+        owned(
+          { '/a/**/b/**/c/**/d/**/e/**/f @deep' },
+          { 'a/b/c/d/e/f/g.txt', 'a/b/c/d/e/fg' }
+        )
+      )
+    end
+  )
+
   describe('in a repository', function()
     local function git(args)
       local result = require('util.system').sync(
@@ -232,5 +282,92 @@ describe('tools.owners', function()
       table.sort(names)
       assert.same({ 'c.js', 'd.js' }, names)
     end)
+
+    --- Run `owners.unowned` and wait for it
+    local function unowned()
+      local done = false
+      owners.unowned(function() done = true end)
+      assert.is_true(vim.wait(10000, function() return done end, 10))
+    end
+
+    it('says when every file git tracks has an owner', function()
+      h.write(dir .. '/.github/CODEOWNERS', { '* @team' })
+      git({ 'add', '.' })
+      vim.cmd.edit(vim.fn.fnameescape(dir .. '/src/a.lua'))
+      unowned()
+      assert.equals('Every one of 5 files has an owner', notes[#notes])
+      assert.same({}, vim.fn.getqflist())
+    end)
+
+    it('lists only the first unowned files past the limit', function()
+      git({ 'add', '.' })
+      vim.cmd.edit(vim.fn.fnameescape(dir .. '/src/a.lua'))
+      local restore = h.stub(owners, 'MAX_UNOWNED', 1)
+      unowned()
+      restore()
+      assert.equals(
+        '2 of 5 files have no owner, the first 1 listed',
+        notes[#notes]
+      )
+      assert.equals(1, #vim.fn.getqflist())
+    end)
+
+    it('reads the repository of the working directory for no file', function()
+      git({ 'add', '.' })
+      local cwd = vim.uv.cwd()
+      vim.cmd.cd(vim.fn.fnameescape(dir))
+      owners.command({ fargs = { 'unowned' } })
+      assert.is_true(
+        vim.wait(10000, function() return #notes > 0 end, 10),
+        'no answer'
+      )
+      vim.cmd.cd(vim.fn.fnameescape(cwd))
+      assert.equals('2 of 5 files have no owner', notes[#notes])
+    end)
+
+    it('says when the repository has no CODEOWNERS', function()
+      vim.fn.delete(dir .. '/.github', 'rf')
+      vim.cmd.edit(vim.fn.fnameescape(dir .. '/src/a.lua'))
+      unowned()
+      assert.equals(
+        'No CODEOWNERS in ' .. vim.fn.fnamemodify(dir, ':~'),
+        notes[#notes]
+      )
+    end)
+
+    it('names the owners for the command with no subcommand', function()
+      vim.cmd.edit(vim.fn.fnameescape(dir .. '/src/a.lua'))
+      owners.command({ fargs = {} })
+      assert.equals('@team', vim.split(notes[1], '\n')[1])
+    end)
+  end)
+
+  it('says when the buffer is in no git repository', function()
+    local cwd = vim.uv.cwd()
+    vim.cmd.cd(vim.fn.fnameescape(dir))
+    local done = false
+    owners.unowned(function() done = true end)
+    vim.cmd.cd(vim.fn.fnameescape(cwd))
+    assert.is_true(done)
+    assert.equals('Not in a git repository', notes[#notes])
+  end)
+
+  it('fails loudly when git cannot list the files', function()
+    -- A folder named `.git` that is no repository: git refuses to list it
+    vim.fn.mkdir(dir .. '/.git', 'p')
+    h.write(dir .. '/CODEOWNERS', { '* @team' })
+    h.write(dir .. '/a.lua', {})
+    vim.cmd.edit(vim.fn.fnameescape(dir .. '/a.lua'))
+    local done = false
+    owners.unowned(function() done = true end)
+    assert.is_true(vim.wait(10000, function() return done end, 10))
+    assert.is_truthy(
+      notes[#notes]:lower():find('not a git repository', 1, true)
+    )
+  end)
+
+  it('refuses an unknown subcommand', function()
+    owners.command({ fargs = { 'owned' } })
+    assert.equals('Unknown subcommand: owned', notes[#notes])
   end)
 end)
