@@ -182,4 +182,274 @@ describe('tools.postmortem', function()
     assert.equals('Action items: Raise the limit', items[1].text)
     vim.cmd('cclose')
   end)
+
+  --- Put a `kubectl` on the path that prints `lines` and exits with `code`
+  local function kubectl(lines, code)
+    h.write(
+      dir .. '/bin/kubectl',
+      vim.list_extend(
+        { '#!/bin/sh' },
+        vim.list_extend(lines, {
+          'exit ' .. (code or 0),
+        })
+      )
+    )
+    vim.fn.setfperm(dir .. '/bin/kubectl', 'rwxr-xr-x')
+  end
+
+  --- What `postmortem.kube` hands back for the window around `T`
+  local function kube()
+    local result
+    postmortem.kube(
+      T - 600,
+      T + 600,
+      function(entries, err) result = { entries = entries, err = err } end
+    )
+    assert.is_true(vim.wait(10000, function() return result ~= nil end, 10))
+    return result
+  end
+
+  it('says why kubectl failed', function()
+    kubectl({ 'echo "Unable to connect to the server" >&2' }, 1)
+    local result = kube()
+    assert.is_nil(result.entries)
+    assert.equals('Unable to connect to the server', result.err)
+  end)
+
+  it('says when kubectl answers with something not JSON', function()
+    kubectl({ 'echo "No resources found"' })
+    local result = kube()
+    assert.is_nil(result.entries)
+    assert.equals('kubectl answered with something not JSON', result.err)
+  end)
+
+  it(
+    'keeps the warnings first when the cluster has more than it keeps',
+    function()
+      h.write(dir .. '/events.json', {
+        vim.json.encode({
+          items = {
+            {
+              type = 'Normal',
+              reason = 'Scheduled',
+              firstTimestamp = '2026-10-20T09:55:00Z',
+              metadata = { namespace = 'prod' },
+            },
+            {
+              type = 'Normal',
+              reason = 'Pulled',
+              eventTime = '2026-10-20T09:56:00Z',
+              involvedObject = { kind = 'Pod', name = 'api-2' },
+            },
+            {
+              type = 'Warning',
+              reason = 'BackOff',
+              lastTimestamp = '2026-10-20T09:58:00Z',
+              involvedObject = { kind = 'Pod', name = 'api-1' },
+            },
+          },
+        }),
+      })
+      kubectl({ 'exec /bin/cat "' .. dir .. '/events.json"' })
+      local restore = h.stub(postmortem, 'MAX_ENTRIES', 2)
+      local result = kube()
+      restore()
+      assert.is_nil(result.err)
+      assert.same({
+        '**Warning** -/Pod/api-1 BackOff: ',
+        'prod/?/? Scheduled: ',
+      }, vim.tbl_map(
+        function(entry) return entry.text end,
+        result.entries
+      ))
+    end
+  )
+
+  it('says a source was read only up to what it keeps', function()
+    h.write(dir .. '/events.json', {
+      vim.json.encode({
+        items = {
+          { reason = 'A', lastTimestamp = '2026-10-20T09:55:00Z' },
+          { reason = 'B', lastTimestamp = '2026-10-20T09:56:00Z' },
+        },
+      }),
+    })
+    kubectl({ 'exec /bin/cat "' .. dir .. '/events.json"' })
+    -- No git: only the cluster is read
+    vim.env.PATH = dir .. '/bin'
+    local restore = h.stub(postmortem, 'MAX_ENTRIES', 1)
+    vim.fn.mkdir(dir .. '/.git', 'p')
+    h.write(dir .. '/notes.md', {})
+    vim.cmd.edit(vim.fn.fnameescape(dir .. '/notes.md'))
+    local file
+    postmortem.write(
+      'Outage',
+      T - 600,
+      T + 600,
+      function(f) file = f or false end
+    )
+    assert.is_true(vim.wait(10000, function() return file ~= nil end, 10))
+    restore()
+    local text = table.concat(vim.fn.readfile(file), '\n')
+    assert.is_truthy(text:find('-/?/? A: ', 1, true))
+    assert.is_falsy(text:find('-/?/? B: ', 1, true))
+    assert.is_truthy(
+      text:find('- Not read: kubernetes past the first 1 entries', 1, true)
+    )
+  end)
+
+  it('writes nothing when the records point outside the project', function()
+    local outside, clean_outside = h.tmpdir()
+    h.write(dir .. '/.adr-dir', { '../' .. vim.fs.basename(outside) })
+    h.write(dir .. '/notes.md', {})
+    vim.cmd.edit(vim.fn.fnameescape(dir .. '/notes.md'))
+    local file
+    postmortem.write('Outage', T - 600, T, function(f) file = f or false end)
+    clean_outside()
+    assert.is_false(file)
+    assert.equals(
+      '`.adr-dir` points outside the project: ../' .. vim.fs.basename(outside),
+      notes[#notes]
+    )
+  end)
+
+  it('writes nothing over what is at the name of the record', function()
+    vim.env.PATH = dir .. '/bin'
+    vim.fn.mkdir(dir .. '/.git', 'p')
+    -- A folder is no record: the next number is still 1, and its name taken
+    local taken = dir .. '/docs/adr/0001-postmortem-outage.md'
+    vim.fn.mkdir(taken, 'p')
+    h.write(dir .. '/notes.md', {})
+    vim.cmd.edit(vim.fn.fnameescape(dir .. '/notes.md'))
+    local file
+    postmortem.write('Outage', T - 600, T, function(f) file = f or false end)
+    assert.is_true(vim.wait(10000, function() return file ~= nil end, 10))
+    assert.is_false(file)
+    assert.equals(taken .. ' is there already, and is no record', notes[#notes])
+    assert.equals(1, vim.fn.isdirectory(taken))
+    assert.equals(dir .. '/notes.md', vim.api.nvim_buf_get_name(0))
+  end)
+
+  describe('asking for the window', function()
+    local prompts, written, restores
+
+    --- Answer the prompts with `answers` in turn; `false` stands for a
+    --- prompt left with <Esc>
+    local function answer(answers)
+      local index = 0
+      table.insert(
+        restores,
+        h.stub(vim.ui, 'input', function(opts, on_confirm)
+          index = index + 1
+          table.insert(prompts, opts.prompt)
+          local reply = answers[index]
+          if reply == false then reply = nil end
+          on_confirm(reply)
+        end)
+      )
+    end
+
+    before_each(function()
+      prompts, written, restores = {}, {}, {}
+      table.insert(
+        restores,
+        h.stub(
+          postmortem,
+          'write',
+          function(title, since, till)
+            table.insert(written, { title, since, till })
+          end
+        )
+      )
+    end)
+    after_each(function()
+      for _, restore in ipairs(restores) do
+        restore()
+      end
+    end)
+
+    local start = '2026-10-20 09:00'
+    local since = os.time({
+      year = 2026,
+      month = 10,
+      day = 20,
+      hour = 9,
+      min = 0,
+      sec = 0,
+    })
+
+    it('writes the window it is given', function()
+      answer({ start, '2026-10-20 10:00' })
+      postmortem.new('API down')
+      assert.same({ { 'API down', since, since + 3600 } }, written)
+      assert.same({
+        'Started (YYYY-MM-DD HH:MM, or HH:MM today): ',
+        'Ended (empty for now): ',
+      }, prompts)
+    end)
+
+    it('ends the window now when no end is given', function()
+      answer({ start, '  ' })
+      local before = os.time()
+      postmortem.new('API down')
+      assert.equals(1, #written)
+      assert.is_true(written[1][3] >= before)
+    end)
+
+    it('asks what happened when no title is given', function()
+      answer({ '  API down  ', start, '2026-10-20 10:00' })
+      postmortem.new()
+      assert.equals('What happened: ', prompts[1])
+      assert.equals('API down', written[1][1])
+    end)
+
+    it('stops when what happened is left empty', function()
+      answer({ ' ' })
+      postmortem.new('')
+      assert.same({ 'What happened: ' }, prompts)
+      assert.same({}, written)
+    end)
+
+    it('stops when no start is given', function()
+      answer({ '' })
+      postmortem.new('API down')
+      assert.same({}, written)
+      assert.same({}, notes)
+    end)
+
+    it('stops when the end is left with escape', function()
+      answer({ start, false })
+      postmortem.new('API down')
+      assert.same({}, written)
+      assert.same({}, notes)
+    end)
+
+    it('refuses what is not a time', function()
+      answer({ 'noon' })
+      postmortem.new('API down')
+      assert.equals('Not a time: noon', notes[#notes])
+      answer({ start, 'later' })
+      postmortem.new('API down')
+      assert.equals('Not a time: later', notes[#notes])
+      assert.same({}, written)
+    end)
+
+    it('refuses a window that ends before it starts', function()
+      answer({ start, '2026-10-20 08:00' })
+      postmortem.new('API down')
+      assert.equals('It ended before it started', notes[#notes])
+      assert.same({}, written)
+    end)
+
+    it('takes the title from the words after new', function()
+      answer({ start, '2026-10-20 10:00' })
+      postmortem.command({ fargs = { 'new', 'API', 'down' } })
+      assert.equals('API down', written[1][1])
+    end)
+  end)
+
+  it('refuses an unknown subcommand', function()
+    postmortem.command({ fargs = { 'old' } })
+    assert.equals('Unknown subcommand: old', notes[#notes])
+  end)
 end)
