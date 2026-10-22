@@ -560,11 +560,14 @@ vim.api.nvim_create_autocmd('VimEnter', {
       -- which-key takes its `spec` apart as it sets up, so the groups are
       -- read before `VeryLazy` loads it
       names = groups()
+      -- Nothing is installed: on a machine without the parsers, their
+      -- downloads and notifications would keep the wait below from returning
+      samples.skip_installs()
+      samples.quiet_sidekick()
+      samples.quiet_noice()
       -- Headless there is no UI to enter, so `UIEnter` is fired by hand, as
       -- attaching one does. lazy.nvim's `VeryLazy` waits for it, and is what
       -- loads `config.keymaps`.
-      samples.quiet_sidekick()
-      samples.quiet_noice()
       vim.api.nvim_exec_autocmds('UIEnter', { modeline = false })
       local fired = vim.wait(
         5000,
