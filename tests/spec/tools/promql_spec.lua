@@ -79,6 +79,10 @@ describe('tools.promql', function()
         expr('  expr: >- # folded', { '    sum(x)', '    > 1', '  for: 5m' })
       )
       assert.equals('up == 0', expr('  expr: |2', { '    up == 0' }))
+      assert.equals(
+        'a\n\nb',
+        expr('  expr: |', { '    a', '', '    b', '', '  for: 5m' })
+      )
     end)
 
     it('finds the rule from a list in its annotations', function()
@@ -162,6 +166,22 @@ describe('tools.promql', function()
     assert.is_truthy(none[#none]:find('matched nothing', 1, true))
   end)
 
+  it('shows a value that is no plain number as Prometheus wrote it', function()
+    local nan =
+      promql.report('0/0', { resultType = 'scalar', result = { 1, 'NaN' } })
+    assert.equals('scalar: NaN', nan[#nan])
+    local lines = promql.report('x', {
+      resultType = 'vector',
+      result = {
+        { metric = { job = 'a' }, value = { 1, '+Inf' } },
+        { metric = { job = 'b' } },
+      },
+    })
+    assert.is_truthy(vim.tbl_contains(lines, '- `{job="a"}` **+Inf**'))
+    -- A series with no sample has no value to show
+    assert.is_truthy(vim.tbl_contains(lines, '- `{job="b"}` **nil**'))
+  end)
+
   --- A fake curl answering the instant and range queries with `instant` and
   --- `range`, its arguments a line each in `calls`
   local function curl(instant, range)
@@ -170,7 +190,7 @@ describe('tools.promql', function()
     h.write(dir .. '/bin/curl', {
       '#!/bin/sh',
       'for arg; do url=$arg; done',
-      'echo "$url" >> "' .. dir .. '/calls"',
+      'printf \'%s\\n\' "$url" >> "' .. dir .. '/calls"',
       'case "$url" in',
       '  *query_range*) cat "' .. dir .. '/range.json" ;;',
       '  *) cat "' .. dir .. '/instant.json" ;;',
@@ -269,6 +289,83 @@ describe('tools.promql', function()
     assert.equals(0, vim.fn.filereadable(dir .. '/calls'))
   end)
 
+  --- Run `expr` with the server of `dir`, and wait for it to finish
+  local function run(expr)
+    local done = false
+    promql.run(expr or 'up', dir, function() done = true end)
+    assert.is_true(vim.wait(5000, function() return done end, 10))
+  end
+
+  it('refuses a server that is no http URL', function()
+    restore_globals()
+    restore_globals =
+      h.stub(_G, 'DyNeo', { prometheus = { url = 'file:///etc/passwd' } })
+    curl('{}', '{}')
+    run()
+    assert.equals('Not a server URL: file:///etc/passwd', notes[#notes])
+    assert.equals(0, vim.fn.filereadable(dir .. '/calls'))
+  end)
+
+  it('says when the server answers more than can be read', function()
+    curl(vim.json.encode({ status = 'success', data = ('x'):rep(256) }), '{}')
+    local restore = h.stub(require('util.ci_http'), 'MAX_BYTES', 64)
+    run()
+    restore()
+    assert.equals(
+      'Prometheus: the server answered with more than can be read',
+      notes[#notes]
+    )
+  end)
+
+  it('says why curl reached no server', function()
+    h.write(dir .. '/bin/curl', {
+      '#!/bin/sh',
+      'echo "curl: (7) Failed to connect to prom.example port 443" >&2',
+      'exit 7',
+    })
+    vim.fn.setfperm(dir .. '/bin/curl', 'rwxr-xr-x')
+    run()
+    assert.equals(
+      'Prometheus: curl: (7) Failed to connect to prom.example port 443',
+      notes[#notes]
+    )
+  end)
+
+  it('says when curl is not installed', function()
+    vim.env.PATH = dir .. '/bin'
+    run()
+    assert.equals('curl is not installed', notes[#notes])
+  end)
+
+  it('runs the expression of the rule under the cursor', function()
+    curl(
+      vim.json.encode({
+        status = 'success',
+        data = { resultType = 'scalar', result = { 1, '1' } },
+      }),
+      '{}'
+    )
+    vim.cmd.edit(vim.fn.fnameescape(dir .. '/rules.yml'))
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, RULES)
+    vim.api.nvim_win_set_cursor(0, { 12, 0 })
+    local done = false
+    promql.under_cursor(nil, function() done = true end)
+    assert.is_true(vim.wait(5000, function() return done end, 10))
+    assert.is_truthy(
+      vim.fn
+        .readfile(dir .. '/calls')[1]
+        :find('query=sum%20by%20%28job%29%20%28up%29', 1, true)
+    )
+  end)
+
+  it('warns when no expression is under the cursor', function()
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'plain text' })
+    local done = false
+    promql.under_cursor(nil, function() done = true end)
+    assert.is_true(done)
+    assert.equals('No PromQL expression under the cursor', notes[#notes])
+  end)
+
   it('takes the lines of a range as the expression', function()
     curl(
       vim.json.encode({
@@ -293,7 +390,7 @@ describe('tools.promql', function()
         dir .. '/bin/promtool',
         vim.list_extend({
           '#!/bin/sh',
-          'echo "$PWD $*" >> "' .. dir .. '/calls"',
+          'printf \'%s\\n\' "$PWD $*" >> "' .. dir .. '/calls"',
         }, lines)
       )
       vim.fn.setfperm(dir .. '/bin/promtool', 'rwxr-xr-x')
@@ -335,6 +432,38 @@ describe('tools.promql', function()
       )
     end)
 
+    --- Run `promql.test` on the buffer, and wait for it
+    local function test()
+      local done = false
+      promql.test(function() done = true end)
+      assert.is_true(vim.wait(5000, function() return done end, 10))
+    end
+
+    it('warns when the buffer is no file on disk', function()
+      test()
+      assert.equals('The buffer is no file on disk', notes[#notes])
+    end)
+
+    it('says when promtool is not installed', function()
+      vim.env.PATH = dir .. '/bin'
+      h.write(dir .. '/rules/api.yml', RULES)
+      vim.cmd.edit(vim.fn.fnameescape(dir .. '/rules/api.yml'))
+      test()
+      assert.equals('promtool is not installed', notes[#notes])
+    end)
+
+    it('says when promtool gives no answer in time', function()
+      promtool({ 'exec sleep 10' })
+      local restore = h.stub(promql, 'TIMEOUT', 200)
+      h.write(dir .. '/rules/api.yml', RULES)
+      vim.cmd.edit(vim.fn.fnameescape(dir .. '/rules/api.yml'))
+      test()
+      restore()
+      assert.equals('promtool gave no answer in time', notes[#notes])
+      -- No scratch buffer of an output that never came
+      assert.equals(dir .. '/rules/api.yml', vim.api.nvim_buf_get_name(0))
+    end)
+
     it(
       'asks for an unsaved file to be written, and a rule file at all',
       function()
@@ -350,5 +479,48 @@ describe('tools.promql', function()
         }, notes)
       end
     )
+  end)
+
+  describe('the command', function()
+    local calls, restores
+
+    before_each(function()
+      calls, restores = {}, {}
+      for _, name in ipairs({ 'test', 'under_cursor' }) do
+        table.insert(
+          restores,
+          h.stub(
+            promql,
+            name,
+            function(...) table.insert(calls, { name, ... }) end
+          )
+        )
+      end
+    end)
+    after_each(function()
+      for _, restore in ipairs(restores) do
+        restore()
+      end
+    end)
+
+    it('runs the rule tests with test', function()
+      promql.command({ fargs = { 'test' }, range = 0, line1 = 1, line2 = 1 })
+      assert.same({ { 'test' } }, calls)
+    end)
+
+    it('runs the lines of its range, or what is under the cursor', function()
+      promql.command({ fargs = {}, range = 2, line1 = 3, line2 = 5 })
+      promql.command({ fargs = {}, range = 0, line1 = 7, line2 = 7 })
+      assert.same({
+        { 'under_cursor', { line1 = 3, line2 = 5 } },
+        { 'under_cursor' },
+      }, calls)
+    end)
+
+    it('refuses an unknown subcommand', function()
+      promql.command({ fargs = { 'check' }, range = 0, line1 = 1, line2 = 1 })
+      assert.equals('Unknown subcommand: check', notes[#notes])
+      assert.same({}, calls)
+    end)
   end)
 end)
