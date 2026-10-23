@@ -259,7 +259,8 @@ describe('tools.review', function()
 
     it('lets the lock go on close and when Neovim leaves', function()
       review.open(remote, pull())
-      vim.api.nvim_exec_autocmds('VimLeavePre', {})
+      -- The review's own handler only: the coverage run saves on any other
+      vim.api.nvim_exec_autocmds('VimLeavePre', { group = 'dy_review' })
       assert.equals('unlock', calls[#calls])
       calls = {}
       review.close()
@@ -497,6 +498,96 @@ describe('tools.review', function()
       assert.is_truthy(warning:find(dir, 1, true))
       assert.is_truthy(warning:find('contains modified', 1, true))
       assert.is_false(vim.tbl_contains(calls, 'forget'))
+    end)
+  end)
+
+  describe('show', function()
+    it('opens the panel alone when no file changed', function()
+      stub(git, 'files', function(_, _, _, cb) cb({}) end)
+      review.open(remote, pull())
+      assert.is_not_nil(review.current())
+      assert.equals('panel.open', calls[#calls])
+      assert.is_false(vim.tbl_contains(calls, 'diff.open src/auth.lua'))
+      assert.is_true(
+        vim.tbl_contains(
+          said(vim.log.levels.INFO),
+          'The pull request changes no file'
+        )
+      )
+    end)
+
+    it('opens the panel when the diff cannot be shown', function()
+      stub(diff, 'open', function(_, path)
+        rec('diff.open ' .. path)
+        return false
+      end)
+      review.open(remote, pull())
+      assert.same(
+        { 'diff.open src/auth.lua', 'panel.open' },
+        vim.list_slice(calls, #calls - 1)
+      )
+    end)
+
+    it('shows a given path, and goes where the session was asked', function()
+      review.open(remote, pull())
+      local s = review.current()
+      local bufnr = h.buffer({ lines = { 'a', 'b', 'c' } })
+      local win = vim.api.nvim_get_current_win()
+      vim.api.nvim_win_set_buf(win, bufnr)
+      stub(diff, 'open', function(_, path)
+        rec('diff.open ' .. path)
+        return 'shown'
+      end)
+      stub(
+        diff,
+        'window',
+        function(side) return side == 'new' and win or nil end
+      )
+      s.jump = { path = 'go.sum', side = 'new', line = 3 }
+      review.show('go.sum')
+      assert.equals('diff.open go.sum', calls[#calls])
+      assert.same({ 3, 0 }, vim.api.nvim_win_get_cursor(win))
+      assert.is_nil(s.jump)
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it('jumps once the asked side of the asked file is drawn', function()
+      review.open(remote, pull())
+      local s = review.current()
+      local bufnr = h.buffer({ lines = { 'a', 'b', 'c' } })
+      local win = vim.api.nvim_get_current_win()
+      vim.api.nvim_win_set_buf(win, bufnr)
+      stub(
+        diff,
+        'window',
+        function(side) return side == 'old' and win or nil end
+      )
+      s.jump = { path = 'src/auth.lua', side = 'old', line = 2 }
+      -- Another file, then the other side, leave the jump for later
+      on_buffer(bufnr, 'go.sum', 'old')
+      on_buffer(bufnr, 'src/auth.lua', 'new')
+      assert.is_not_nil(s.jump)
+      on_buffer(bufnr, 'src/auth.lua', 'old')
+      assert.is_nil(s.jump)
+      assert.same({ 2, 0 }, vim.api.nvim_win_get_cursor(win))
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it('drops a jump whose window is gone', function()
+      review.open(remote, pull())
+      local s = review.current()
+      stub(diff, 'window', function() return nil end)
+      s.jump = { path = 'src/auth.lua', side = 'new', line = 2 }
+      on_buffer(h.buffer({ lines = { 'a' } }), 'src/auth.lua', 'new')
+      assert.is_nil(s.jump)
+    end)
+
+    it('draws nothing once the review is closed', function()
+      review.open(remote, pull())
+      review.close()
+      local before = #maps
+      on_buffer(h.buffer({ lines = { 'a' } }), 'src/auth.lua', 'new')
+      assert.equals(before, #maps)
     end)
   end)
 
@@ -980,6 +1071,42 @@ describe('tools.review', function()
     it('asks for a review first', function()
       review.command({ fargs = { 'drafts' } })
       assert.is_truthy(said(vim.log.levels.WARN)[1]:find('No review', 1, true))
+    end)
+
+    it('refuses an unknown subcommand', function()
+      review.command({ fargs = { 'nope' } })
+      assert.same({ 'Unknown subcommand: nope' }, said(vim.log.levels.ERROR))
+    end)
+
+    it('asks for a review before trusting one', function()
+      review.command({ fargs = { 'trust' } })
+      assert.is_truthy(said(vim.log.levels.WARN)[1]:find('No review', 1, true))
+    end)
+
+    it('asks again whether to trust the open review', function()
+      local hold_first
+      stub(untrusted, 'hold', function(_, fn) hold_first = fn end)
+      local answers = { 2, 1 }
+      local asked = 0
+      stub(vim.fn, 'confirm', function()
+        asked = asked + 1
+        return answers[asked]
+      end)
+      review.open(remote, pull())
+      hold_first(0)
+      assert.is_false(review.current().trusted)
+      review.command({ fargs = { 'trust' } })
+      assert.equals(2, asked)
+      assert.is_true(review.current().trusted)
+      notes = {}
+      review.command({ fargs = { 'trust' } })
+      assert.equals(2, asked)
+      assert.is_true(
+        vim.tbl_contains(
+          said(vim.log.levels.INFO),
+          'The review is trusted already'
+        )
+      )
     end)
   end)
 end)
