@@ -1038,6 +1038,174 @@ exit 1
     )
   end)
 
+  describe('a malformed answer', function()
+    local pull = { id = '7', head_sha = 'a7a7a7', base_sha = 'b7b7b7' }
+    local BRANCH = 'repos_o_r_pulls_state_open_head_o_3Afeat_2Fx_per_page_1'
+    local REVIEWS = 'repos_o_r_pulls_7_reviews_per_page_100_page_1'
+    local COMMENTS =
+      'repos_o_r_pulls_7_reviews_302_comments_per_page_100_page_1'
+
+    --- What `fn` hands its callback: nothing, and the error, is expected
+    ---@param fn fun(cb: fun(...))
+    ---@return string
+    local function fails(fn)
+      local value, err = wait(fn)
+      assert.is_nil(value)
+      assert.is_string(err)
+      return err
+    end
+
+    it('refuses a remote that names no repository, asking nothing', function()
+      local bad = { kind = 'github', host = 'github.com', slug = 'only' }
+      for _, ask in ipairs({
+        function(cb) github.list(bad, cb) end,
+        function(cb) github.for_branch(bad, 'x', cb) end,
+        function(cb) github.get(bad, '1', cb) end,
+        function(cb) github.threads(bad, pull, cb) end,
+        function(cb) github.pending(bad, pull, cb) end,
+      }) do
+        assert.equals('Not a GitHub repository: only', fails(ask))
+      end
+      assert.same({}, calls())
+    end)
+
+    it('fails a listing that is no list or holds a broken pull', function()
+      answer('user', 'user.json')
+      answer(PULLS .. '1', { message = 'Moved' })
+      assert.equals(
+        'GitHub answered with something not a list',
+        fails(function(cb) github.list(remote, cb) end)
+      )
+      local broken = raw_pull(1)
+      broken.head = 'a'
+      answer(PULLS .. '1', { raw_pull(2), broken })
+      assert.equals(
+        'GitHub answered with a malformed pull request',
+        fails(function(cb) github.list(remote, cb) end)
+      )
+    end)
+
+    it('fails the pull of a branch that is no list or broken', function()
+      answer(BRANCH, { message = 'Moved' })
+      assert.equals(
+        'GitHub answered with something not a list',
+        fails(function(cb) github.for_branch(remote, 'feat/x', cb) end)
+      )
+      answer(BRANCH, { { number = 5 } })
+      assert.equals(
+        'GitHub answered with a malformed pull request',
+        fails(function(cb) github.for_branch(remote, 'feat/x', cb) end)
+      )
+    end)
+
+    it('fails a pull request missing its heads', function()
+      local raw = raw_pull(3)
+      raw.base.sha = vim.NIL
+      answer('repos_o_r_pulls_3', raw)
+      assert.equals(
+        'GitHub answered with a malformed pull request',
+        fails(function(cb) github.get(remote, '3', cb) end)
+      )
+    end)
+
+    it('fails threads with no data or no review threads', function()
+      answer('graphql_DyReviewThreads', { message = 'odd' })
+      assert.equals(
+        'GitHub answered with no data',
+        fails(function(cb) github.threads(remote, pull, cb) end)
+      )
+      answer(
+        'graphql_DyReviewThreads',
+        { data = { repository = { pullRequest = {} } } }
+      )
+      assert.equals(
+        'GitHub answered with no review threads',
+        fails(function(cb) github.threads(remote, pull, cb) end)
+      )
+    end)
+
+    it('fails when the reviews run past the pages it reads', function()
+      github.MAX_PAGES = 1
+      answer('user', 'user.json')
+      local many = {}
+      for i = 1, github.PER_PAGE do
+        many[i] = { id = i, state = 'COMMENTED', user = { login = 'x' } }
+      end
+      answer(REVIEWS, many)
+      assert.equals(
+        'More reviews than can be read on GitHub',
+        fails(function(cb) github.pending(remote, pull, cb) end)
+      )
+    end)
+
+    it('fails my pending review without ids, or a comment of it', function()
+      answer('user', 'user.json')
+      answer(
+        REVIEWS,
+        { { id = 302, state = 'PENDING', user = { login = 'me' } } }
+      )
+      assert.equals(
+        'GitHub answered with a malformed review',
+        fails(function(cb) github.pending(remote, pull, cb) end)
+      )
+      answer(REVIEWS, 'reviews.json')
+      answer(COMMENTS, { { path = 'a.lua', body = 'no id' } })
+      assert.equals(
+        'GitHub answered with a malformed comment',
+        fails(function(cb) github.pending(remote, pull, cb) end)
+      )
+    end)
+
+    it(
+      'fails a submit when GitHub names no pull or starts no review',
+      function()
+        local draft = {
+          id = 'd',
+          origin = 'user',
+          state = 'ready',
+          path = 'a.lua',
+          side = 'new',
+          line = 1,
+          body = 'text',
+        }
+        local function submit()
+          return wait(function(cb)
+            github.submit(
+              remote,
+              pull,
+              { draft },
+              { verdict = 'comment', body = '' },
+              function() end,
+              cb
+            )
+          end)
+        end
+        answer('user', 'user.json')
+        answer(REVIEWS, {})
+        answer(
+          'graphql_DyReviewPullId',
+          { data = { repository = { pullRequest = vim.NIL } } }
+        )
+        assert.equals('GitHub answered with no pull request', submit())
+        answer('graphql_DyReviewPullId', 'pull-id.json')
+        answer(
+          'graphql_DyReviewCreate',
+          { data = { addPullRequestReview = { pullRequestReview = {} } } }
+        )
+        assert.equals('GitHub started no review', submit())
+        assert.is_false(vim.tbl_contains(keys(), 'graphql_DyReviewAddThread'))
+      end
+    )
+  end)
+
+  it('gives a posted comment the id its import gives it', function()
+    assert.equals(
+      vim.fn.sha256('github:5'):sub(1, 12),
+      github.import_id('301/5')
+    )
+    assert.is_nil(github.import_id('PRRT_1'))
+  end)
+
   it('offers the verdicts GitHub has', function()
     assert.same(
       { 'approve', 'request_changes', 'comment' },
