@@ -168,6 +168,58 @@ describe('tools.ci_inline', function()
     assert.equals('pending', ci.bucket('notStarted'))
   end)
 
+  it('finds the task a mapped, grouped or retried run is of', function()
+    local function lines_of(jobs, lines, kind)
+      return vim.tbl_map(
+        function(mark) return mark.line end,
+        ci.marks(jobs, lines, kind)
+      )
+    end
+    local function failed(name, extra)
+      return vim.tbl_extend(
+        'force',
+        { name = name, status = 'failed' },
+        extra or {}
+      )
+    end
+    assert.same(
+      { 2, 3 },
+      lines_of(
+        { failed('load[2]'), failed('group.extract') },
+        { load = 2, extract = 3 },
+        'airflow'
+      )
+    )
+    assert.same(
+      { 4 },
+      lines_of({ failed('transform-0') }, { transform = 4 }, 'prefect')
+    )
+    assert.same(
+      { 5, 6 },
+      lines_of(
+        { failed('build(0:linux)'), failed('inner', { template = 'outer' }) },
+        { build = 5, outer = 6 },
+        'argo'
+      )
+    )
+  end)
+
+  it(
+    'reads a `- job:` with no name as no job',
+    function()
+      assert.same(
+        { build = 4 },
+        ci.job_lines({
+          'jobs:',
+          '  - job:',
+          '    displayName: Nameless',
+          '  - job: build',
+          '    displayName: ""',
+        }, 'azure')
+      )
+    end
+  )
+
   it('reads the problems glab ci lint names', function()
     local diagnostics = ci.lint_diagnostics(
       table.concat({
@@ -663,6 +715,161 @@ describe('tools.ci_inline', function()
       vim.api.nvim_set_current_buf(github)
       assert.same({}, vim.fn.maparg('<localleader>l', 'n', false, true))
       assert.equals(1, vim.fn.maparg('<localleader>s', 'n', false, true).buffer)
+    end)
+
+    it('says when an Azure pipeline has no run on the branch', function()
+      git('remote', 'add', 'origin', 'git@ssh.dev.azure.com:v3/c/p/web')
+      cli('az', {
+        'case "$*" in',
+        [[  *"--resource definitions"*) echo '{"count":1,"value":[{"id":5,"repository":{"name":"web"},"process":{"yamlFilename":"/azure-pipelines.yml"}}]}';;]],
+        [[  *"--resource builds"*) echo '{"count":0,"value":[]}';;]],
+        'esac',
+      })
+      h.write(repo .. '/azure-pipelines.yml', AZURE)
+      vim.cmd.edit(repo .. '/azure-pipelines.yml')
+      vim.bo.filetype = 'yaml.az-pl'
+      ci.status(0)
+      assert.is_true(vim.wait(5000, function() return #notes > 0 end, 20))
+      assert.same({ 'No run of azure-pipelines.yml on feat/x' }, notes)
+    end)
+
+    --- The context `ci.context` hands for the current buffer, waited for
+    local function context_of()
+      local got
+      ci.context(0, function(ctx) got = ctx end)
+      vim.wait(5000, function() return got ~= nil or #notes > 0 end, 20)
+      return got
+    end
+
+    it('reads the cluster an Argo workflow runs on', function()
+      local argo = require('tools.ci_argo')
+      local answer = { { context = 'kind-a', namespace = 'argo' } }
+      local seen
+      local restore = h.stub(argo, 'target', function(d, lines, on_done)
+        seen = { d, lines[2] }
+        on_done(unpack(answer))
+      end)
+      h.write(repo .. '/wf.yaml', {
+        'apiVersion: argoproj.io/v1alpha1',
+        'kind: Workflow',
+      })
+      vim.cmd.edit(repo .. '/wf.yaml')
+      vim.bo.filetype = 'yaml'
+      local ctx = context_of()
+      assert.same({ repo, 'kind: Workflow' }, seen)
+      assert.equals('argo', ctx.kind)
+      assert.equals('kind-a/argo', ctx.where)
+      assert.equals(repo .. '/wf.yaml', ctx.file)
+
+      answer = { nil, 'No cluster for this workflow' }
+      assert.is_nil(context_of())
+      restore()
+      assert.same({ 'No cluster for this workflow' }, notes)
+    end)
+
+    it("runs a Dagster file of assets alone in Dagster's asset job", function()
+      local dagster = require('tools.ci_dagster')
+      local seen
+      local restore = h.stub(dagster, 'target', function(root, job, on_done)
+        seen = { root, job }
+        on_done({ url = 'http://dagster', job = job })
+      end)
+      h.write(repo .. '/assets.py', {
+        'from dagster import asset',
+        '@asset',
+        'def numbers():',
+        '    return [1]',
+      })
+      vim.cmd.edit(repo .. '/assets.py')
+      vim.bo.filetype = 'python'
+      local ctx = context_of()
+      restore()
+      assert.same({ repo, dagster.ASSET_JOB }, seen)
+      assert.equals('dagster', ctx.kind)
+      assert.equals(dagster.ASSET_JOB, ctx.where)
+    end)
+
+    it('runs a Prefect flow from the root of its project', function()
+      local prefect = require('tools.ci_prefect')
+      local seen
+      local restore = h.stub(prefect, 'target', function(root, flow, on_done)
+        seen = { root, flow }
+        on_done(nil, 'no Prefect here')
+      end)
+      h.write(repo .. '/pyproject.toml', { '[project]' })
+      h.write(repo .. '/flows/etl.py', {
+        'from prefect import flow',
+        '@flow',
+        'def nightly_load():',
+        '    pass',
+      })
+      vim.cmd.edit(repo .. '/flows/etl.py')
+      vim.bo.filetype = 'python'
+      assert.is_nil(context_of())
+      restore()
+      assert.same({ repo, 'nightly-load' }, seen)
+      assert.same({ 'no Prefect here' }, notes)
+    end)
+
+    it('lints a saved Jenkinsfile with its Jenkins server', function()
+      local jenkins = require('tools.ci_jenkins')
+      local answers = {
+        { { { lnum = 1, col = 0, message = 'unknown step' } } },
+        {},
+        { nil, 'Jenkins is unreachable' },
+      }
+      local sent = {}
+      local restore_target = h.stub(
+        jenkins,
+        'target',
+        function(_, branch, on_done)
+          on_done({ url = 'https://ci.example.com/job/app/' .. branch })
+        end
+      )
+      local restore_lint = h.stub(jenkins, 'lint', function(url, text, on_done)
+        table.insert(sent, { url, text })
+        on_done(unpack(table.remove(answers, 1)))
+      end)
+      h.write(repo .. '/Jenkinsfile', { 'pipeline {', '}' })
+      vim.cmd.edit(repo .. '/Jenkinsfile')
+      local bufnr = vim.api.nvim_get_current_buf()
+      vim.bo.filetype = 'groovy'
+      for count = 1, 3 do
+        ci.lint(bufnr)
+        assert.is_true(
+          vim.wait(5000, function() return #notes >= count end, 20)
+        )
+        if count == 1 then assert.equals(1, #vim.diagnostic.get(bufnr)) end
+      end
+      restore_target()
+      restore_lint()
+      assert.same({
+        'Jenkins found 1 problems',
+        'Jenkins says the file is valid',
+        'Jenkins is unreachable',
+      }, notes)
+      assert.same(
+        { 'https://ci.example.com/job/app/feat/x', 'pipeline {\n}\n' },
+        sent[1]
+      )
+      assert.same({}, vim.diagnostic.get(bufnr))
+    end)
+
+    it('names the group of a Python pipeline file for which-key', function()
+      local specs = {}
+      local restore = h.stub(package.loaded, 'which-key', {
+        add = function(spec) table.insert(specs, spec) end,
+      })
+      local bufnr = h.buffer({
+        filetype = 'python',
+        lines = { 'from airflow import DAG' },
+      })
+      ci.attach(bufnr)
+      restore()
+      assert.same(
+        { { { '<localleader>p', group = 'pipeline', buffer = bufnr } } },
+        specs
+      )
     end)
   end)
 end)
