@@ -269,4 +269,131 @@ describe('tools.history', function()
       }, notes)
     end
   )
+
+  it('reads a declaration of no definition kind as none', function()
+    local chunk = node('chunk', 0, 10)
+    assert.is_nil(history.enclosing(node('variable_declaration', 1, 1, chunk)))
+  end)
+
+  --- `vim.treesitter` answering with `found` for any position, the positions
+  --- it was asked about kept in `asked`
+  local function parsed(found, asked)
+    local parsed_count = 0
+    local restores = {
+      h.stub(vim.treesitter, 'get_parser', function()
+        return { parse = function() parsed_count = parsed_count + 1 end }
+      end),
+      h.stub(vim.treesitter, 'get_node', function(opts)
+        table.insert(asked, opts.pos)
+        return found
+      end),
+    }
+    return function()
+      for _, restore in ipairs(restores) do
+        restore()
+      end
+      return parsed_count
+    end
+  end
+
+  it('asks tree-sitter for the node at the start of the line', function()
+    local asked = {}
+    local fn = node('function_declaration', 2, 4, node('chunk', 0, 10))
+    local restore = parsed(fn, asked)
+    local bufnr = h.buffer({ lines = SOURCE })
+    local found = { history.definition_at(bufnr, 4) }
+    assert.equals(1, restore())
+    assert.same({ 3, 5, 'function_declaration' }, found)
+    assert.same({ { 3, 2 } }, asked)
+  end)
+
+  it('shows the history of the definition under the cursor', function()
+    local asked = {}
+    local restore =
+      parsed(node('function_declaration', 2, 4, node('chunk', 0, 10)), asked)
+    local shown = {}
+    local restore_show = h.stub(
+      history,
+      'show',
+      function(...) table.insert(shown, { ... }) end
+    )
+    vim.api.nvim_set_current_buf(h.buffer({ lines = SOURCE }))
+    vim.api.nvim_win_set_cursor(0, { 4, 0 })
+    history.command({ range = 0, line1 = 4, line2 = 4 })
+    history.command({ range = 2, line1 = 7, line2 = 9 })
+    restore()
+    restore_show()
+    assert.same(
+      { { 3, 5, 'function declaration' }, { 7, 9, 'Selection' } },
+      shown
+    )
+    assert.same({ { 3, 2 } }, asked)
+  end)
+
+  describe('when git answers', function()
+    local answers, ran, restore_run
+
+    before_each(function()
+      vim.fn.mkdir(dir .. '/.git', 'p')
+      h.write(dir .. '/m.lua', SOURCE)
+      vim.cmd.edit(vim.fn.fnameescape(dir .. '/m.lua'))
+      answers, ran = {}, {}
+      local system = require('util.system')
+      restore_run = h.stub(system, 'run', function(cmd, _, on_done)
+        local sub = cmd[2] == '-C' and cmd[4] or cmd[2]
+        table.insert(ran, sub)
+        on_done(vim.tbl_extend('keep', answers[sub] or {}, { code = 0 }))
+      end)
+    end)
+    after_each(function() restore_run() end)
+
+    --- The lines `show` opened for lines 3-5, or the note it gave
+    local function shown()
+      local done = false
+      history.show(3, 5, 'function', function() done = true end)
+      assert.is_true(done)
+      return vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    end
+
+    it('says what an unwritten buffer shows, and no history', function()
+      vim.api.nvim_buf_set_lines(0, 0, 0, false, { '-- new' })
+      answers.diff = { stdout = '' }
+      answers.log = { stdout = '' }
+      local lines = shown()
+      assert.same({
+        '# function, lines 3-5 of m.lua',
+        '',
+        'The buffer is not written: these are the lines of the file on disk.',
+        '',
+        'No commit changed these lines: they are not committed yet.',
+      }, lines)
+      assert.same({ 'ls-files', 'diff', 'log' }, ran)
+    end)
+
+    it('says where the history it read was cut', function()
+      answers.log = { stdout = 'commit abc', cut = true, code = 1 }
+      local lines = shown()
+      assert.equals('commit abc', lines[3])
+      assert.equals('… cut at 4 MiB', lines[4])
+    end)
+
+    it('says why git gave no history', function()
+      answers.log = { code = 128, stderr = 'fatal: bad range' }
+      shown()
+      answers.log = nil
+      answers.diff = { code = 1, stderr = 'fatal: bad HEAD' }
+      shown()
+      answers.diff = { stdout = '\n@@ -0,0 +1,9 @@\n' }
+      shown()
+      answers['ls-files'] =
+        { code = 127, missing = true, stderr = 'git is not installed' }
+      shown()
+      assert.same({
+        'fatal: bad range',
+        'fatal: bad HEAD',
+        'These lines are not committed yet: they have no history',
+        'git is not installed',
+      }, notes)
+    end)
+  end)
 end)
