@@ -165,4 +165,47 @@ describe('tools.ci_prefect', function()
     assert.same({ 'Starting\nBoom\n', false, nil, false }, got)
     assert.equals('logs r1 t2 5000', vim.fn.readfile(dir .. '/calls')[1])
   end)
+
+  it('gives the Python to ask with, or why there is none', function()
+    python({})
+    assert.same(
+      { { flow = 'daily-etl', python = bin .. '/python' } },
+      await(function(cb) prefect.target(nil, 'daily-etl', cb) end)
+    )
+    vim.fn.mkdir(dir .. '/empty', 'p')
+    vim.env.PATH = dir .. '/empty'
+    assert.same(
+      { nil, 'prefect is not installed, here or in the project' },
+      await(function(cb) prefect.target(dir .. '/elsewhere', 'x', cb) end)
+    )
+  end)
+
+  it('says when the client answers with something not JSON', function()
+    python({ 'echo "Prefect 3.0 starting"' })
+    local target = { flow = 'daily-etl', python = bin .. '/python' }
+    assert.same(
+      { nil, 'Prefect answered with something not JSON' },
+      await(function(cb) prefect.fetch(target, cb) end)
+    )
+  end)
+
+  it('says why a log could not be read', function()
+    local target = { flow = 'daily-etl', python = bin .. '/python' }
+    local function log()
+      return await(
+        function(cb)
+          prefect.log(target, { id = 'brave-fox', run_id = 'r1' }, {}, cb)
+        end
+      )
+    end
+    python({
+      'echo "Traceback (most recent call last):" >&2',
+      'echo "ObjectNotFound: flow run r1" >&2',
+      'exit 1',
+    })
+    assert.same({ nil, false, 'ObjectNotFound: flow run r1', false }, log())
+    assert.equals('logs r1  5000', vim.fn.readfile(dir .. '/calls')[1])
+    python({ 'exit 2' })
+    assert.same({ nil, false, 'prefect exited 2', false }, log())
+  end)
 end)
