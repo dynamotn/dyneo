@@ -439,6 +439,34 @@ describe('tools.cert', function()
       assert.is_falsy(text:find('Not all read', 1, true))
     end)
 
+    it('reads a PEM PKCS#7 bundle, and says what it could not', function()
+      if not ready then return pending('openssl is not installed') end
+      vim.fn.system({
+        'openssl',
+        'pkcs7',
+        '-inform',
+        'DER',
+        '-in',
+        dir .. '/chain.p7b',
+        '-out',
+        dir .. '/chain.p7b.pem',
+      })
+      assert.equals(0, vim.v.shell_error)
+      local text = built(cert, { path = dir .. '/chain.p7b.pem' })
+      assert.is_truthy(text:find('2 certificates, PEM', 1, true))
+      assert.is_truthy(text:find('CN%s*=%s*ca.test'))
+      assert.is_falsy(text:find('Not all read', 1, true))
+      local lines = vim.fn.readfile(dir .. '/leaf.pem')
+      vim.list_extend(
+        lines,
+        { '-----BEGIN PKCS7-----', 'bm90IGEgYnVuZGxl', '-----END PKCS7-----' }
+      )
+      h.write(dir .. '/broken.pem', lines)
+      text = built(cert, { path = dir .. '/broken.pem' })
+      assert.is_truthy(text:find('1 certificate, PEM', 1, true))
+      assert.is_truthy(text:find('\nNot all read: ', 1, true))
+    end)
+
     it('says where a chain is out of order, and what it left out', function()
       if not ready then return pending('openssl is not installed') end
       h.write(

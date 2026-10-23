@@ -50,16 +50,16 @@ end
 function M.pems(lines)
   local found, open = {}, nil
   for number, line in ipairs(lines) do
-    local begin = line:match('%-%-%-%-%-BEGIN ([%u ]+)%-%-%-%-%-')
+    local begin = line:match('%-%-%-%-%-BEGIN ([%u%d ]+)%-%-%-%-%-')
     if begin then
       open = { kind = 'pem', label = begin, first = number, body = {} }
     end
     if open then
       table.insert(open.body, vim.trim(line))
-      if line:match('%-%-%-%-%-END [%u ]+%-%-%-%-%-') then
+      if line:match('%-%-%-%-%-END [%u%d ]+%-%-%-%-%-') then
         local text = table.concat(open.body, '\n')
         -- From BEGIN to END only: the key before it on the line goes
-        text = text:match('(%-%-%-%-%-BEGIN.*%-%-%-%-%-END [%u ]+%-%-%-%-%-)')
+        text = text:match('(%-%-%-%-%-BEGIN.*%-%-%-%-%-END [%u%d ]+%-%-%-%-%-)')
         if text then
           table.insert(found, {
             kind = 'pem',

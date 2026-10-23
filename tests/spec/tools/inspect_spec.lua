@@ -126,6 +126,20 @@ describe('tools.inspect', function()
       end
     )
 
+    it('reads a label with a digit, as PKCS#7 has', function()
+      local found = inspect.pems({
+        '-----BEGIN PKCS7-----',
+        'MIIB',
+        '-----END PKCS7-----',
+      })
+      assert.equals(1, #found)
+      assert.equals('PKCS7', found[1].label)
+      assert.equals(
+        '-----BEGIN PKCS7-----\nMIIB\n-----END PKCS7-----',
+        found[1].text
+      )
+    end)
+
     it('names a private key, never decodes it', function()
       local lines
       inspect.pem({
