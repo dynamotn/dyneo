@@ -68,7 +68,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The action unpacks under `TMPDIR` and renames the result into `$HOME`,
+      # which fails with EXDEV on runner images where `/tmp` is another
+      # filesystem (rhysd/action-setup-vim#80): the runner's own temp
+      # directory sits on the same one as `$HOME`
       - uses: rhysd/action-setup-vim@febef33995d6649302e9d88dda81e071b68f16a7 # v1.6.1
+        env:
+          TMPDIR: ${{ runner.temp }}
         with:
           neovim: true
           version: ${{ matrix.neovim }}
