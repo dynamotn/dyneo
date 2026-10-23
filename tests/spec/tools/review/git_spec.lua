@@ -106,6 +106,16 @@ describe('tools.review.git', function()
       assert.is_nil(base)
       assert.is_truthy(err and err ~= '')
     end)
+
+    it('says when the revisions share no history', function()
+      local tree = sh(root, 'write-tree')
+      local lone = sh(root, 'commit-tree', '-m', 'lone', tree)
+      local base, err = await(
+        function(cb) git.merge_base(root, 'main', lone, cb) end
+      )
+      assert.is_nil(base)
+      assert.equals(('main and %s have no common ancestor'):format(lone), err)
+    end)
   end)
 
   describe('files', function()
@@ -155,6 +165,34 @@ describe('tools.review.git', function()
       clean()
       assert.is_nil(files)
       assert.is_truthy(err and err ~= '')
+    end)
+  end)
+
+  describe('files from output it does not foresee', function()
+    it('skips a numstat field it cannot read', function()
+      local restore = h.stub(
+        require('util.system'),
+        'run',
+        function(cmd, _, on_done)
+          local args = table.concat(cmd, ' ')
+          local out = ''
+          if args:find('--numstat', 1, true) then
+            out = 'not a count\0003\t1\ta.txt\000'
+          elseif args:find('--name-status', 1, true) then
+            out = 'M\000a.txt\000'
+          end
+          on_done({ code = 0, signal = 0, stdout = out, stderr = '' })
+        end
+      )
+      local files, err = await(
+        function(cb) git.files(root, 'base', 'head', cb) end
+      )
+      restore()
+      assert.is_nil(err)
+      assert.equals(1, #files)
+      assert.equals('a.txt', files[1].path)
+      assert.equals(3, files[1].added)
+      assert.equals(1, files[1].removed)
     end)
   end)
 
@@ -320,6 +358,30 @@ describe('tools.review.git', function()
         'with space.txt',
       }, paths)
     end)
+
+    it(
+      'fails when the diff of a file on the old side cannot be read',
+      function()
+        git.MAX_DIFF_BYTES = 10
+        local paths, err = await(
+          function(cb)
+            git.interdiff(
+              root,
+              sha.base,
+              sha.feature,
+              sha.main,
+              sha.rebased,
+              cb
+            )
+          end
+        )
+        assert.is_nil(paths)
+        assert.equals(
+          'git diff printed more than can be read, and was stopped',
+          err
+        )
+      end
+    )
 
     it('gives an error for an unknown rev', function()
       local paths, err = await(
