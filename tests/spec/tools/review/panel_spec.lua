@@ -280,4 +280,163 @@ describe('tools.review.panel', function()
       end)
     end)
   end)
+
+  describe('the panel window', function()
+    local restores, calls
+
+    before_each(function()
+      calls = {}
+      restores = {
+        h.stub(
+          require('util.plugin'),
+          'safe_keymap_set',
+          function(mode, lhs, rhs, opts) vim.keymap.set(mode, lhs, rhs, opts) end
+        ),
+        h.stub(package.loaded, 'tools.review', {
+          show = function(path) calls[#calls + 1] = { 'show', path } end,
+          mark = function(path) calls[#calls + 1] = { 'mark', path } end,
+        }),
+        h.stub(package.loaded, 'tools.review.ci', {
+          STATES = require('tools.review.ci').STATES,
+          pick = function(s) calls[#calls + 1] = { 'pick', s } end,
+          load = function(s) calls[#calls + 1] = { 'load', s } end,
+        }),
+      }
+    end)
+
+    after_each(function()
+      for i = #restores, 1, -1 do
+        restores[i]()
+      end
+      vim.cmd('silent! tabonly | silent! only')
+    end)
+
+    --- The panel's window in the current tab
+    local function panel_win(s)
+      for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        if vim.api.nvim_win_get_buf(win) == s.panel_buf then return win end
+      end
+    end
+
+    --- Run the panel's buffer mapping of `lhs` with the cursor on `line`
+    local function press(s, lhs, line)
+      local win = panel_win(s)
+      vim.api.nvim_set_current_win(win)
+      vim.api.nvim_win_set_cursor(win, { line, 0 })
+      local map = vim.fn.maparg(lhs, 'n', false, true)
+      assert.equals(1, map.buffer)
+      if map.callback then return map.callback() end
+      vim.cmd((map.rhs:gsub('^<cmd>', ''):gsub('<cr>$', '')))
+    end
+
+    it('opens at the left, draws the files and keeps the focus', function()
+      local s = session()
+      local code = vim.api.nvim_get_current_win()
+      panel.open(s)
+      local win = panel_win(s)
+      assert.is_not_nil(win)
+      assert.equals(code, vim.api.nvim_get_current_win())
+      assert.equals(panel.WIDTH, vim.api.nvim_win_get_width(win))
+      assert.is_true(vim.wo[win].winfixwidth)
+      assert.is_false(vim.wo[win].number)
+      assert.equals('no', vim.wo[win].signcolumn)
+      assert.equals('dyreview', vim.bo[s.panel_buf].filetype)
+      assert.equals('nofile', vim.bo[s.panel_buf].buftype)
+      assert.equals(
+        ' ▾ Source             3 files  +820 -4',
+        vim.api.nvim_buf_get_lines(s.panel_buf, 2, 3, false)[1]
+      )
+      assert.same({ kind = 'source' }, s.panel_rows[3])
+    end)
+
+    it('is not opened twice in a tab, and keeps its buffer', function()
+      local s = session()
+      panel.open(s)
+      local bufnr = s.panel_buf
+      local wins = #vim.api.nvim_tabpage_list_wins(0)
+      panel.open(s)
+      assert.equals(bufnr, s.panel_buf)
+      assert.equals(wins, #vim.api.nvim_tabpage_list_wins(0))
+    end)
+
+    it('opens the file under the cursor, and does nothing off a row', function()
+      local s = session()
+      panel.open(s)
+      press(s, '<CR>', 1)
+      assert.same({}, calls)
+      press(s, '<CR>', 4)
+      assert.same({ { 'show', 'src/auth/token.go' } }, calls)
+    end)
+
+    it('folds and unfolds a bucket from its line', function()
+      local s = session()
+      panel.open(s)
+      press(s, '<CR>', 3)
+      assert.is_true(s.collapsed.source)
+      assert.equals(
+        ' ▸ Source             3 files  +820 -4',
+        vim.api.nvim_buf_get_lines(s.panel_buf, 2, 3, false)[1]
+      )
+      assert.equals(4, vim.api.nvim_buf_line_count(s.panel_buf))
+      press(s, '<CR>', 3)
+      assert.is_false(s.collapsed.source)
+      assert.equals(7, vim.api.nvim_buf_line_count(s.panel_buf))
+    end)
+
+    it('lists the CI runs from the CI line and refreshes them', function()
+      local s = session({ ci = { runs = {}, errors = {} } })
+      panel.open(s)
+      press(s, '<CR>', 2)
+      assert.same({ { 'pick', s } }, calls)
+      press(s, 'r', 1)
+      assert.same({ 'load', s }, calls[2])
+    end)
+
+    it('marks the file under the cursor, and only a file', function()
+      local s = session()
+      panel.open(s)
+      press(s, 'm', 3)
+      assert.same({}, calls)
+      press(s, 'm', 5)
+      assert.same({ { 'mark', 'db/migrations/0042_bill.sql' } }, calls)
+    end)
+
+    it('closes its window with q', function()
+      local s = session()
+      panel.open(s)
+      press(s, 'q', 1)
+      assert.is_nil(panel_win(s))
+      assert.is_true(vim.api.nvim_buf_is_valid(s.panel_buf))
+    end)
+
+    it('follows the file shown in the diff', function()
+      local s = session()
+      panel.open(s)
+      panel.follow(s, 'src/billing/export.go')
+      assert.equals(6, vim.api.nvim_win_get_cursor(panel_win(s))[1])
+      -- A path the panel does not list leaves the cursor where it is
+      panel.follow(s, 'nowhere.go')
+      assert.equals(6, vim.api.nvim_win_get_cursor(panel_win(s))[1])
+    end)
+
+    it('does nothing without a panel buffer', function()
+      local s = session()
+      assert.has_no.errors(function()
+        panel.refresh(s)
+        panel.follow(s, 'go.sum')
+        panel.close(s)
+      end)
+      assert.is_nil(s.panel_buf)
+    end)
+
+    it('wipes its buffer and windows on close', function()
+      local s = session()
+      panel.open(s)
+      local bufnr = s.panel_buf
+      panel.close(s)
+      assert.is_nil(s.panel_buf)
+      assert.is_false(vim.api.nvim_buf_is_valid(bufnr))
+      assert.equals(1, #vim.api.nvim_tabpage_list_wins(0))
+    end)
+  end)
 end)
