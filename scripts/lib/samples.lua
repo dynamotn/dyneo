@@ -243,6 +243,17 @@ function M.skip_installs()
     -- script that compiles nothing does not need either.
     require('util.treesitter').build = function(cb) cb() end
   end)
+  -- A source whose tool Mason was not let install fails its run with an
+  -- error on every buffer it serves. Not run, it answers nothing, and the
+  -- skipped package is already reported.
+  M.before_config('none-ls.nvim', function()
+    local loop = require('null-ls.loop')
+    local spawn = loop.spawn
+    loop.spawn = function(cmd, ...)
+      if vim.fn.executable(cmd) ~= 1 then return end
+      return spawn(cmd, ...)
+    end
+  end)
   -- Fetches its own `tinymist` and `websocat` release binaries on setup.
   M.before_config('typst-preview.nvim', function()
     require('typst-preview.fetch').fetch = function(_, callback)
