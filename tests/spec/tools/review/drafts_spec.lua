@@ -279,6 +279,20 @@ describe('tools.review.drafts', function()
     end)
   end)
 
+  describe('summary', function()
+    it('cuts a long first line to the label width', function()
+      local long = string.rep('é', drafts.LABEL_WIDTH + 5)
+      local text = drafts.summary(user({ body = long .. '\nsecond' }))
+      assert.equals(drafts.LABEL_WIDTH, vim.fn.strchars(text))
+      assert.equals(string.rep('é', drafts.LABEL_WIDTH - 1) .. '…', text)
+    end)
+
+    it('keeps a first line that fits', function()
+      local fits = string.rep('a', drafts.LABEL_WIDTH)
+      assert.equals(fits, drafts.summary(user({ body = fits })))
+    end)
+  end)
+
   it('defines default highlights', function()
     for _, name in pairs(drafts.HL) do
       assert.is_not_nil(vim.api.nvim_get_hl(0, { name = name }).link)
