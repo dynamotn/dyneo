@@ -111,6 +111,28 @@ describe('tools.review.ai', function()
       assert.is_true(chunks[1].cut)
       assert.same({ old = 1, new = 4 }, chunks[1].last['big.lua'])
     end)
+
+    it('cuts a diff with no line end short of a split character', function()
+      local diffs = { ['u.lua'] = ('é'):rep(30) }
+      local chunks = ai.chunks({ file('u.lua') }, diffs, 7)
+      assert.equals('ééé\n(diff of u.lua cut at 1 KiB)\n', chunks[1].text)
+    end)
+  end)
+
+  describe('last_lines', function()
+    it('follows each side through context, removed and added lines', function()
+      local text = table.concat({
+        'diff --git a/x b/x',
+        '@@ -3,3 +3,2 @@',
+        ' same',
+        '-gone',
+        '-gone too',
+        '+new',
+        '\\ No newline at end of file',
+      }, '\n')
+      assert.same({ old = 5, new = 4 }, ai.last_lines(text))
+      assert.same({ old = 0, new = 0 }, ai.last_lines('+before any hunk'))
+    end)
   end)
 
   describe('parse', function()
@@ -266,6 +288,49 @@ describe('tools.review.ai', function()
       assert.equals(2, #result.drafts)
       assert.same({ 'local x = 1', 'local y = 2' }, result.drafts[1].suggestion)
       assert.is_nil(result.drafts[2].suggestion)
+    end)
+
+    it('keeps the string lines of a suggestion given as a list', function()
+      local result = ai.parse(
+        vim.json.encode({
+          comments = {
+            {
+              path = 'src/a.lua',
+              line = 11,
+              body = 'Use local',
+              suggestion = { 'local x = 1', 7, 'local y = 2' },
+            },
+          },
+        }),
+        hunks
+      )
+      assert.same({ 'local x = 1', 'local y = 2' }, result.drafts[1].suggestion)
+    end)
+
+    it('orders a range given end first', function()
+      local result = ai.parse(
+        vim.json.encode({
+          comments = {
+            { path = 'src/a.lua', line = 11, start_line = 14, body = 'x' },
+          },
+        }),
+        hunks
+      )
+      assert.equals(11, result.drafts[1].start_line)
+      assert.equals(14, result.drafts[1].line)
+    end)
+
+    it('tries the next brace when one never closes', function()
+      local result =
+        ai.parse('Note { see: {"summary": "Fine", "comments": []}', hunks)
+      assert.equals('Fine', result.summary)
+      assert.same({}, result.drafts)
+    end)
+
+    it('refuses comments that are not a list', function()
+      local result, err = ai.parse('{"comments": {"path": "src/a.lua"}}', hunks)
+      assert.is_nil(result)
+      assert.equals('the comments of the answer are not a list', err)
     end)
   end)
 
@@ -602,6 +667,93 @@ describe('tools.review.ai', function()
       ai.run(s)
       assert.is_falsy(said():find('running already', 1, true))
       assert.equals(2, changed)
+    end)
+
+    it('keeps nothing when the review closes while the AI runs', function()
+      local asked = 0
+      stub(session_mod, 'current', function()
+        asked = asked + 1
+        return asked == 1 and s or nil
+      end)
+      local before = vim.deepcopy(s.state.drafts)
+      ai.run(s)
+      assert.equals(1, #sent)
+      assert.equals(0, changed)
+      assert.same(before, s.state.drafts)
+      assert.is_truthy(
+        said():find('The review closed: the AI drafts are not kept', 1, true)
+      )
+    end)
+
+    it('leaves out the comments on a file whose hunks failed', function()
+      local git = require('tools.review.git')
+      stub(git, 'hunks', function(_, _, _, path, _, cb)
+        if path == 'src/b.lua' then return cb(nil, 'boom') end
+        cb({ new = { { 1, 5 } }, old = {} })
+      end)
+      ai.run(s)
+      -- One chunk holds both files, and is sent for the one that reads
+      assert.equals(1, #sent)
+      local new = vim.tbl_filter(
+        function(d) return d.origin == 'ai' and d.state == 'pending' end,
+        s.state.drafts
+      )
+      assert.same(
+        { 'src/a.lua', 'src/b.lua' },
+        vim.tbl_map(function(d) return d.path end, new)
+      )
+      assert.equals('p-b', new[2].id)
+      local text = said()
+      assert.is_truthy(
+        text:find(
+          'failed for src/b.lua: its changed lines could not be read',
+          1,
+          true
+        )
+      )
+      assert.is_falsy(text:find('outside', 1, true))
+    end)
+
+    it('names the first files left out, then how many more', function()
+      for i = 1, 7 do
+        table.insert(
+          s.files,
+          file(('gen%d.lock'):format(i), {
+            kind = 'generated',
+          })
+        )
+      end
+      ai.run(s)
+      assert.is_truthy(
+        said():find(
+          'Left out of the AI pass: go.sum (generated), gen1.lock (generated), '
+            .. 'gen2.lock (generated), gen3.lock (generated), '
+            .. 'gen4.lock (generated) and 3 more',
+          1,
+          true
+        )
+      )
+    end)
+
+    it('says when the diff cannot be read, and may run again', function()
+      local git = require('tools.review.git')
+      stub(git, 'diff', function(_, _, _, _, _, cb) cb(nil, 'bad revision') end)
+      ai.run(s)
+      assert.same({}, sent)
+      assert.equals('Could not read the diff: bad revision', notes[1].msg)
+      assert.equals(vim.log.levels.ERROR, notes[1].level)
+      ai.run(s)
+      assert.is_falsy(said():find('running already', 1, true))
+    end)
+
+    it('says when no file is left to send, and may run again', function()
+      s.files = { file('go.sum', { kind = 'generated' }) }
+      ai.run(s)
+      assert.same({}, sent)
+      assert.equals('Nothing to send to the AI', notes[#notes].msg)
+      assert.equals(vim.log.levels.WARN, notes[#notes].level)
+      ai.run(s)
+      assert.is_falsy(said():find('running already', 1, true))
     end)
 
     it('keeps nothing once the review has closed', function()
