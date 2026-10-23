@@ -651,4 +651,150 @@ describe('tools.review.submit', function()
     assert.is_true(told('adapter bug'))
     assert.is_false(submit.busy())
   end)
+
+  it(
+    'waits for the main loop when the forge answers in a fast event',
+    function()
+      s.state.drafts = { draft({ id = 'a' }) }
+      local get = s.adapter.get
+      s.adapter.get = function(remote, id, cb)
+        local timer = vim.uv.new_timer()
+        timer:start(0, 0, function()
+          timer:close()
+          assert.is_true(vim.in_fast_event())
+          get(remote, id, cb)
+        end)
+      end
+      submit.run(s)
+      assert.is_true(vim.wait(1000, function() return #sent == 1 end, 10))
+      assert.same({ 'a' }, sent[1].ids)
+      assert.is_true(told('Review sent'))
+      assert.is_false(submit.busy())
+    end
+  )
+
+  it('refuses when a diff read gives no hunks of a file', function()
+    s.state.drafts = { draft({ id = 'a', path = 'src/b.lua' }) }
+    stub(session, 'load_hunks', function(_, _, cb) cb() end)
+    submit.run(s)
+    assert.same({}, sent)
+    assert.same({}, confirms)
+    assert.is_true(told('Not sent: Could not read the diff of src/b.lua'))
+    assert.is_false(submit.busy())
+  end)
+
+  it('names a draft of an older push outside the diff only once', function()
+    s.files = { { path = 'src/a.lua', blob = 'B2' } }
+    stub(git, 'blobs', function(_, _, _, cb) cb({ ['src/a.lua'] = 'B1' }) end)
+    s.state.drafts = { draft({ id = 'stale', head = 'old1', line = 40 }) }
+    submit.run(s)
+    assert.matches('1 draft was written on an older push', confirms[1], 1, true)
+    assert.is_nil(confirms[1]:find('outside the current diff', 1, true))
+    assert.is_true(s.state.drafts[1].file_level)
+  end)
+
+  it('warns when the head cannot be marked reviewed', function()
+    s.state.drafts = { draft({ id = 'a' }) }
+    stub(git, 'update_ref', function(_, _, _, cb) cb(false, 'ref locked') end)
+    submit.run(s)
+    assert.is_true(told('Review sent'))
+    assert.is_true(told('Could not mark the head reviewed: ref locked'))
+    assert.equals(head, s.state.last_head)
+  end)
+
+  it('sends nothing when the review closed while it was read again', function()
+    s.state.drafts = { draft({ id = 'a' }) }
+    stub(session, 'current', function() return nil end)
+    submit.run(s)
+    assert.same({}, sent)
+    assert.same({}, confirms)
+    assert.is_true(told('The review was closed: nothing sent'))
+    assert.is_false(submit.busy())
+  end)
+
+  it('refuses when reading the pull request again raises', function()
+    s.adapter.get = function() error('adapter bug') end
+    submit.run(s)
+    assert.same({}, confirms)
+    assert.is_true(told('Could not read the pull request again:'))
+    assert.is_true(told('adapter bug'))
+    assert.is_false(submit.busy())
+  end)
+
+  describe(
+    'when a change while confirming leaves the verdict no body',
+    function()
+      before_each(function()
+        s.state.drafts = { draft({ id = 'a' }) }
+        verdict('request_changes')
+        -- The only comment is dropped while the confirmation is up
+        confirm_with({
+          function() s.state.drafts[1].state = 'dropped' end,
+          1,
+        })
+      end)
+
+      it('asks for a body before confirming again', function()
+        answers({ '', 'Please add tests' })
+        submit.run(s)
+        assert.equals(2, #inputs)
+        assert.equals(2, #confirms)
+        assert.is_true(told('confirm again'))
+        assert.same({
+          {
+            ids = {},
+            review = {
+              verdict = 'request_changes',
+              body = 'Please add tests',
+            },
+          },
+        }, sent)
+      end)
+
+      it('sends nothing when the body is cancelled', function()
+        answers({ '' })
+        submit.run(s)
+        assert.equals(2, #inputs)
+        assert.equals(1, #confirms)
+        assert.same({}, sent)
+        assert.is_true(told('Not sent'))
+        assert.is_false(submit.busy())
+      end)
+    end
+  )
+
+  it('refuses when the drafts cannot be read again after yes', function()
+    s.state.drafts = { draft({ id = 'a' }) }
+    confirm_with({
+      function()
+        s.hunks['src/a.lua'] = nil
+        stub(session, 'load_hunks', function(_, _, cb) cb('git broke') end)
+      end,
+    })
+    submit.run(s)
+    assert.same({}, sent)
+    assert.is_true(
+      told('Not sent: Could not read the diff of src/a.lua: git broke')
+    )
+    assert.is_false(submit.busy())
+  end)
+
+  it('says when the forge takes no verdict', function()
+    s.adapter.verdicts = {}
+    submit.run(s)
+    assert.same({}, confirms)
+    assert.same({}, sent)
+    assert.is_true(told('GitHub takes no verdict from here'))
+    assert.is_false(submit.busy())
+  end)
+
+  it('sends nothing when no verdict is chosen', function()
+    s.state.drafts = { draft({ id = 'a' }) }
+    verdict('none')
+    submit.run(s)
+    assert.same({}, inputs)
+    assert.same({}, sent)
+    assert.is_true(told('Not sent'))
+    assert.is_false(submit.busy())
+  end)
 end)
