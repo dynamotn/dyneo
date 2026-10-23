@@ -1248,11 +1248,182 @@ exit 1
       assert.equals(3, #calls())
     end)
 
+    it('names every draft deleted before it was published', function()
+      answer('user', 'user.json')
+      answer(DRAFTS, {})
+      answer(DISCUSSIONS, {})
+      writes_succeed()
+      local err, reports, info = submit({
+        draft({ id = 'one', body = 'One.', posted = 'draft:900' }),
+        draft({ id = 'two', body = 'Two.', posted = 'draft:901' }),
+        draft({ id = 'new' }),
+      }, { verdict = 'comment' })
+      assert.equals(
+        '2 drafts were deleted on GitLab before they were published',
+        err
+      )
+      assert.same({ lost = { 'one', 'two' } }, info)
+      assert.same({}, reports)
+      assert.same({ 'user', DRAFTS, DISCUSSIONS }, keys())
+    end)
+
+    it('sends the rest once every draft sent is found published', function()
+      answer('user', 'user.json')
+      answer(DRAFTS, {})
+      answer(DISCUSSIONS, {
+        {
+          id = 'dx',
+          notes = {
+            mine(950, 'Published.', {
+              position = { new_path = 'a.lua', new_line = 1 },
+            }),
+          },
+        },
+      })
+      writes_succeed()
+      local err, reports = submit({
+        draft({ id = 'out', body = 'Published.', posted = 'draft:900' }),
+        draft({ id = 'new', body = 'New.' }),
+      }, { verdict = 'comment' })
+      assert.is_nil(err)
+      assert.same({ { 'new', 'draft:900' } }, reports)
+      assert.same(
+        { 'user', DRAFTS, DISCUSSIONS, DIFFS, NEW_DRAFT, PUBLISH },
+        keys()
+      )
+      assert.equals('New.', calls()[5].body.note)
+    end)
+
+    it('refuses to place drafts on a diff without its paths', function()
+      answer('user', 'user.json')
+      answer(DRAFTS, {})
+      writes_succeed()
+      answer(DIFFS, { { new_path = 'a.lua', diff = '' } })
+      local err, reports = submit({ draft({ id = 'a' }) }, {
+        verdict = 'comment',
+      })
+      assert.equals('GitLab answered with a malformed diff', err)
+      assert.same({}, reports)
+      assert.same({ 'user', DRAFTS, DIFFS }, keys())
+    end)
+
+    it('fails the verdict when GitLab does not say if I approved', function()
+      answer('user', 'user.json')
+      answer(DRAFTS, { mine(900, 'One.') })
+      writes_succeed()
+      answer(APPROVALS, { approved_by = {} })
+      local err = submit(
+        { draft({ id = 'a', body = 'One.', posted = 'draft:900' }) },
+        { verdict = 'approve' }
+      )
+      assert.equals('GitLab did not say whether you approved', err)
+      assert.same({ 'user', DRAFTS, PUBLISH, APPROVALS }, keys())
+    end)
+
     it('refuses a verdict GitLab does not have, asking nothing', function()
       local err = submit({ draft({}) }, { verdict = 'request_changes' })
       assert.is_string(err)
       assert.same({}, calls())
     end)
+  end)
+
+  describe('a malformed answer', function()
+    local pull = { id = '7', head_sha = 'a7a7a7', base_sha = 'b7b7b7' }
+    local BRANCH = PROJECT .. '_state_opened_source_branch_feat_2Fx_per_page_20'
+
+    --- What `fn` hands its callback: nothing, and the error, is expected
+    ---@param fn fun(cb: fun(...))
+    ---@return string
+    local function fails(fn)
+      local value, err = wait(fn)
+      assert.is_nil(value)
+      assert.is_string(err)
+      return err
+    end
+
+    it('refuses a remote that names no project, asking nothing', function()
+      for _, slug in ipairs({ 'p', 'g/', 'g//p' }) do
+        local bad = { kind = 'gitlab', host = 'gitlab.com', slug = slug }
+        assert.equals(
+          'Not a GitLab project: ' .. slug,
+          fails(function(cb) gitlab.list(bad, cb) end)
+        )
+      end
+      assert.same({}, calls())
+    end)
+
+    it('fails a listing when GitLab does not say who I am', function()
+      answer('user', { username = 'me' })
+      assert.equals(
+        'GitLab did not say who is signed in',
+        fails(function(cb) gitlab.list(remote, cb) end)
+      )
+      assert.same({ 'user' }, keys())
+    end)
+
+    it('fails a listing with no data or no merge requests', function()
+      answer('user', 'user.json')
+      answer('graphql_DyReviewMergeRequests', { message = 'odd' })
+      assert.equals(
+        'GitLab answered with no data',
+        fails(function(cb) gitlab.list(remote, cb) end)
+      )
+      answer('graphql_DyReviewMergeRequests', { data = { project = vim.NIL } })
+      assert.equals(
+        'GitLab answered with no merge requests',
+        fails(function(cb) gitlab.list(remote, cb) end)
+      )
+    end)
+
+    it('fails a listing holding a broken merge request', function()
+      answer('user', 'user.json')
+      local nameless = node(2)
+      nameless.iid = vim.NIL
+      answer('graphql_DyReviewMergeRequests', list_page({ node(1), nameless }))
+      assert.equals(
+        'GitLab answered with a malformed merge request',
+        fails(function(cb) gitlab.list(remote, cb) end)
+      )
+      local headless = node(2)
+      headless.diffRefs = { baseSha = 'b', startSha = 's' }
+      answer('graphql_DyReviewMergeRequests', list_page({ headless }))
+      assert.equals(
+        'GitLab answered with a malformed merge request',
+        fails(function(cb) gitlab.list(remote, cb) end)
+      )
+    end)
+
+    it('fails the merge request of a branch when it is no list', function()
+      answer(BRANCH, { message = 'Moved' })
+      assert.equals(
+        'GitLab answered with something not a list',
+        fails(function(cb) gitlab.for_branch(remote, 'feat/x', cb) end)
+      )
+    end)
+
+    it('fails threads that are no list', function()
+      answer(DISCUSSIONS, { message = 'Moved' })
+      assert.equals(
+        'GitLab answered with something not a list',
+        fails(function(cb) gitlab.threads(remote, pull, cb) end)
+      )
+    end)
+
+    it('fails a draft note without its id', function()
+      answer(DRAFTS, { { id = 61, note = 'x' }, { note = 'no id' } })
+      assert.equals(
+        'GitLab answered with a malformed draft note',
+        fails(function(cb) gitlab.pending(remote, pull, cb) end)
+      )
+    end)
+  end)
+
+  it('gives a posted draft note the id its import gives it', function()
+    assert.equals(
+      vim.fn.sha256('gitlab:900'):sub(1, 12),
+      gitlab.import_id('draft:900')
+    )
+    assert.is_nil(gitlab.import_id('900'))
   end)
 
   it('writes a suggestion in a fence longer than any it holds', function()
