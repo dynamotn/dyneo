@@ -399,6 +399,33 @@ describe('tools.rego', function()
     assert.same({ 'capabilities --current' }, vim.fn.readfile(dir .. '/calls'))
   end)
 
+  it('says so when the capabilities cannot be written', function()
+    opa({})
+    local restore = h.stub(
+      vim.fn,
+      'tempname',
+      function() return dir .. '/missing/t' end
+    )
+    local answers = {}
+    local function ask()
+      rego.capabilities(
+        function(file, err) table.insert(answers, { file, err }) end
+      )
+    end
+    ask()
+    local done = vim.wait(5000, function() return #answers == 1 end, 10)
+    restore()
+    assert.is_true(done)
+    assert.is_nil(answers[1][1])
+    assert.equals(
+      'Not run: could not write ' .. dir .. '/missing/t-opa-capabilities.json',
+      answers[1][2]
+    )
+    -- Answered from what is kept, not left waiting on a run that failed
+    ask()
+    assert.same(answers[1], answers[2])
+  end)
+
   it('closes the playground once its policy is gone', function()
     opa({ [[echo '{}']] })
     local bufnr = policy()

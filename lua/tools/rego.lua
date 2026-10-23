@@ -107,11 +107,11 @@ function M.capabilities(on_done)
       end
       -- In the session's own temporary folder, removed when it ends
       local path = vim.fn.tempname() .. '-opa-capabilities.json'
-      local written = vim.fn.writefile(
-        { vim.json.encode(M.restrict(data)) },
-        path
-      ) == 0
-      if not written then
+      -- `writefile` raises on a failed write; raised here, the waiters would
+      -- never be answered
+      local wrote, status =
+        pcall(vim.fn.writefile, { vim.json.encode(M.restrict(data)) }, path)
+      if not wrote or status ~= 0 then
         return answer(nil, 'Not run: could not write ' .. path)
       end
       answer(path)
