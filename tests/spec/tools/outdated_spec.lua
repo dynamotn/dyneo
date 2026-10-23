@@ -153,6 +153,24 @@ describe('tools.outdated', function()
       end
     )
 
+    it('reads dependency groups and Poetry groups, no other table', function()
+      local deps = read('pyproject', {
+        '[dependency-groups]',
+        'test = ["pytest>=8.0"]',
+        '[tool.poetry.group.lint.dependencies]',
+        'black = "^24.1"',
+        '[tool.ruff]',
+        'target = "^3.12"',
+      })
+      assert.are.same(
+        { { 'pytest', '8.0', 2 }, { 'black', '24.1', 4 } },
+        vim.tbl_map(
+          function(dep) return { dep.name, dep.version, dep.line } end,
+          deps
+        )
+      )
+    end)
+
     it('reads providers and registry modules of Terraform', function()
       local deps = read('terraform', {
         'terraform {',
@@ -344,6 +362,15 @@ describe('tools.outdated', function()
       assert.is_nil(held.time)
     end)
 
+    it('names no release held that reads as the one offered', function()
+      local aged, held = outdated.pick('1.0', {
+        { version = '1.1.0', time = NOW - 30 * DAY },
+        { version = '1.1.5', time = NOW - DAY },
+      }, NOW)
+      assert.are.equal('1.1.0', aged.version)
+      assert.is_nil(held)
+    end)
+
     it('says nothing of a release no newer at the precision written', function()
       local aged, held = outdated.pick('v4', {
         { version = 'v4.2.2', time = NOW - 30 * DAY },
@@ -411,6 +438,19 @@ describe('tools.outdated', function()
         },
       })
       assert.are.same({ { version = '5.1.0', time = NOW - DAY } }, providers)
+      local modules = outdated.releases_of('tf-module', {
+        included = {
+          {
+            type = 'module-versions',
+            attributes = { version = '5.2.0', ['published-at'] = ago(DAY) },
+          },
+          {
+            type = 'provider-versions',
+            attributes = { version = '9.9.9' },
+          },
+        },
+      })
+      assert.are.same({ { version = '5.2.0', time = NOW - DAY } }, modules)
       local actions = outdated.releases_of('action', {
         { tag_name = 'v5.0.0', published_at = ago(DAY) },
         { tag_name = 'v5.1.0-rc', published_at = ago(DAY), prerelease = true },
@@ -641,6 +681,307 @@ describe('tools.outdated', function()
       vim.cmd.edit(vim.fn.fnameescape(dir .. '/notes.md'))
       outdated.check(0)
       assert.matches('Not a manifest', notes[#notes])
+    end)
+
+    it('cuts a long error to the width of one line', function()
+      vim.cmd.edit(vim.fn.fnameescape(dir .. '/package.json'))
+      local bufnr = vim.api.nvim_get_current_buf()
+      local name = ('long-'):rep(20)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+        '{',
+        '  "dependencies": {',
+        '    "' .. name .. '": "^1.0.0"',
+        '  }',
+        '}',
+      })
+      local done = false
+      outdated.check(bufnr, function() done = true end)
+      assert.is_true(vim.wait(5000, function() return done end))
+      local shown = marks(bufnr)[3]
+      assert.matches('^  %? 404 https://api%.deps%.dev/', shown)
+      assert.matches('…$', shown)
+      assert.are.equal(
+        outdated.ERROR_WIDTH,
+        vim.fn.strchars(shown) - vim.fn.strchars('  ? ')
+      )
+    end)
+
+    it('bumps nothing once the version left the line', function()
+      local bufnr = package_json()
+      local done = false
+      outdated.check(bufnr, function() done = true end)
+      assert.is_true(vim.wait(5000, function() return done end))
+      -- `^1.1.0` becomes `^1.2.0`, the mark staying where it was
+      vim.api.nvim_buf_set_text(bufnr, 2, 20, 2, 21, { '2' })
+      vim.api.nvim_win_set_cursor(0, { 3, 0 })
+      outdated.bump(bufnr)
+      assert.are.equal(
+        '    "left-pad": "^1.2.0",',
+        vim.api.nvim_buf_get_lines(bufnr, 2, 3, false)[1]
+      )
+      assert.matches('1%.1%.0 is no longer on this line', notes[#notes])
+    end)
+
+    it('says when curl is not installed, asking nothing', function()
+      local bufnr = package_json()
+      local executable = vim.fn.executable
+      local restore = h.stub(
+        vim.fn,
+        'executable',
+        function(name) return name == 'curl' and 0 or executable(name) end
+      )
+      outdated.check(bufnr)
+      restore()
+      assert.matches('curl is not installed', notes[#notes])
+      assert.are.equal(0, vim.fn.filereadable(dir .. '/calls'))
+    end)
+
+    it('checks, bumps and clears the current buffer by subcommand', function()
+      local bufnr = package_json()
+      outdated.command({ fargs = {} })
+      assert.matches('Asking about 2', notes[#notes])
+      assert.is_true(
+        vim.wait(
+          5000,
+          function() return notes[#notes]:find('behind', 1, true) ~= nil end
+        )
+      )
+      vim.api.nvim_win_set_cursor(0, { 3, 0 })
+      outdated.command({ fargs = { 'bump' } })
+      assert.matches('left%-pad: 1%.1%.0 → 1%.3%.0', notes[#notes])
+      assert.is_not_nil(marks(bufnr)[4])
+      outdated.command({ fargs = { 'clear' } })
+      assert.are.same({}, marks(bufnr))
+      assert.is_nil(outdated.found[bufnr])
+      outdated.command({ fargs = { 'nope' } })
+      assert.are.equal('Unknown subcommand: nope', notes[#notes])
+    end)
+
+    describe('each registry', function()
+      --- Serve `body` at `url` through the fake curl
+      local function serve(url, body)
+        h.write(dir .. '/web/' .. url:gsub('[^%w]', '_'), vim.split(body, '\n'))
+      end
+      --- Check a buffer holding `lines` at `name`, and give what it shows
+      local function check(name, lines)
+        local file = dir .. '/' .. name
+        vim.fn.mkdir(vim.fs.dirname(file), 'p')
+        vim.cmd.edit(vim.fn.fnameescape(file))
+        local bufnr = vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+        local done = false
+        outdated.check(bufnr, function() done = true end)
+        assert.is_true(vim.wait(5000, function() return done end))
+        return marks(bufnr), bufnr
+      end
+      local function calls()
+        if vim.fn.filereadable(dir .. '/calls') == 0 then return {} end
+        return vim.fn.readfile(dir .. '/calls')
+      end
+
+      before_each(function()
+        -- Any URL served by `serve`, the others failing as curl does
+        h.write(dir .. '/bin/curl', {
+          '#!/bin/sh',
+          'for arg; do url=$arg; done',
+          'echo "$url" >> "' .. dir .. '/calls"',
+          'file="'
+            .. dir
+            .. '/web/$(printf %s "$url" | tr -c \'A-Za-z0-9\' _)"',
+          '[ -f "$file" ] || { echo "404 $url" >&2; exit 22; }',
+          'cat "$file"',
+        })
+        vim.fn.setfperm(dir .. '/bin/curl', 'rwxr-xr-x')
+      end)
+
+      it('asks PyPI through jq, keeping only times and flags', function()
+        h.write(dir .. '/bin/jq', {
+          '#!/bin/sh',
+          'printf %s "$2" > "' .. dir .. '/filter"',
+          'cat',
+        })
+        vim.fn.setfperm(dir .. '/bin/jq', 'rwxr-xr-x')
+        serve(
+          'https://pypi.org/pypi/requests/json',
+          vim.json.encode({
+            releases = {
+              ['2.32.0'] = { { upload_time_iso_8601 = ago(20 * DAY) } },
+            },
+          })
+        )
+        local shown = check('requirements.txt', { 'requests==2.31.0' })
+        assert.are.equal('  → 2.32.0', shown[1])
+        assert.matches(
+          'upload_time_iso_8601, yanked',
+          vim.fn.readfile(dir .. '/filter')[1]
+        )
+      end)
+
+      it(
+        'says when a registry answers more than it reads, or no JSON',
+        function()
+          serve(
+            'https://api.deps.dev/v3/systems/npm/packages/big',
+            ('x'):rep(64)
+          )
+          serve('https://api.deps.dev/v3/systems/npm/packages/text', 'oops')
+          local restore = h.stub(outdated, 'MAX_BYTES', 32)
+          local shown = check('package.json', {
+            '{',
+            '  "dependencies": { "big": "^1.0.0" },',
+            '  "devDependencies": { "text": "^1.0.0" }',
+            '}',
+          })
+          restore()
+          assert.matches('more than can be read', shown[2])
+          assert.matches('something not JSON', shown[3])
+          assert.matches('2 failed', notes[#notes])
+        end
+      )
+
+      it('asks the Go proxy newest first until a release is aged', function()
+        local text = 'https://proxy.golang.org/golang.org/x/text/@v/'
+        serve(text .. 'list', 'v0.20.0\nv0.21.0\nv0.22.0\nv0.23.0-rc1')
+        serve(text .. 'v0.22.0.info', vim.json.encode({ Time = ago(DAY) }))
+        serve(text .. 'v0.21.0.info', vim.json.encode({ Time = ago(30 * DAY) }))
+        serve('https://proxy.golang.org/example.com/done/@v/list', 'v1.0.0')
+        serve('https://proxy.golang.org/example.com/new/@v/list', 'v2.0.0')
+        local shown = check('go.mod', {
+          'module example.com/app',
+          'require (',
+          '\tgolang.org/x/text v0.20.0',
+          '\texample.com/done v1.0.0',
+          '\texample.com/new v1.0.0',
+          '\texample.com/gone v1.0.0',
+          ')',
+        })
+        assert.are.equal('  → v0.21.0  v0.22.0 held, 1d old', shown[3])
+        -- Up to date: the newest listed is the version written
+        assert.is_nil(shown[4])
+        -- A release whose date the proxy did not give is held
+        assert.are.equal('  v2.0.0 held, date unknown', shown[5])
+        assert.matches('^  %? 404 https://proxy%.golang%.org/', shown[6])
+        local asked = calls()
+        assert.is_true(vim.tbl_contains(asked, text .. 'v0.22.0.info'))
+        assert.is_false(vim.tbl_contains(asked, text .. 'v0.20.0.info'))
+        assert.is_false(vim.tbl_contains(asked, text .. 'v0.23.0-rc1.info'))
+      end)
+
+      it('asks the Go proxy no more than its lookups allow', function()
+        local toml = 'https://proxy.golang.org/github.com/!burnt!sushi/toml/@v/'
+        serve(toml .. 'list', 'v1.1.0\nv1.2.0')
+        serve(toml .. 'v1.2.0.info', vim.json.encode({ Time = ago(0) }))
+        serve(toml .. 'v1.1.0.info', vim.json.encode({ Time = ago(90 * DAY) }))
+        local restore = h.stub(outdated, 'GO_LOOKUPS', 1)
+        local shown = check('go.mod', {
+          'module example.com/app',
+          'require github.com/BurntSushi/toml v1.0.0',
+        })
+        restore()
+        assert.are.equal('  v1.2.0 held, out today', shown[2])
+        assert.is_false(vim.tbl_contains(calls(), toml .. 'v1.1.0.info'))
+      end)
+
+      it('asks the Terraform registry of providers and modules', function()
+        local function versions(kind, version)
+          return vim.json.encode({
+            included = {
+              {
+                type = kind,
+                attributes = {
+                  version = version,
+                  ['published-at'] = ago(30 * DAY),
+                },
+              },
+            },
+          })
+        end
+        serve(
+          'https://registry.terraform.io/v2/providers/hashicorp/aws'
+            .. '?include=provider-versions',
+          versions('provider-versions', '5.40.0')
+        )
+        serve(
+          'https://registry.terraform.io/v2/modules/'
+            .. 'terraform-aws-modules/vpc/aws?include=module-versions',
+          versions('module-versions', '5.8.1')
+        )
+        local shown = check('versions.tf', {
+          'terraform {',
+          '  required_providers {',
+          '    aws = { source = "hashicorp/aws", version = "~> 5.0" }',
+          '  }',
+          '}',
+          'module "vpc" {',
+          '  source  = "terraform-aws-modules/vpc/aws"',
+          '  version = "5.1.0"',
+          '}',
+        })
+        assert.are.equal('  → 5.40', shown[3])
+        assert.are.equal('  → 5.8.1', shown[8])
+      end)
+
+      it('asks GitHub through gh, and bumps no pinned action', function()
+        local sha = ('a'):rep(40)
+        local releases = vim.json.encode({
+          { tag_name = 'v5.0.0', published_at = ago(30 * DAY) },
+        })
+        h.write(dir .. '/bin/gh', {
+          '#!/bin/sh',
+          'echo "$*" >> "' .. dir .. '/gh-calls"',
+          'case "$2" in',
+          "  repos/actions/*) echo '" .. releases .. "' ;;",
+          '  *) echo "HTTP 404" >&2; exit 1 ;;',
+          'esac',
+        })
+        vim.fn.setfperm(dir .. '/bin/gh', 'rwxr-xr-x')
+        local shown, bufnr = check('.github/workflows/ci.yml', {
+          'steps:',
+          '  - uses: actions/checkout@v4',
+          '  - uses: actions/cache@' .. sha .. ' # v4.1.2',
+          '  - uses: o/missing@v1',
+        })
+        assert.are.equal('  → v5', shown[2])
+        assert.are.equal('  → v5.0.0  (pinned: :DyActionsPin)', shown[3])
+        assert.matches('HTTP 404', shown[4])
+        assert.are.same({}, calls())
+        assert.is_true(
+          vim.tbl_contains(
+            vim.fn.readfile(dir .. '/gh-calls'),
+            'api repos/actions/checkout/releases?per_page=100'
+          )
+        )
+        vim.api.nvim_win_set_cursor(0, { 3, 0 })
+        outdated.bump(bufnr)
+        assert.matches('Pinned to a commit', notes[#notes])
+        assert.matches(
+          sha,
+          vim.api.nvim_buf_get_lines(bufnr, 2, 3, false)[1],
+          1,
+          true
+        )
+      end)
+
+      it('asks GitHub anonymously when gh is not installed', function()
+        serve(
+          'https://api.github.com/repos/actions/checkout/releases?per_page=100',
+          vim.json.encode({
+            { tag_name = 'v5.0.0', published_at = ago(30 * DAY) },
+          })
+        )
+        local executable = vim.fn.executable
+        local restore = h.stub(
+          vim.fn,
+          'executable',
+          function(name) return name == 'gh' and 0 or executable(name) end
+        )
+        local shown = check(
+          '.github/workflows/ci.yml',
+          { 'steps:', '  - uses: actions/checkout@v4' }
+        )
+        restore()
+        assert.are.equal('  → v5', shown[2])
+      end)
     end)
   end)
 end)
