@@ -327,6 +327,122 @@ describe('tools.sbom', function()
     end)
   end)
 
+  describe('the license report', function()
+    local notes, restores
+
+    before_each(function()
+      notes = {}
+      restores = {
+        h.stub(
+          vim,
+          'notify',
+          function(msg, level) table.insert(notes, { msg, level }) end
+        ),
+      }
+    end)
+    after_each(function()
+      for _, restore in ipairs(restores) do
+        restore()
+      end
+    end)
+
+    it('says when nothing is installed', function()
+      table.insert(
+        restores,
+        h.stub(sbom, 'components', function() return {} end)
+      )
+      sbom.license()
+      assert.same({ { 'Nothing installed to read the licenses of', 2 } }, notes)
+    end)
+
+    it("reads a Mason package's license from the registry", function()
+      table.insert(
+        restores,
+        h.stub(
+          sbom,
+          'components',
+          function()
+            return {
+              { name = 'tool', version = '1.0', source = 'mason' },
+              { name = 'gone', version = '2.0', source = 'mason' },
+              { name = 'bare', version = '3.0', source = 'mason' },
+            }
+          end
+        )
+      )
+      table.insert(
+        restores,
+        h.stub(package.loaded, 'mason-registry', {
+          get_package = function(name)
+            if name == 'gone' then error('no package ' .. name) end
+            if name == 'bare' then return { spec = {} } end
+            return { spec = { licenses = { 'BUSL-1.1', 'MIT' } } }
+          end,
+        })
+      )
+      table.insert(
+        restores,
+        h.stub(_G, 'DyNeo', {
+          license_policy = { deny = { 'BUSL-*' }, review = {} },
+        })
+      )
+      sbom.license()
+      assert.same(
+        { { '1 denied, 0 to review, 2 unknown of 3', vim.log.levels.ERROR } },
+        notes
+      )
+      local text =
+        table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+      assert.is_truthy(
+        text:find('## Denied\n\n- tool 1.0 (mason): BUSL-1.1 AND MIT', 1, true)
+      )
+      assert.is_truthy(text:find('- gone 2.0 (mason)', 1, true))
+      assert.equals('markdown', vim.bo.filetype)
+    end)
+
+    it('warns of what is unknown, under no policy at all', function()
+      table.insert(
+        restores,
+        h.stub(
+          sbom,
+          'components',
+          function()
+            return { { name = 'x', version = '1', source = 'lazy.nvim' } }
+          end
+        )
+      )
+      table.insert(restores, h.stub(_G, 'DyNeo', nil))
+      sbom.license()
+      assert.same(
+        { { '0 denied, 0 to review, 1 unknown of 1', vim.log.levels.WARN } },
+        notes
+      )
+    end)
+
+    it('says nothing loud when every license is allowed', function()
+      table.insert(
+        restores,
+        h.stub(
+          sbom,
+          'components',
+          function()
+            return {
+              {
+                name = 'x',
+                version = '1',
+                source = 'lazy.nvim',
+                license = 'MIT',
+              },
+            }
+          end
+        )
+      )
+      table.insert(restores, h.stub(_G, 'DyNeo', { license_policy = {} }))
+      sbom.license()
+      assert.same({ { '0 denied, 0 to review, 0 unknown of 1', 2 } }, notes)
+    end)
+  end)
+
   it('reads a lockfile from disk when no lines are given', function()
     h.write(dir .. '/go.mod', { 'require x.org/y v1.0.0' })
     assert.equals(1, #sbom.lockfile(dir .. '/go.mod'))
