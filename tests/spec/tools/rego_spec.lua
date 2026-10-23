@@ -360,5 +360,126 @@ describe('tools.rego', function()
       )
       assert.same({}, calls())
     end)
+
+    it('says what is no policy to test', function()
+      opa({})
+      vim.cmd.edit(vim.fn.fnameescape(dir .. '/notes.md'))
+      local done = false
+      rego.test(function() done = true end)
+      assert.is_true(done)
+      assert.same({ 'Not a Rego policy' }, notes)
+    end)
+
+    it('says when the coverage of passing tests cannot be read', function()
+      opa({
+        'case "$*" in',
+        [[  *--coverage*) echo 'not json'; exit 3;;]],
+        [[  *) echo '[{"package":"data.p","name":"test_ok"}]';;]],
+        'esac',
+      })
+      policy()
+      local done = false
+      rego.test(function() done = true end)
+      assert.is_true(vim.wait(5000, function() return done end, 10))
+      assert.equals(
+        '1 tests passed; coverage not read: opa exited 3',
+        notes[#notes]
+      )
+    end)
+  end)
+
+  it('reads the capabilities once, however many ask meanwhile', function()
+    opa({})
+    local answers = {}
+    rego.capabilities(function(file) table.insert(answers, file) end)
+    rego.capabilities(function(file) table.insert(answers, file) end)
+    assert.is_true(vim.wait(5000, function() return #answers == 2 end, 10))
+    assert.equals(rego.capabilities_file, answers[1])
+    assert.equals(answers[1], answers[2])
+    assert.same({ 'capabilities --current' }, vim.fn.readfile(dir .. '/calls'))
+  end)
+
+  it('closes the playground once its policy is gone', function()
+    opa({ [[echo '{}']] })
+    local bufnr = policy()
+    local playground = assert(rego.open())
+    assert.is_true(vim.wait(5000, function() return #calls() > 0 end, 10))
+    vim.api.nvim_buf_delete(bufnr, { force = true })
+    rego.run(playground)
+    assert.is_nil(next(rego.open_playgrounds))
+    assert.equals(0, vim.fn.isdirectory(playground.dir))
+    assert.is_false(vim.api.nvim_buf_is_valid(playground.query))
+  end)
+
+  it('shows what it read of an answer cut short, and says so', function()
+    opa({ [[case "$1" in eval) yes '"deny"' | head -c 4096;; esac]] })
+    rego.MAX_OUTPUT = 1024
+    policy()
+    local playground = assert(rego.open())
+    local win
+    assert.is_true(vim.wait(5000, function()
+      win = vim.fn.win_findbuf(playground.result)[1]
+      return win ~= nil and vim.wo[win].winbar == ' opa: cut at 1 KiB'
+    end, 10))
+    assert.equals(
+      '"deny"',
+      vim.api.nvim_buf_get_lines(playground.result, 0, 1, false)[1]
+    )
+  end)
+
+  it('says when opa is not installed', function()
+    policy()
+    assert.is_nil(rego.open())
+    local done = false
+    rego.test(function() done = true end)
+    assert.is_true(done)
+    assert.same({ 'opa is not installed', 'opa is not installed' }, notes)
+  end)
+
+  describe('the command', function()
+    it(
+      'asks for the input, and opens nothing when that is cancelled',
+      function()
+        opa({ [[echo '{}']] })
+        h.write(dir .. '/in.json', { '{}' })
+        policy()
+        local answers = { nil, '  ', ' ' .. dir .. '/in.json ' }
+        local prompts = 0
+        local restore = h.stub(vim.ui, 'input', function(opts, on_confirm)
+          prompts = prompts + 1
+          assert.equals('file', opts.completion)
+          on_confirm(answers[prompts])
+        end)
+        local inputs = {}
+        local open = rego.open
+        local restore_open = h.stub(
+          rego,
+          'open',
+          function(input) table.insert(inputs, input or 'none') end
+        )
+        for _ = 1, 3 do
+          rego.command({ fargs = {} })
+        end
+        rego.command({ fargs = { dir .. '/other.json' } })
+        restore()
+        restore_open()
+        assert.equals(open, rego.open)
+        assert.same({ 'none', dir .. '/in.json', dir .. '/other.json' }, inputs)
+      end
+    )
+
+    it('runs the tests, and clears what they marked', function()
+      local ran = {}
+      local restores = {
+        h.stub(rego, 'test', function() table.insert(ran, 'test') end),
+        h.stub(rego, 'clear', function() table.insert(ran, 'clear') end),
+      }
+      rego.command({ fargs = { 'test' } })
+      rego.command({ fargs = { 'clear' } })
+      for _, restore in ipairs(restores) do
+        restore()
+      end
+      assert.same({ 'test', 'clear' }, ran)
+    end)
   end)
 end)
