@@ -175,6 +175,21 @@ describe('tools.review.ci', function()
     end
   )
 
+  it('says when GitLab has more jobs than one page holds', function()
+    local jobs = {}
+    for i = 1, 100 do
+      jobs[i] = { id = i, name = 'job ' .. i, status = 'success' }
+    end
+    fake('glab', {
+      { '/pipelines/9/jobs', jobs },
+      { 'pipelines?sha=' .. SHA, { { id = 9 } } },
+    })
+    local runs, errors = status(session('gitlab'))
+    assert.equals(100, #runs)
+    assert.equals('pass', runs[100].state)
+    assert.same({ 'gitlab: more than 100 jobs: not all were read' }, errors)
+  end)
+
   it('shows no run, and no error, for a commit GitLab has not built', function()
     fake('glab', { { 'pipelines?sha=', '[]' } })
     local runs, errors = status(session('gitlab'))
