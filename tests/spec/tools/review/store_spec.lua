@@ -72,6 +72,18 @@ describe('tools.review.store', function()
       assert.is_false(ok)
       assert.matches('pid 4194305 on elsewhere', why, 1, true)
     end)
+
+    it('gives up on a lock it can neither take nor take over', function()
+      -- A directory where the lock goes: never opened, read or unlinked
+      vim.fn.mkdir(lock_file(), 'p')
+      local ok, why = store.lock(remote, 'pr-1')
+      assert.is_false(ok)
+      assert.equals(
+        'Could not take the lock of this review: ' .. lock_file(),
+        why
+      )
+      assert.equals('directory', vim.uv.fs_stat(lock_file()).type)
+    end)
   end)
 
   it('starts empty', function()
@@ -140,6 +152,8 @@ describe('tools.review.store', function()
     bad(remote, '../a')
     bad(remote, 'a/b')
     bad(remote, '..')
+    bad({ host = 'h' }, 'a')
+    bad({ host = 'h', slug = 7 }, 'a')
   end)
 
   it('keeps a corrupt file aside', function()
@@ -193,6 +207,50 @@ describe('tools.review.store', function()
     assert.equal(tonumber('600', 8), mode(path))
     assert.equal(tonumber('700', 8), mode(vim.fs.dirname(path)))
     assert.equal(tonumber('700', 8), mode(review))
+  end)
+
+  it('says when the state cannot be written, leaving no temp file', function()
+    local path = store.path(remote, 'pr-1')
+    store.save(remote, 'pr-1', { reviewed = { a = 'old' }, drafts = {} })
+    local undo = h.stub(vim.fn, 'writefile', function() return -1 end)
+    local ok, err = pcall(store.save, remote, 'pr-1', {
+      reviewed = { a = 'new' },
+      drafts = {},
+    })
+    undo()
+    assert.is_false(ok)
+    assert.matches(
+      'review store: cannot write ' .. path .. '.tmp.',
+      err,
+      1,
+      true
+    )
+    assert.equal('old', store.load(remote, 'pr-1').reviewed.a)
+    assert.same({ 'pr-1.json' }, vim.fn.readdir(vim.fs.dirname(path)))
+  end)
+
+  it('says when the state cannot replace the old one', function()
+    local path = store.path(remote, 'pr-1')
+    store.save(remote, 'pr-1', { reviewed = { a = 'old' }, drafts = {} })
+    local undo = h.stub(
+      vim.uv,
+      'fs_rename',
+      function() return nil, 'EACCES: permission denied' end
+    )
+    local ok, err = pcall(store.save, remote, 'pr-1', {
+      reviewed = { a = 'new' },
+      drafts = {},
+    })
+    undo()
+    assert.is_false(ok)
+    assert.matches(
+      'cannot replace ' .. path .. ': EACCES: permission denied',
+      err,
+      1,
+      true
+    )
+    assert.equal('old', store.load(remote, 'pr-1').reviewed.a)
+    assert.same({ 'pr-1.json' }, vim.fn.readdir(vim.fs.dirname(path)))
   end)
 
   it('writes atomically', function()
