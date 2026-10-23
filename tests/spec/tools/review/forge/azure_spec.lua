@@ -468,6 +468,57 @@ exit 1
     )
   end)
 
+  describe('a malformed answer', function()
+    --- What `fn` hands its callback: nothing, and the error, is expected
+    ---@param fn fun(cb: fun(...))
+    ---@return string
+    local function fails(fn)
+      local value, err = wait(fn)
+      assert.is_nil(value)
+      assert.is_string(err)
+      return err
+    end
+
+    it('fails a listing when Azure DevOps does not say who I am', function()
+      answer(WHO, { authenticatedUser = { displayName = 'Me' } })
+      assert.equals(
+        'Azure DevOps did not say who is signed in',
+        fails(function(cb) azure.list(remote, cb) end)
+      )
+      assert.same({ WHO }, keys())
+    end)
+
+    it('fails a listing that is no list or holds a broken pull', function()
+      answer(WHO, 'connection.json')
+      answer(LIST .. '.1', { count = 1, value = { pullRequestId = 7 } })
+      answer(LIST .. '.2', { count = 2, value = { row(), { title = 'x' } } })
+      assert.equals(
+        'Azure DevOps answered with something not a list',
+        fails(function(cb) azure.list(remote, cb) end)
+      )
+      assert.equals(
+        'Azure DevOps answered with a malformed pull request',
+        fails(function(cb) azure.list(remote, cb) end)
+      )
+    end)
+
+    it('refuses a pull request whose merge is not ready', function()
+      answer(GET, row({ lastMergeSourceCommit = vim.NIL }))
+      assert.equals(
+        'Azure DevOps answered with a pull request whose merge is not ready',
+        fails(function(cb) azure.get(remote, '7', cb) end)
+      )
+    end)
+
+    it('fails threads holding one without an id', function()
+      answer(THREADS, { count = 2, value = { { id = 5 }, { status = 'x' } } })
+      assert.equals(
+        'Azure DevOps answered with a malformed thread',
+        fails(function(cb) azure.threads(remote, { id = '7' }, cb) end)
+      )
+    end)
+  end)
+
   it('has no pending drafts to import', function()
     local drafts, err = wait(
       function(cb) azure.pending(remote, { id = '7' }, cb) end
@@ -824,6 +875,80 @@ exit 1
       assert.same({}, reports)
       assert.same({ WHO, THREADS }, keys())
     end)
+
+    it('takes no thread of mine of other text or on another file', function()
+      writes_succeed()
+      answer(THREADS, {
+        value = {
+          mine(90, 'Other.', at('a.lua', 'new', 1, 1)),
+          mine(91, 'One.', at('b.lua', 'new', 1, 1)),
+        },
+      })
+      local err, reports = submit(
+        { draft({ id = 'a', body = 'One.' }) },
+        { verdict = 'approve' }
+      )
+      assert.is_nil(err)
+      assert.same({ { 'a', '100' } }, reports)
+      assert.same({
+        WHO,
+        THREADS,
+        REVIEWERS,
+        ITERATIONS,
+        CHANGES,
+        NEW_THREAD,
+        VOTE,
+      }, keys())
+      assert.same(first('One.'), calls()[6].body.comments)
+    end)
+
+    it('posts a body no thread of mine holds yet', function()
+      writes_succeed()
+      my_vote(10)
+      local err = submit({}, { verdict = 'approve', body = 'LGTM' })
+      assert.is_nil(err)
+      assert.same({ WHO, THREADS, REVIEWERS, NEW_THREAD }, keys())
+      assert.same(first('LGTM'), calls()[4].body.comments)
+    end)
+
+    it('fails before any write without an iteration or its changes', function()
+      writes_succeed()
+      answer(ITERATIONS .. '.1', { count = 1, value = { { name = 'x' } } })
+      answer(CHANGES .. '.1', { count = 0 })
+      local err, reports = submit(
+        { draft({ id = 'a' }) },
+        { verdict = 'approve' }
+      )
+      assert.equals('Azure DevOps answered with no iteration', err)
+      assert.same({}, reports)
+      err, reports = submit({ draft({ id = 'a' }) }, { verdict = 'approve' })
+      assert.equals('Azure DevOps answered with no changes', err)
+      assert.same({}, reports)
+      assert.same({
+        WHO,
+        THREADS,
+        REVIEWERS,
+        ITERATIONS,
+        THREADS,
+        REVIEWERS,
+        ITERATIONS,
+        CHANGES,
+      }, keys())
+    end)
+
+    it(
+      'refuses a reply to a thread not of Azure DevOps, asking nothing',
+      function()
+        writes_succeed()
+        local err, reports = submit(
+          { draft({ id = 'r', reply_to = 'PRRT_1', body = 'Agreed.' }) },
+          { verdict = 'approve' }
+        )
+        assert.equals('Not a thread of Azure DevOps: PRRT_1', err)
+        assert.same({}, reports)
+        assert.same({}, calls())
+      end
+    )
 
     it('sends only the rest after a submit failed midway', function()
       writes_succeed()
