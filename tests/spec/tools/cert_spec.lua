@@ -426,6 +426,63 @@ describe('tools.cert', function()
         'No certificate served: connect:errno=111',
       }, lines)
     end)
+
+    it('reads the certificates among other PEM blocks, and no more', function()
+      if not ready then return pending('openssl is not installed') end
+      local lines = vim.fn.readfile(dir .. '/leaf.csr')
+      vim.list_extend(lines, vim.fn.readfile(dir .. '/leaf.pem'))
+      h.write(dir .. '/mixed.pem', lines)
+      local text = built(cert, { path = dir .. '/mixed.pem' })
+      assert.is_truthy(text:find('1 certificate, PEM', 1, true))
+      assert.is_truthy(text:find('- Order: a single certificate', 1, true))
+      assert.is_truthy(text:find('CN%s*=%s*leaf.test'))
+      assert.is_falsy(text:find('Not all read', 1, true))
+    end)
+
+    it('says where a chain is out of order, and what it left out', function()
+      if not ready then return pending('openssl is not installed') end
+      h.write(
+        dir .. '/reversed.pem',
+        vim.list_extend(
+          vim.fn.readfile(dir .. '/ca.pem'),
+          vim.fn.readfile(dir .. '/leaf.pem')
+        )
+      )
+      local text = built(cert, { path = dir .. '/reversed.pem' })
+      assert.is_truthy(
+        text:find(
+          '- Order: Certificate 1 is not issued by certificate 2',
+          1,
+          true
+        )
+      )
+      cert.MAX_CERTS = 1
+      text = built(cert, { path = dir .. '/chain.pem' })
+      assert.is_truthy(
+        text:find('2 certificates, PEM; the first 1 are shown', 1, true)
+      )
+      assert.is_truthy(text:find('## Certificate 1 of 1', 1, true))
+      assert.is_falsy(text:find('## Certificate 2', 1, true))
+    end)
+
+    it('gives the first line of a verify failure it cannot read', function()
+      if not ready then return pending('openssl is not installed') end
+      local real = vim.fn.exepath('openssl')
+      h.write(dir .. '/bin/openssl', {
+        '#!/bin/sh',
+        'if [ "$1" = verify ]; then',
+        '  printf "store unreadable\\nmore\\n" >&2',
+        '  exit 2',
+        'fi',
+        'exec "' .. real .. '" "$@"',
+      })
+      vim.fn.setfperm(dir .. '/bin/openssl', 'rwxr-xr-x')
+      vim.env.PATH = dir .. '/bin:' .. path
+      local text = built(cert, { path = dir .. '/leaf.pem' })
+      assert.is_truthy(
+        text:find('- Trust: **fails**: store unreadable\n', 1, true)
+      )
+    end)
   end)
 
   describe('hosts', function()
@@ -475,5 +532,112 @@ describe('tools.cert', function()
       assert.is_true(done)
       assert.same({ 'No host name under the cursor' }, notes)
     end)
+
+    --- `util.system.run` answering `s_client` with no certificate, and the
+    --- commands it was asked to run
+    local function no_answer()
+      local ran = {}
+      local system = require('util.system')
+      local restore = h.stub(system, 'run', function(cmd, _, on_done)
+        table.insert(ran, cmd)
+        on_done({ code = 1, stdout = '', stderr = 'connect:errno=61' })
+      end)
+      return ran, restore
+    end
+
+    it('asks the host it is given, and shows what it said', function()
+      local notes = {}
+      local restore_notify = h.stub(
+        vim,
+        'notify',
+        function(msg) table.insert(notes, msg) end
+      )
+      local ran, restore = no_answer()
+      local done = false
+      cert.host('https://example.com:8443/x', function() done = true end)
+      restore()
+      restore_notify()
+      assert.is_true(done)
+      assert.same({ 'Asking example.com:8443 for its certificates…' }, notes)
+      assert.equals('example.com:8443', ran[1][4])
+      assert.same({
+        '# example.com:8443',
+        '',
+        'No certificate served: connect:errno=61',
+      }, vim.api.nvim_buf_get_lines(0, 0, -1, false))
+      assert.equals('markdown', vim.bo.filetype)
+    end)
+
+    it('reads the value of a key the cursor is on', function()
+      local restore_notify = h.stub(vim, 'notify', function() end)
+      local ran, restore = no_answer()
+      vim.api.nvim_set_current_buf(h.buffer({ lines = { 'host: a.example' } }))
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+      local done = false
+      cert.host(nil, function() done = true end)
+      restore()
+      restore_notify()
+      assert.is_true(done)
+      assert.equals('a.example:443', ran[1][4])
+    end)
+  end)
+
+  describe('the command', function()
+    it('runs `host` on the host it is given', function()
+      local got
+      local restore = h.stub(cert, 'host', function(target) got = target end)
+      cert.command({ fargs = { 'host', 'example.com' } })
+      restore()
+      assert.equals('example.com', got)
+    end)
+
+    it('reads the file it is given, a space in its name too', function()
+      h.write(dir .. '/my notes.txt', { 'hello' })
+      cert.command({ fargs = { dir .. '/my', 'notes.txt' } })
+      assert.same(
+        { '# my notes.txt', '', 'No certificate in this file' },
+        vim.api.nvim_buf_get_lines(0, 0, -1, false)
+      )
+      assert.is_false(vim.bo.modifiable)
+    end)
+
+    it('reads the file of a buffer that holds no PEM text', function()
+      h.write(dir .. '/bundle.p12', { 'x' })
+      vim.cmd.edit(vim.fn.fnameescape(dir .. '/bundle.p12'))
+      local bufnr = vim.api.nvim_get_current_buf()
+      cert.command({ fargs = {} })
+      assert.are_not.equal(bufnr, vim.api.nvim_get_current_buf())
+      local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+      assert.equals('# bundle.p12', lines[1])
+      assert.is_truthy(lines[3]:find('PKCS#12', 1, true))
+    end)
+
+    it('says when a buffer holds no certificate and is no file', function()
+      local notes = {}
+      local restore = h.stub(
+        vim,
+        'notify',
+        function(msg, level) table.insert(notes, { msg, level }) end
+      )
+      local bufnr = h.buffer({ lines = { 'nothing here' } })
+      vim.api.nvim_set_current_buf(bufnr)
+      cert.command({ fargs = {} })
+      restore()
+      assert.same(
+        { { 'No certificate in this buffer', vim.log.levels.WARN } },
+        notes
+      )
+      assert.equals(bufnr, vim.api.nvim_get_current_buf())
+    end)
+  end)
+
+  it('says why a file is not read', function()
+    assert.same({ nil, dir .. ' is not a file' }, { cert.read_file(dir) })
+    h.write(dir .. '/big.pem', { 'some text' })
+    cert.LIMIT = 4
+    assert.same(
+      { nil, 'big.pem is larger than 0 KiB: no certificate file' },
+      { cert.read_file(dir .. '/big.pem') }
+    )
   end)
 end)
