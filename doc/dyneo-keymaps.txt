@@ -858,7 +858,7 @@ Other keys
 `<localleader>c`       n      Run Chunk  (ft: quarto)
 `<localleader>c`       n      Cost (Terraform)  (ft: terraform, tf)
 `<localleader>d`       n      Flutter Devices  (ft: dart)
-`<localleader>d`       n      Preview Mermaid Block  (ft: markdown)
+`<localleader>d`       n      Preview Diagram Block  (ft: markdown)
 `<localleader>d`       n      Breaking Changes Since HEAD  (ft: proto, graphql)
 `<localleader>d`       n      Drift (Terraform)  (ft: terraform, tf)
 `<localleader>d`       n      Breaking Changes Since HEAD (AsyncAPI)  (ft: yaml, json)

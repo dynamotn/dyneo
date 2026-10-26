@@ -181,15 +181,22 @@ local function svg_to_png(svg_path, png_path, on_done)
 end
 
 --- Render `source_path` to a PNG and hand the path to `on_rendered`
+---
+--- With `text`, that is the diagram, read by d2 from stdin: a block of a
+--- Markdown file at `source_path`, whose imports resolve from its directory.
 ---@param source_path string
 ---@param on_rendered fun(output_path: string)
-local function render_d2(source_path, on_rendered)
+---@param text? string
+function M.render(source_path, on_rendered, text)
   if vim.fn.executable('d2') == 0 then
     return notify('d2 not found in PATH', vim.log.levels.ERROR)
   end
-  local ok, lines = pcall(vim.fn.readfile, source_path)
-  if not ok then return end
-  local text = table.concat(lines, '\n')
+  local stdin = text ~= nil
+  if not text then
+    local ok, lines = pcall(vim.fn.readfile, source_path)
+    if not ok then return end
+    text = table.concat(lines, '\n')
+  end
 
   -- Keyed on the contents rather than the timestamp, which two edits within
   -- the same second share
@@ -204,7 +211,7 @@ local function render_d2(source_path, on_rendered)
 
   local command = {
     'd2',
-    source_path,
+    stdin and '-' or source_path,
     svg_path,
     '-t',
     tostring(M.CONFIG.theme_id),
@@ -228,19 +235,19 @@ local function render_d2(source_path, on_rendered)
 
   -- Off the main loop: a `tala` layout takes its time
   local system = require('util.system')
-  system.run(
-    command,
-    { timeout = M.TIMEOUT, cwd = vim.fs.dirname(source_path) },
-    function(result)
-      if result.code ~= 0 then return fail(system.failure(result, 'd2')) end
-      svg_to_png(svg_path, output_path, function(err)
-        vim.uv.fs_unlink(svg_path)
-        if err then return fail(err) end
-        prune_cache()
-        on_rendered(output_path)
-      end)
-    end
-  )
+  system.run(command, {
+    timeout = M.TIMEOUT,
+    cwd = vim.fs.dirname(source_path),
+    stdin = stdin and text or nil,
+  }, function(result)
+    if result.code ~= 0 then return fail(system.failure(result, 'd2')) end
+    svg_to_png(svg_path, output_path, function(err)
+      vim.uv.fs_unlink(svg_path)
+      if err then return fail(err) end
+      prune_cache()
+      on_rendered(output_path)
+    end)
+  end)
 end
 
 --- Show `output_path` outside of zellij, which drops the kitty graphics
@@ -295,7 +302,7 @@ function M.preview(bufnr)
   -- cursor may have moved on by the time it lands
   local source_win = vim.api.nvim_get_current_win()
 
-  render_d2(source_path, function(output_path)
+  M.render(source_path, function(output_path)
     if vim.env.ZELLIJ ~= nil then
       M.show_outside_zellij(output_path)
       return

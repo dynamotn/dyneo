@@ -555,7 +555,7 @@ local function requirements()
     asyncapi = '`:DyAsyncApiDiff` (`:MasonInstall asyncapi-cli`)',
     ['graphql-inspector'] = '`:DyBreaking` on GraphQL (`:MasonInstall graphql-inspector`)',
     likec4 = '`:DyC4`, a LikeC4 view drawn here (`:MasonInstall likec4`)',
-    mmdc = '`:DyMermaid` (`npm install -g @mermaid-js/mermaid-cli`)',
+    mmdc = '`:DyDiagram` on Mermaid (`npm install -g @mermaid-js/mermaid-cli`)',
     depcruise = '`:DyDeps` in a JavaScript project (`npm install -D dependency-cruiser`)',
     ['go-arch-lint'] = '`:DyDeps` in a Go project',
     ['lint-imports'] = '`:DyDeps` in a Python project (`pip install import-linter`)',

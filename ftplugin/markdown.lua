@@ -30,12 +30,12 @@ vim.keymap.set(
   { buffer = true, desc = 'Decision Matrix' }
 )
 
--- `<leader>cp` is the browser preview of the whole document: a Mermaid
--- block gets one of its own, drawn in a kitty overlay that zellij cannot
+-- `<leader>cp` is the browser preview of the whole document: a Mermaid or
+-- D2 block gets one of its own, drawn in a kitty overlay that zellij cannot
 -- swallow
 vim.keymap.set(
   'n',
   '<localleader>d',
-  function() require('tools.diagram.mermaid').preview(0) end,
-  { buffer = true, desc = 'Preview Mermaid Block' }
+  function() require('tools.diagram.block').preview(0) end,
+  { buffer = true, desc = 'Preview Diagram Block' }
 )

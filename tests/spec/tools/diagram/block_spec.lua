@@ -1,8 +1,8 @@
 local h = require('helpers')
 
-describe('tools.diagram.mermaid', function()
+describe('tools.diagram.block', function()
   local dir, cleanup, cache_dir, commands, executables, results, notified
-  local inputs, restores, mermaid
+  local inputs, options, restores, block
 
   --- Run `fn` with `tbl[key]` replaced for the rest of the test
   local function stub(tbl, key, value)
@@ -13,8 +13,8 @@ describe('tools.diagram.mermaid', function()
     restores = {}
     dir, cleanup = h.tmpdir()
     cache_dir = dir .. '/cache/diagram-cache/mermaid'
-    commands, notified, inputs = {}, {}, {}
-    executables = { mmdc = 1 }
+    commands, notified, inputs, options = {}, {}, {}, {}
+    executables = { mmdc = 1, d2 = 1, ['rsvg-convert'] = 1 }
     -- Exit code of each command, by its program
     results = {}
 
@@ -27,8 +27,9 @@ describe('tools.diagram.mermaid', function()
     stub(
       vim,
       'system',
-      h.system_double(function(cmd)
+      h.system_double(function(cmd, opts)
         table.insert(commands, cmd)
+        options[cmd[1]] = opts
         if cmd[1] == 'mmdc' then
           -- What mmdc was given, read while it still exists
           table.insert(inputs, vim.fn.readfile(cmd[3]))
@@ -47,8 +48,8 @@ describe('tools.diagram.mermaid', function()
     stub(vim.env, 'KITTY_LISTEN_ON', 'unix:/tmp/kitty')
     executables.kitten = 1
 
-    h.unload('tools.diagram.mermaid', 'tools.diagram.d2.snacks')
-    mermaid = require('tools.diagram.mermaid')
+    h.unload('tools.diagram.block', 'tools.diagram.d2.snacks')
+    block = require('tools.diagram.block')
   end)
 
   after_each(function()
@@ -70,12 +71,13 @@ describe('tools.diagram.mermaid', function()
   ---@param lines string[]
   ---@param row integer
   ---@param filetype? string
-  local function preview(lines, row, filetype)
-    local bufnr = h.buffer({ lines = lines })
+  ---@param name? string
+  local function preview(lines, row, filetype, name)
+    local bufnr = h.buffer({ lines = lines, name = name })
     vim.bo[bufnr].filetype = filetype or 'markdown'
     vim.api.nvim_set_current_buf(bufnr)
     vim.api.nvim_win_set_cursor(0, { row, 0 })
-    mermaid.preview(bufnr)
+    block.preview(bufnr)
     vim.wait(100, function() return false end)
   end
 
@@ -90,32 +92,43 @@ describe('tools.diagram.mermaid', function()
     '```sh',
     'echo hi',
     '```',
+    '',
+    '```d2',
+    'x -> y',
+    '```',
   }
+
+  --- The body `block_at` finds, without its language
+  local function body_at(lines, row) return (block.block_at(lines, row)) end
 
   describe('block_at', function()
     it('finds the mermaid block around a row, fences included', function()
       for _, row in ipairs({ 3, 4, 5, 6 }) do
-        assert.are.same({ 'graph TD', '  a --> b' }, mermaid.block_at(doc, row))
+        assert.are.same({ 'graph TD', '  a --> b' }, body_at(doc, row))
       end
     end)
 
     it('finds nothing outside a block or in another language', function()
-      assert.is_nil(mermaid.block_at(doc, 1))
-      assert.is_nil(mermaid.block_at(doc, 7))
-      assert.is_nil(mermaid.block_at(doc, 9))
+      assert.is_nil(body_at(doc, 1))
+      assert.is_nil(body_at(doc, 7))
+      assert.is_nil(body_at(doc, 9))
     end)
 
     it('reads a tilde fence and an unclosed block', function()
-      assert.are.same(
-        { 'pie' },
-        mermaid.block_at({ '~~~ mermaid', 'pie', '~~~' }, 2)
-      )
-      assert.are.same({ 'pie' }, mermaid.block_at({ '```mermaid', 'pie' }, 2))
+      assert.are.same({ 'pie' }, body_at({ '~~~ mermaid', 'pie', '~~~' }, 2))
+      assert.are.same({ 'pie' }, body_at({ '```mermaid', 'pie' }, 2))
+    end)
+
+    it('names the language of the block', function()
+      assert.are.same({ { 'graph TD', '  a --> b' }, 'mermaid' }, {
+        block.block_at(doc, 4),
+      })
+      assert.are.same({ { 'x -> y' }, 'd2' }, { block.block_at(doc, 13) })
     end)
 
     it('does not close a fence on a shorter one', function()
       local lines = { '````mermaid', '```', 'pie', '````' }
-      assert.are.same({ '```', 'pie' }, mermaid.block_at(lines, 3))
+      assert.are.same({ '```', 'pie' }, body_at(lines, 3))
     end)
   end)
 
@@ -147,7 +160,7 @@ describe('tools.diagram.mermaid', function()
     preview(doc, 9)
     assert.is_nil(command_of('mmdc'))
     assert.are.equal(vim.log.levels.WARN, notified[1].level)
-    assert.is_truthy(notified[1].msg:find('no mermaid block', 1, true))
+    assert.is_truthy(notified[1].msg:find('no mermaid or d2 block', 1, true))
   end)
 
   it('says so when mmdc is missing', function()
@@ -156,6 +169,22 @@ describe('tools.diagram.mermaid', function()
     assert.is_nil(command_of('mmdc'))
     assert.are.equal(vim.log.levels.ERROR, notified[1].level)
     assert.is_truthy(notified[1].msg:find('mmdc', 1, true))
+  end)
+
+  it('renders a d2 block from stdin, beside its file', function()
+    preview(doc, 13, nil, dir .. '/docs/notes.md')
+    local d2 = command_of('d2')
+    assert.are.equal('-', d2[2])
+    assert.are.equal('x -> y', options.d2.stdin)
+    assert.are.equal(dir .. '/docs', options.d2.cwd)
+    assert.are.same(
+      { 'kitten', '@', '--to', 'unix:/tmp/kitty', 'launch', '--type=overlay' },
+      vim.list_slice(command_of('kitten'), 1, 6)
+    )
+    assert.is_truthy(
+      vim.list_contains(command_of('kitten'), '--title=D2 preview')
+    )
+    assert.is_nil(command_of('mmdc'))
   end)
 
   it('reports a failed render and shows nothing', function()

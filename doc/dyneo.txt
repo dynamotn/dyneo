@@ -1434,14 +1434,15 @@ D2 diagrams render inline on kitty-graphics terminals, zellij included.
 their own preview on the same key.  The diagram of what a directory
 declares is drawn by |dyneo-architecture|.
 
-Mermaid diagrams are drawn by `mmdc` (`npm install -g
-@mermaid-js/mermaid-cli`).  `<localleader>d` in Markdown, or `<leader>cp` in
-a Mermaid file (|:DyMermaid| in either), draws the block under the cursor --
-or the whole file -- and shows the picture in a kitty overlay above the
-window, which works under zellij: zellij passes no kitty graphics through,
-so nothing can be drawn inside its pane.  Without kitty's remote control
-(`KITTY_LISTEN_ON`) the system viewer opens it.  Renders are cached by the
-text of the diagram.
+A diagram block in Markdown -- ```` ```mermaid ```` or ```` ```d2 ```` -- is
+drawn by `<localleader>d` (|:DyDiagram|), and a Mermaid file by
+`<leader>cp`.  The picture opens in a kitty overlay above the window, which
+works under zellij: zellij passes no kitty graphics through, so nothing can
+be drawn inside its pane.  Without kitty's remote control (`KITTY_LISTEN_ON`)
+the system viewer opens it.  Mermaid is drawn by `mmdc` (`npm install -g
+@mermaid-js/mermaid-cli`); a D2 block as a D2 file is, its imports read from
+the directory of the Markdown file.  Renders are cached by the text of the
+diagram.
 
 C4 models are written as code.  A LikeC4 model (`.c4`, `.likec4`) gets its
 grammar and its language server, which checks the whole workspace -- every
@@ -2382,9 +2383,9 @@ Project ~
 :DyMatrix               Work out the totals of the decision matrix under the
                         cursor, or write one.  See |dyneo-matrix|.
 
-                                                                  *:DyMermaid*
-:DyMermaid              Draw the Mermaid block under the cursor, or the
-                        Mermaid file, in a kitty overlay.  See
+                                                                  *:DyDiagram*
+:DyDiagram              Draw the Mermaid or D2 block under the cursor, or
+                        the Mermaid file, in a kitty overlay.  See
                         |dyneo-diagram|.
 
                                                                       *:DyWar*

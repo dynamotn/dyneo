@@ -1,9 +1,10 @@
---- A preview of a Mermaid diagram -- the fenced block under the cursor in
---- Markdown, or a whole Mermaid file -- as a PNG drawn by `mmdc`
+--- A preview of the diagram under the cursor -- a ```` ```mermaid ```` or
+--- ```` ```d2 ```` block in Markdown, or a whole Mermaid file -- as a PNG
 ---
---- The picture opens where the D2 preview opens one under zellij: in a kitty
---- overlay, else the system viewer. zellij drops the kitty graphics protocol,
---- so `Snacks.image` cannot draw the block inline there. Renders are cached by
+--- Mermaid is drawn by `mmdc`, D2 by `tools.diagram.d2.snacks`. The picture
+--- opens where the D2 preview opens one under zellij: in a kitty overlay,
+--- else the system viewer. zellij drops the kitty graphics protocol, so
+--- `Snacks.image` cannot draw a block inline there. Renders are cached by
 --- the text of the diagram. `ftplugin/markdown.lua` and
 --- `ftplugin/mermaid.lua` map it.
 local M = {}
@@ -18,9 +19,12 @@ M.CONFIG = {
 --- Milliseconds `mmdc` may take: it starts a headless browser
 M.TIMEOUT = 60 * 1000
 
-local notify = require('util.notify').titled('Mermaid')
+--- The languages of a block this previews, and the overlay's title
+M.LANGUAGES = { mermaid = 'Mermaid preview', d2 = 'D2 preview' }
 
---- Where renders are kept, made on first use
+local notify = require('util.notify').titled('Diagram')
+
+--- Where Mermaid renders are kept, made on first use
 ---@return string
 function M.cache_dir()
   local dir =
@@ -29,14 +33,15 @@ function M.cache_dir()
   return dir
 end
 
---- The body of the ```` ```mermaid ```` block holding `row`, fences included,
---- or nil when `row` is in no such block
+--- The body of the block of a language in `M.LANGUAGES` holding `row`,
+--- fences included, and that language; nil when `row` is in no such block
 ---
 --- Every fence is walked from the top, so a fence shown inside another
 --- block, or a longer one, is not read as the end of it.
 ---@param lines string[]
 ---@param row integer 1-based
----@return string[]?
+---@return string[]? body
+---@return string? language
 function M.block_at(lines, row)
   local open, fence, lang
   for i, line in ipairs(lines) do
@@ -57,23 +62,23 @@ function M.block_at(lines, row)
         and #marks >= #fence
       then
         if row <= i then
-          if row < open or lang ~= 'mermaid' then return nil end
-          return vim.list_slice(lines, open + 1, i - 1)
+          if row < open or not M.LANGUAGES[lang] then return nil end
+          return vim.list_slice(lines, open + 1, i - 1), lang
         end
         open = nil
       end
     end
   end
   -- An unclosed block runs to the end of the text
-  if open and row >= open and lang == 'mermaid' then
-    return vim.list_slice(lines, open + 1)
+  if open and row >= open and M.LANGUAGES[lang] then
+    return vim.list_slice(lines, open + 1), lang
   end
 end
 
---- Render `text` to a PNG and hand its path to `on_rendered`
+--- Render the Mermaid `text` to a PNG and hand its path to `on_rendered`
 ---@param text string
 ---@param on_rendered fun(output_path: string)
-local function render(text, on_rendered)
+local function render_mermaid(text, on_rendered)
   if vim.fn.executable('mmdc') == 0 then
     return notify(
       'mmdc not found in PATH: npm install -g @mermaid-js/mermaid-cli',
@@ -126,23 +131,31 @@ function M.preview(bufnr)
   bufnr = (bufnr == nil or bufnr == 0) and vim.api.nvim_get_current_buf()
     or bufnr
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local lang = 'mermaid' ---@type string?
   if vim.bo[bufnr].filetype ~= 'mermaid' then
     local win = vim.fn.bufwinid(bufnr)
     local row = vim.api.nvim_win_get_cursor(win ~= -1 and win or 0)[1]
-    lines = M.block_at(lines, row)
+    lines, lang = M.block_at(lines, row)
     if not lines then
-      return notify('no mermaid block under the cursor', vim.log.levels.WARN)
-    end
-  end
-  render(
-    table.concat(lines, '\n'),
-    function(output_path)
-      require('tools.diagram.d2.snacks').show_outside_zellij(
-        output_path,
-        'Mermaid preview'
+      return notify(
+        'no mermaid or d2 block under the cursor',
+        vim.log.levels.WARN
       )
     end
-  )
+  end
+  local d2 = require('tools.diagram.d2.snacks')
+  local function show(output_path)
+    d2.show_outside_zellij(output_path, M.LANGUAGES[lang])
+  end
+  local text = table.concat(lines, '\n')
+  if lang == 'd2' then
+    -- An unnamed buffer still renders: imports then resolve from the
+    -- working directory
+    local path = vim.api.nvim_buf_get_name(bufnr)
+    d2.render(path ~= '' and path or vim.fn.getcwd() .. '/_', show, text)
+  else
+    render_mermaid(text, show)
+  end
 end
 
 return M
