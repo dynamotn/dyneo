@@ -1,7 +1,7 @@
 local h = require('helpers')
 
 describe('plugins.toolbox.navigation', function()
-  local restores, env
+  local restores
 
   --- The specs the file returns, keyed by plugin name
   ---@return table<string, table>
@@ -28,33 +28,30 @@ describe('plugins.toolbox.navigation', function()
 
   before_each(function()
     h.globals()
-    env = { ZELLIJ = vim.env.ZELLIJ, TMUX = vim.env.TMUX }
     restores = {}
   end)
   after_each(function()
     for i = #restores, 1, -1 do
       restores[i]()
     end
-    vim.env.ZELLIJ = env.ZELLIJ
-    vim.env.TMUX = env.TMUX
   end)
 
-  it('resizes into the multiplexer that holds Neovim', function()
-    vim.env.ZELLIJ = '0'
-    vim.env.TMUX = nil
-    assert.are.equal(
-      'zellij',
-      load()['mrjones2014/smart-splits.nvim'].opts.multiplexer_integration
+  it('resizes into zellij or tmux through their backend plugins', function()
+    local splits = load()['mrjones2014/smart-splits.nvim']
+    local mains = {}
+    for _, dep in ipairs(splits.dependencies) do
+      mains[dep.main] = dep
+    end
+    for _, backend in ipairs(splits.opts.mux.backend) do
+      assert.is_truthy(mains[backend], backend .. ' is not installed')
+    end
+    assert.same(
+      { 'smart-splits-backend-zellij-lua', 'smart-splits-backend-tmux' },
+      splits.opts.mux.backend
     )
-    vim.env.ZELLIJ = nil
-    vim.env.TMUX = '/tmp/tmux-1/default,1,0'
-    assert.are.equal(
-      'tmux',
-      load()['mrjones2014/smart-splits.nvim'].opts.multiplexer_integration
-    )
-    vim.env.TMUX = nil
-    assert.is_false(
-      load()['mrjones2014/smart-splits.nvim'].opts.multiplexer_integration
+    assert.is_false(splits.opts.mux.warn_if_unusable)
+    assert.is_true(
+      mains['smart-splits-backend-zellij-lua'].opts.move_cursor.pane_or_tab
     )
   end)
 
@@ -94,7 +91,8 @@ describe('plugins.toolbox.navigation', function()
     assert.are.equal('move_cursor_previous', called['<C-\\>'])
     assert.are.equal('resize_up', called['<C-Up>'])
     assert.are.equal('swap_buf_right', called['<leader>w<Right>'])
-    assert.are.equal('stop', splits.opts.at_edge)
+    assert.are.equal('stop', splits.opts.move.at_edge)
+    assert.is_true(splits.opts.swap.move_cursor)
   end)
 
   it('toggles and expands the lists through quicker', function()

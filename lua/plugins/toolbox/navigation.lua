@@ -110,21 +110,35 @@ return {
         desc = 'Swap buffer right',
       },
     },
+    -- Each multiplexer is a backend plugin of its own
+    dependencies = {
+      {
+        'smart-splits-nvim/backend-zellij-lua',
+        main = 'smart-splits-backend-zellij-lua',
+        -- zellij binds `Shift-Left`/`Shift-Right` to `MoveFocusOrTab`, so
+        -- going past its last pane moves on to the next tab, from Neovim as
+        -- well
+        opts = { move_cursor = { pane_or_tab = true } },
+      },
+      { 'smart-splits-nvim/backend-tmux', main = 'smart-splits-backend-tmux' },
+    },
     opts = {
       -- Stop at the last window when there is no pane beyond, rather than
       -- wrapping round to the first
-      at_edge = 'stop',
-      -- zellij binds `Shift-Left`/`Shift-Right` to `MoveFocusOrTab`, so going
-      -- past its last pane moves on to the next tab, from Neovim as well
-      zellij_move_focus_or_tab = true,
+      move = { at_edge = 'stop' },
       -- Keep editing the buffer that was moved, not the one it landed on
-      cursor_follows_swapped_bufs = true,
-      -- Only the multiplexers there is a pane to resize in. Left to detect on
-      -- its own, it also picks kitty and wezterm, whose remote control is not
-      -- set up for it here.
-      multiplexer_integration = vim.env.ZELLIJ and 'zellij'
-        or vim.env.TMUX and 'tmux'
-        or false,
+      swap = { move_cursor = true },
+      -- Only the multiplexers there is a pane to resize in, the first that
+      -- detects winning; kitty and wezterm's remote control is not set up for
+      -- it here
+      mux = {
+        backend = {
+          'smart-splits-backend-zellij-lua',
+          'smart-splits-backend-tmux',
+        },
+        -- Outside both, plain window movement is what is wanted
+        warn_if_unusable = false,
+      },
     },
   },
   {

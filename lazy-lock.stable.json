@@ -4,6 +4,8 @@
   "SchemaStore.nvim": { "branch": "main", "commit": "7fca30f2890a6acf9d21d194876c6ac960d92070" },
   "async.nvim": { "branch": "main", "commit": "15f28ec323a75f34f317336831c00c2d1b0a7192" },
   "avante.nvim": { "branch": "main", "commit": "421209b946d208b2ab27ca95378c2b0073188ae6" },
+  "backend-tmux": { "branch": "master", "commit": "9e9e6aa9b3eb7a8d3896a993611622ac97abff52" },
+  "backend-zellij-lua": { "branch": "master", "commit": "4e3e588795efb95548dd2ebeaf385a7823821ceb" },
   "blade-nav.nvim": { "branch": "main", "commit": "909825e2cfa5171867f2109f7cedc5e3e5d60956" },
   "blink-cmp-avante": { "branch": "master", "commit": "e5a1be4c818520385f95fe2663c04e48f5f0c36a" },
   "blink-cmp-dictionary": { "branch": "master", "commit": "c7587081fb1a9fa276d609e3fb5b7cfefa9b0656" },
