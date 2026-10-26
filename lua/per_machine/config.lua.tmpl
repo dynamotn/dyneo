@@ -60,6 +60,15 @@ DyNeo.firenvim_site_settings = {
     priority = 9,
     takeover = 'never',
   },
+  -- Teams, Outlook and Microsoft 365 moved under `cloud.microsoft`
+  [ [[.*\.cloud\.microsoft.*]] ] = {
+    priority = 9,
+    takeover = 'never',
+  },
+  [ [[.*teams\.live\.com.*]] ] = {
+    priority = 9,
+    takeover = 'never',
+  },
   [ [[.*github\.com\/.*\/blob\/.*]] ] = {
     priority = 9,
     takeover = 'never',
