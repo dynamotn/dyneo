@@ -1477,8 +1477,9 @@ Obsidian            Vaults from |DyNeo.obsidian|.
 chezmoi             Templates edited with the target language injected, not
                     as plain text.
 Firefox, Chrome     Neovim embedded in a textarea with firenvim, tuned per
-                    site through |DyNeo.firenvim_site_settings|.
-zellij              Test runner, terminal integration, and the pane sources
+                    site through |DyNeo.firenvim_site_settings|.  Only the
+                    default `NVIM_APPNAME` installs the browser host.
+zellij             Test runner, terminal integration, and the pane sources
                     for completion.
 AI CLI tools        Through sidekick, behind |dyneo-ai-guard|.
 GitHub, GitLab      Pull requests and issues through Octo when `gh` is

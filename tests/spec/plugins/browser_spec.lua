@@ -46,10 +46,11 @@ describe('plugins.integration.browser: open.nvim', function()
 end)
 
 describe('plugins.integration.browser: firenvim', function()
-  local restores, specs
+  local restores, specs, appname
 
   before_each(function()
     h.globals()
+    appname = vim.env.NVIM_APPNAME
     DyNeo.firenvim_site_settings = {
       ['https://example.org/.*'] = { takeover = 'never' },
     }
@@ -61,6 +62,7 @@ describe('plugins.integration.browser: firenvim', function()
       restores[i]()
     end
     vim.g.firenvim_config = nil
+    vim.env.NVIM_APPNAME = appname
   end)
 
   --- The spec of `name`
@@ -82,6 +84,7 @@ describe('plugins.integration.browser: firenvim', function()
 
   it('installs through the loaded plugin, and hides the bars', function()
     local loaded, installed
+    vim.env.NVIM_APPNAME = nil
     table.insert(
       restores,
       h.stub(package.loaded, 'lazy', {
@@ -101,6 +104,21 @@ describe('plugins.integration.browser: firenvim', function()
     assert.equals(0, vim.o.laststatus)
     assert.equals(0, vim.o.showtabline)
     vim.o.laststatus, vim.o.showtabline = laststatus, showtabline
+  end)
+
+  it('leaves the browser host to the default Neovim', function()
+    local installed = false
+    vim.env.NVIM_APPNAME = 'nvim-stable'
+    table.insert(
+      restores,
+      h.stub(package.loaded, 'lazy', { load = function() end })
+    )
+    table.insert(
+      restores,
+      h.stub(vim.fn, 'firenvim#install', function() installed = true end)
+    )
+    spec_of('glacambre/firenvim').build()
+    assert.is_false(installed)
   end)
 
   it('registers the Jira opener with open.nvim, and opens the word', function()

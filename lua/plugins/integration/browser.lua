@@ -17,6 +17,10 @@ return {
     -- Edit on browser by neovim
     'glacambre/firenvim',
     build = function()
+      -- The host script runs whichever `nvim` is on `$PATH` but keeps the
+      -- `NVIM_APPNAME` it was installed from, so another channel installing
+      -- it would point the default binary at that channel's plugins
+      if (vim.env.NVIM_APPNAME or 'nvim') ~= 'nvim' then return end
       require('lazy').load({ plugins = { 'firenvim' }, wait = true })
       vim.fn['firenvim#install'](0)
     end,
