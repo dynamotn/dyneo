@@ -34,6 +34,7 @@
 :DyKube	dyneo.txt	/*:DyKube*
 :DyLog	dyneo.txt	/*:DyLog*
 :DyMatrix	dyneo.txt	/*:DyMatrix*
+:DyMermaid	dyneo.txt	/*:DyMermaid*
 :DyNfr	dyneo.txt	/*:DyNfr*
 :DyOpenApiDiff	dyneo.txt	/*:DyOpenApiDiff*
 :DyOpenApiRequest	dyneo.txt	/*:DyOpenApiRequest*

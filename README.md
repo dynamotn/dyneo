@@ -178,8 +178,9 @@ below follow the sections of `:help dyneo`.
   Jira issues to branches and worklogs. `<leader>ph` `pl` `pc` `pj`
 - **Pull request review** — GitHub, GitLab and Azure DevOps in one UI:
   triage panel, drafts, resumable submit. `:DyReview` `<leader>pv`
-- **Previews** — D2 diagrams inline on kitty-graphics terminals, Markdown,
-  Typst. `<leader>cp`
+- **Previews** — D2 diagrams inline on kitty-graphics terminals, Mermaid
+  blocks in a kitty overlay (zellij too), Markdown, Typst. `<leader>cp`
+  `:DyMermaid`
 - **Spelling** — Vietnamese, Chinese and technical word lists; code comments
   too. `:DySpell vi`
 - **Integrations** — Obsidian, chezmoi templates, firenvim, zellij, AI CLIs.

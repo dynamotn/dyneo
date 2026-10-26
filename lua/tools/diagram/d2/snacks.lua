@@ -247,9 +247,11 @@ end
 --- protocol, so snacks.nvim has nothing to draw into
 ---
 --- Kitty's remote control opens the picture in an overlay above the zellij
---- window; without it, the system viewer takes over.
+--- window; without it, the system viewer takes over. The Mermaid preview
+--- shows its pictures here too.
 ---@param output_path string
-local function show_outside_zellij(output_path)
+---@param title? string The overlay's title, `D2 preview` unless given
+function M.show_outside_zellij(output_path, title)
   local listen_on = vim.env.KITTY_LISTEN_ON
   if not listen_on or vim.fn.executable('kitten') == 0 then
     vim.ui.open(output_path)
@@ -264,7 +266,7 @@ local function show_outside_zellij(output_path)
     listen_on,
     'launch',
     '--type=overlay',
-    '--title=D2 preview',
+    '--title=' .. (title or 'D2 preview'),
     'kitten',
     'icat',
     '--hold',
@@ -295,7 +297,7 @@ function M.preview(bufnr)
 
   render_d2(source_path, function(output_path)
     if vim.env.ZELLIJ ~= nil then
-      show_outside_zellij(output_path)
+      M.show_outside_zellij(output_path)
       return
     end
 

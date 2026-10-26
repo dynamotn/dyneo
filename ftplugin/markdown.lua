@@ -29,3 +29,13 @@ vim.keymap.set(
   '<cmd>DyMatrix<cr>',
   { buffer = true, desc = 'Decision Matrix' }
 )
+
+-- `<leader>cp` is the browser preview of the whole document: a Mermaid
+-- block gets one of its own, drawn in a kitty overlay that zellij cannot
+-- swallow
+vim.keymap.set(
+  'n',
+  '<localleader>d',
+  function() require('tools.diagram.mermaid').preview(0) end,
+  { buffer = true, desc = 'Preview Mermaid Block' }
+)

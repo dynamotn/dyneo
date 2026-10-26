@@ -157,6 +157,7 @@ one of the same keys in those buffers.
 `<leader>co`           n      Organize Imports  (LSP: vtsls)
 `<leader>cp`           n      Preview D2 diagram  (ft: d2)
 `<leader>cp`           n      Markdown Preview  (ft: markdown, markdown.mdx)
+`<leader>cp`           n      Preview Mermaid diagram  (ft: mermaid)
 `<leader>cp`           n      Toggle Typst Preview  (ft: typst)
 `<leader>cr`           n      Rename  (LSP)
 `<leader>cs`           n      Toggle Outline
@@ -857,6 +858,7 @@ Other keys
 `<localleader>c`       n      Run Chunk  (ft: quarto)
 `<localleader>c`       n      Cost (Terraform)  (ft: terraform, tf)
 `<localleader>d`       n      Flutter Devices  (ft: dart)
+`<localleader>d`       n      Preview Mermaid Block  (ft: markdown)
 `<localleader>d`       n      Breaking Changes Since HEAD  (ft: proto, graphql)
 `<localleader>d`       n      Drift (Terraform)  (ft: terraform, tf)
 `<localleader>d`       n      Breaking Changes Since HEAD (AsyncAPI)  (ft: yaml, json)

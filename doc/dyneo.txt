@@ -116,7 +116,8 @@ skipped, not reported as an error.
 
 Optional: `pngpaste` (macOS) or `wl-paste`/`xclip` (Linux) to paste images,
 `fcitx5-remote` to switch input method, and `d2` with one of `rsvg-convert`,
-`resvg` or `magick` on a kitty-graphics terminal for |dyneo-diagram|.
+`resvg` or `magick` on a kitty-graphics terminal, and `mmdc`, for
+|dyneo-diagram|.
 
 ------------------------------------------------------------------------------
 2. INSTALL                                                     *dyneo-install*
@@ -1433,6 +1434,15 @@ D2 diagrams render inline on kitty-graphics terminals, zellij included.
 their own preview on the same key.  The diagram of what a directory
 declares is drawn by |dyneo-architecture|.
 
+Mermaid diagrams are drawn by `mmdc` (`npm install -g
+@mermaid-js/mermaid-cli`).  `<localleader>d` in Markdown, or `<leader>cp` in
+a Mermaid file (|:DyMermaid| in either), draws the block under the cursor --
+or the whole file -- and shows the picture in a kitty overlay above the
+window, which works under zellij: zellij passes no kitty graphics through,
+so nothing can be drawn inside its pane.  Without kitty's remote control
+(`KITTY_LISTEN_ON`) the system viewer opens it.  Renders are cached by the
+text of the diagram.
+
 C4 models are written as code.  A LikeC4 model (`.c4`, `.likec4`) gets its
 grammar and its language server, which checks the whole workspace -- every
 model file under the root -- as it is typed.  The server runs a
@@ -2371,6 +2381,11 @@ Project ~
                                                                    *:DyMatrix*
 :DyMatrix               Work out the totals of the decision matrix under the
                         cursor, or write one.  See |dyneo-matrix|.
+
+                                                                  *:DyMermaid*
+:DyMermaid              Draw the Mermaid block under the cursor, or the
+                        Mermaid file, in a kitty overlay.  See
+                        |dyneo-diagram|.
 
                                                                       *:DyWar*
 :DyWar                  How far the latest Well-Architected review got,
