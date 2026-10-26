@@ -1434,6 +1434,13 @@ D2 diagrams render inline on kitty-graphics terminals, zellij included.
 their own preview on the same key.  The diagram of what a directory
 declares is drawn by |dyneo-architecture|.
 
+The Markdown preview (`<leader>cp`, `:MdKite`) is mdkite.nvim in the
+browser, Mermaid blocks drawn there.  Its server listens on `127.0.0.1`,
+refuses a foreign `Host` and any path out of what it serves, and a
+sensitive buffer (|dyneo-ai-guard|) is never previewed.  The page loads its
+libraries (markdown-it, mermaid, KaTeX) from jsDelivr and unpkg by major
+version, so it needs the network and trusts those CDNs with the text shown.
+
 A diagram block in Markdown -- ```` ```mermaid ```` or ```` ```d2 ```` -- is
 drawn by `<localleader>d` (|:DyDiagram|), and a Mermaid file by
 `<leader>cp`.  The picture opens in a kitty overlay above the window, which

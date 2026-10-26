@@ -90,4 +90,72 @@ describe('plugins.lang.markdown', function()
       )
     end)
   end)
+
+  describe('mdkite', function()
+    local started, restores, notified
+
+    --- The mdkite.nvim spec, set up against a stand-in for the plugin
+    local function setup()
+      for _, spec in ipairs(dofile(h.root .. '/lua/plugins/lang/markdown.lua')) do
+        if spec[1] == 'selimacerbas/mdkite.nvim' then
+          spec.config(spec, spec.opts)
+          return spec
+        end
+      end
+    end
+
+    before_each(function()
+      started, notified = 0, {}
+      restores = {
+        h.stub(package.loaded, 'mdkite', {
+          setup = function() end,
+          start = function() started = started + 1 end,
+        }),
+        h.stub(
+          vim,
+          'notify',
+          function(msg, level) table.insert(notified, { msg, level }) end
+        ),
+      }
+    end)
+    after_each(function()
+      for i = #restores, 1, -1 do
+        restores[i]()
+      end
+    end)
+
+    it(
+      'renders Mermaid in the browser, off the main loop',
+      function() assert.are.equal('js', setup().opts.mermaid_renderer) end
+    )
+
+    it('starts on an ordinary buffer', function()
+      setup()
+      table.insert(
+        restores,
+        h.stub(
+          require('util.sensitive'),
+          'is_sensitive',
+          function() return false end
+        )
+      )
+      require('mdkite').start()
+      assert.are.equal(1, started)
+    end)
+
+    it('never serves a sensitive buffer', function()
+      setup()
+      table.insert(
+        restores,
+        h.stub(
+          require('util.sensitive'),
+          'is_sensitive',
+          function() return true end
+        )
+      )
+      require('mdkite').start()
+      assert.are.equal(0, started)
+      assert.are.equal(vim.log.levels.WARN, notified[1][2])
+    end)
+  end)
 end)

@@ -26,25 +26,45 @@ end
 return vim.list_contains(DyNeo.enabled_languages, 'markdown')
     and {
       {
-        -- Preview markdown
-        -- No `ft`: the key below is already limited to these filetypes and
-        -- loads the plugin, which has nothing else to set up. Loading on `ft`
-        -- made lazy.nvim replay `FileType` on every Markdown buffer, sourcing
-        -- its ftplugins and syntax files and starting its servers twice.
-        'toppair/peek.nvim',
-        build = 'deno task --quiet build:fast',
-        enabled = DyNeo.used_full_plugins or vim.fn.executable('deno') == 1,
+        -- Preview markdown in the browser, Mermaid blocks drawn by their
+        -- language name. Its server refuses a foreign `Host` and paths out of
+        -- its root; the page loads markdown-it and mermaid from jsDelivr and
+        -- unpkg by major version, with no SRI, until the plugin vendors them.
+        -- No `ft`: the key and the command load it, and loading on `ft` made
+        -- lazy.nvim replay `FileType` on every Markdown buffer, sourcing its
+        -- ftplugins and syntax files and starting its servers twice.
+        'selimacerbas/mdkite.nvim',
+        dependencies = { 'selimacerbas/kitehost.nvim' },
+        cmd = 'MdKite',
         keys = {
           {
             '<leader>cp',
-            function() require('peek').open() end,
+            '<cmd>MdKite toggle<cr>',
             ft = language.filetypes,
             desc = 'Markdown Preview',
           },
         },
         opts = {
-          app = 'browser',
+          -- `rust` runs `mmdr` with `vim.fn.system` for every block on every
+          -- refresh: no deadline, and the page loads mermaid.js regardless
+          mermaid_renderer = 'js',
         },
+        config = function(_, opts)
+          local mdkite = require('mdkite')
+          mdkite.setup(opts)
+          -- The preview writes the buffer to its workspace and serves it:
+          -- `:MdKite`, its `toggle` and the key all start through here
+          local start = mdkite.start
+          mdkite.start = function(...)
+            if require('util.sensitive').is_sensitive(0) then
+              return require('util.notify').titled('Markdown')(
+                'not previewing a sensitive buffer',
+                vim.log.levels.WARN
+              )
+            end
+            return start(...)
+          end
+        end,
       },
       {
         -- Obsidian
