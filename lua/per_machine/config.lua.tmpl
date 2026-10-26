@@ -48,24 +48,49 @@ DyNeo.firenvim_site_settings = {
     priority = 9,
     takeover = 'never',
   },
+  -- Microsoft 365: its editors fight firenvim for the text box
+  -- SharePoint, OneDrive for work, Stream
   [ [[.*\.sharepoint\.com.*]] ] = {
     priority = 9,
     takeover = 'never',
   },
+  -- Office on the web, Forms, Planner, To Do, Whiteboard
   [ [[.*\.office\.com.*]] ] = {
     priority = 9,
     takeover = 'never',
   },
-  [ [[.*teams\.microsoft\.com.*]] ] = {
+  -- Outlook on `outlook.office365.com`
+  [ [[.*\.office365\.com.*]] ] = {
     priority = 9,
     takeover = 'never',
   },
-  -- Teams, Outlook and Microsoft 365 moved under `cloud.microsoft`
+  -- The Microsoft 365 app
+  [ [[.*\.microsoft365\.com.*]] ] = {
+    priority = 9,
+    takeover = 'never',
+  },
+  -- Teams, Outlook, Microsoft 365, Loop and Engage, moved under
+  -- `cloud.microsoft`
   [ [[.*\.cloud\.microsoft.*]] ] = {
     priority = 9,
     takeover = 'never',
   },
-  [ [[.*teams\.live\.com.*]] ] = {
+  [ [[.*(teams|loop|whiteboard|copilot)\.microsoft\.com.*]] ] = {
+    priority = 9,
+    takeover = 'never',
+  },
+  -- Personal Teams, Outlook and OneDrive, and the Word and Excel editors
+  -- on `officeapps.live.com`
+  [ [[.*\.live\.com.*]] ] = {
+    priority = 9,
+    takeover = 'never',
+  },
+  -- Viva Engage
+  [ [[.*\.yammer\.com.*]] ] = {
+    priority = 9,
+    takeover = 'never',
+  },
+  [ [[.*\.powerbi\.com.*]] ] = {
     priority = 9,
     takeover = 'never',
   },
