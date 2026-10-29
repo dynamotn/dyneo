@@ -129,8 +129,14 @@ describe('tools.history', function()
       return pending('no Lua parser on this machine')
     end
     local bufnr = h.buffer({ lines = SOURCE, filetype = 'lua' })
-    assert.same({ 3, 5 }, { history.definition_at(bufnr, 4) })
-    assert.same({ 7, 9 }, { history.definition_at(bufnr, 7) })
+    assert.same(
+      { 3, 5, 'function_declaration' },
+      { history.definition_at(bufnr, 4) }
+    )
+    assert.same(
+      { 7, 9, 'function_declaration' },
+      { history.definition_at(bufnr, 7) }
+    )
     assert.is_nil(history.definition_at(bufnr, 11))
   end)
 
