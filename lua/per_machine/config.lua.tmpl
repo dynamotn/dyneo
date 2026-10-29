@@ -9,7 +9,7 @@ DyNeo.enabled_languages = { 'gitcommit', 'gitrebase', 'bash', 'sql' }
 DyNeo.bundle_languages = { 'gitcommit', 'bash', 'sql' }
 {{- end }}
 {{- if eq .chezmoi.os "android" }}
-DyNeo.obsidian.paths.personal = '~/storage/shared/Documents/Notes'
+DyNeo.obsidian.paths.personal = '~/storage/shared/Documents/DyBrain'
 {{- end }}
 DyNeo.firenvim_site_settings = {
   [ [[.*google\.com.*]] ] = {
@@ -99,12 +99,11 @@ DyNeo.firenvim_site_settings = {
     takeover = 'never',
   },
 }
-{{- if has "F1" .decryptEnterprise }}
-require('per_machine.F1')
+{{- range .decryptEnterprise }}
+{{-   if stat (joinPath $.chezmoi.sourceDir "private_dot_config/nvim/lua/per_machine" (printf "encrypted_%s.lua.age" .)) }}
+require('per_machine.{{ . }}')
+{{-   end }}
 {{- end }}
 {{- if eq .code "l30n4rd0d4v1nc1" }}
 DyNeo.used_full_plugins = true
-{{- end }}
-{{- if .blockedGitlab }}
-DyNeo.obsidian.vaults = function() return {} end
 {{- end }}
