@@ -89,6 +89,12 @@ function M.run(cmd, opts, on_done)
       guard:stop()
       guard:close()
     end
+    -- `vim.system` turns CRLF into LF only in the output it collects itself,
+    -- not in what it hands to readers like these
+    if opts.text ~= false then
+      result.stdout = result.stdout:gsub('\r\n', '\n')
+      result.stderr = result.stderr:gsub('\r\n', '\n')
+    end
     vim.schedule(function() on_done(result) end)
   end
   local function never_started(reason)
@@ -266,12 +272,22 @@ function M.each(items, limit, worker, on_done)
       done()
     end
   end
+  -- A worker that calls `done` at once would start the next from inside this
+  -- loop, one stack frame deeper per item: the loop already running takes it
+  local looping = false
   start = function()
-    while running < limit and next_index < #items do
-      next_index = next_index + 1
-      running = running + 1
-      step(items[next_index])
-    end
+    if looping then return end
+    looping = true
+    -- `on_done` may raise from inside: the rest must not wait on the flag
+    local ok, err = pcall(function()
+      while running < limit and next_index < #items do
+        next_index = next_index + 1
+        running = running + 1
+        step(items[next_index])
+      end
+    end)
+    looping = false
+    if not ok then error(err, 0) end
   end
   if #items == 0 then
     if on_done then on_done() end

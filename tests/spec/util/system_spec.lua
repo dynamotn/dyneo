@@ -145,6 +145,12 @@ describe('util.system', function()
       assert.is_false(result.missing)
     end)
 
+    it('reads CRLF output as lines, unless asked for bytes', function()
+      local cmd = { 'printf', 'a\\r\\nb\\r\\n' }
+      assert.are.equal('a\nb\n', run(cmd).stdout)
+      assert.are.equal('a\r\nb\r\n', run(cmd, { text = false }).stdout)
+    end)
+
     it('says a command is not installed, later and without raising', function()
       local answered = false
       system.run({ dir .. '/nothing-here' }, {}, function() answered = true end)
@@ -300,6 +306,20 @@ describe('util.system', function()
         done()
       end)
       assert.are.same({ 1, 2 }, seen)
+    end)
+
+    it('ends a long list of workers that are done at once', function()
+      local items, ended = {}, false
+      for i = 1, 20000 do
+        items[i] = i
+      end
+      system.each(
+        items,
+        4,
+        function(_, done) done() end,
+        function() ended = true end
+      )
+      assert.is_true(ended)
     end)
 
     it('ends at once for nothing to do', function()
