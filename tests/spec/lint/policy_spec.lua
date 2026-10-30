@@ -88,6 +88,8 @@ describe('policy linters', function()
     end)
 
     it('reports a run that gave no usable report', function()
+      -- `vim.diagnostic` writes the buffer into each one it keeps
+      assert.are_not.equal(linter.unreadable, linter.parser(nil)[1])
       assert.same({ linter.unreadable }, linter.parser(nil))
       assert.same({ linter.unreadable }, linter.parser(''))
       assert.same({ linter.unreadable }, linter.parser('not json'))

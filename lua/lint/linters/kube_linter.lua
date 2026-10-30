@@ -42,10 +42,14 @@ M.unreadable = {
 
 function M.parse(output, bufnr)
   -- No report is no clean run: the tool prints one even with nothing found
-  if output == nil or output == '' then return { M.unreadable } end
+  if output == nil or output == '' then
+    return { vim.deepcopy(M.unreadable) }
+  end
   local ok, report =
     pcall(vim.json.decode, output, { luanil = { object = true, array = true } })
-  if not ok or type(report) ~= 'table' then return { M.unreadable } end
+  if not ok or type(report) ~= 'table' then
+    return { vim.deepcopy(M.unreadable) }
+  end
   local lines = bufnr and vim.api.nvim_buf_get_lines(bufnr, 0, -1, false) or {}
   local diagnostics = {}
   for _, item in

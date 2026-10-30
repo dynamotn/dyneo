@@ -36,10 +36,14 @@ M.unreadable = {
 
 function M.parse(output)
   -- No report is no clean run: the tool prints one even with nothing found
-  if output == nil or output == '' then return { M.unreadable } end
+  if output == nil or output == '' then
+    return { vim.deepcopy(M.unreadable) }
+  end
   local ok, report =
     pcall(vim.json.decode, output, { luanil = { object = true, array = true } })
-  if not ok or type(report) ~= 'table' then return { M.unreadable } end
+  if not ok or type(report) ~= 'table' then
+    return { vim.deepcopy(M.unreadable) }
+  end
   -- One framework prints an object, several a list of them
   if not vim.islist(report) then report = { report } end
   local diagnostics = {}
