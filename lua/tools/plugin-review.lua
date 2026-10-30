@@ -130,11 +130,13 @@ local function is_ignored(path)
     if path:find(pattern) then return true end
   end
   local name = vim.fs.basename(path)
+  -- `plugin/LICENSE.lua` runs: only a licence or changelog in text is prose
+  local text = not name:find('.', 1, true) or name:find('%.txt$') ~= nil
   return path:find('^doc/') ~= nil
     or name:find('%.md$') ~= nil
     or name:find('%.rst$') ~= nil
-    or name:find('^LICEN[CS]E') ~= nil
-    or name:find('^CHANGELOG') ~= nil
+    or (text and name:find('^LICEN[CS]E') ~= nil)
+    or (text and name:find('^CHANGELOG') ~= nil)
 end
 
 --- The line comment of each kind of file, by extension or by name

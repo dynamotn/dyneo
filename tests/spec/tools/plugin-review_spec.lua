@@ -239,6 +239,21 @@ describe('tools.plugin-review', function()
       }, flags(findings))
     end)
 
+    it('reads code named like a licence or a changelog', function()
+      local findings = review.scan({
+        'diff --git a/LICENSE b/LICENSE',
+        '@@ -0,0 +1 @@',
+        '+see https://example.com',
+        'diff --git a/plugin/LICENSE.lua b/plugin/LICENSE.lua',
+        '@@ -0,0 +1 @@',
+        "+vim.system({ 'curl', 'https://example.com' })",
+      })
+      assert.same({
+        'plugin/LICENSE.lua:1 runs a process',
+        'plugin/LICENSE.lua:1 reaches the network',
+      }, flags(findings))
+    end)
+
     it('flags a build file and a binary, whatever is in them', function()
       local findings = review.scan({
         'diff --git a/build.lua b/build.lua',
