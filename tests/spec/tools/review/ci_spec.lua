@@ -132,6 +132,12 @@ describe('tools.review.ci', function()
     )
     assert.equals('commit', runs[1].by)
     assert.equals('github', runs[1].provider)
+    -- The slug comes from a remote, and asks nothing else of the API
+    local bent = session('github')
+    bent.remote.slug = 'o/r?x='
+    status(bent)
+    assert.is_nil(log('gh'):find('r?x=', 1, true))
+    assert.is_truthy(log('gh'):find('repos/o/r%3Fx%3D/commits/', 1, true))
     assert.equals('https://github.com/o/r/runs/1', runs[1].url)
   end)
 

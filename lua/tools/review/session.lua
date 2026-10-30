@@ -495,7 +495,7 @@ function M.start(remote, pull, adapter, fail)
           local paths, read = {}, {}
           for _, file in ipairs(files) do
             file.kind = triage.classify(file.path, file.attrs)
-            file.risk = file.kind == 'source' and triage.risk(file.path) or 0
+            file.risk = triage.risk(file.path, file.kind)
             paths[#paths + 1] = file.path
             if file.kind ~= 'generated' then read[#read + 1] = file end
           end

@@ -169,10 +169,14 @@ function M.classify(path, attrs)
   return 'source'
 end
 
---- How much attention a path deserves; 0 means none in particular.
+--- How much attention a path deserves; 0 means none in particular. Given its
+--- `kind`, only source and config count: a workflow, a Dockerfile or a schema
+--- is config, and a test or a doc about auth is no risk of its own.
 ---@param path string
+---@param kind? DyReviewKind
 ---@return integer
-function M.risk(path)
+function M.risk(path, kind)
+  if kind and kind ~= 'source' and kind ~= 'config' then return 0 end
   -- An upper-case letter after a lower-case one starts a word, so
   -- `AuthService` reads as `auth_service` while `author` stays one word.
   local p = normalize((path:gsub('(%l)(%u)', '%1_%2')))

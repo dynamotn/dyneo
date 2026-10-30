@@ -57,9 +57,17 @@ end
 ---@return DyReviewCiSource
 local function github(s)
   return function(done)
-    local path = ('repos/%s/commits/%s/check-runs?per_page=100'):format(
-      s.remote.slug,
-      s.pull.head_sha
+    -- Each part encoded: the slug comes from a remote anyone can set, and
+    -- must not bend the path
+    local owner, name = (s.remote.slug or ''):match('^([^/]+)/([^/]+)$')
+    -- Encoding leaves dots alone: `..` would still climb the path
+    if not (owner and name) or owner:match('^%.+$') or name:match('^%.+$') then
+      return done(nil, 'not an owner/name slug')
+    end
+    local path = ('repos/%s/%s/commits/%s/check-runs?per_page=100'):format(
+      forge.encode(owner),
+      forge.encode(name),
+      forge.encode(s.pull.head_sha)
     )
     forge.api(s.remote, path, function(data, err)
       local rows = type(data) == 'table' and data.check_runs

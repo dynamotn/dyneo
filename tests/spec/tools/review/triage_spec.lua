@@ -94,6 +94,16 @@ describe('tools.review.triage', function()
       assert.is_true(mig > 0)
       assert.equals(0, triage.risk('src/util/str.go'))
     end)
+
+    it('marks a changed workflow or Dockerfile, not a test of auth', function()
+      local workflow = '.github/workflows/release.yml'
+      assert.is_true(triage.risk(workflow, triage.classify(workflow)) > 0)
+      assert.is_true(
+        triage.risk('Dockerfile', triage.classify('Dockerfile')) > 0
+      )
+      local spec = 'tests/auth_spec.lua'
+      assert.equals(0, triage.risk(spec, triage.classify(spec)))
+    end)
   end)
 
   describe('risk word boundaries', function()
