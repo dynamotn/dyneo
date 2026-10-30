@@ -9,7 +9,10 @@
 
 ---@param source integer|string A buffer, or the text of a string parser
 ---@return integer
-local function buffer(source) return tonumber(source) or 0 end
+local function buffer(source)
+  -- Not `tonumber`: a string parser's text of `42` is no buffer 42
+  return type(source) == 'number' and source or 0
+end
 
 --- Asks what a buffer *is* rather than what it is called: `ftdetect` already
 --- knows that `.github/workflows/ci.yml` is a workflow

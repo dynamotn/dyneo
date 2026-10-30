@@ -71,6 +71,13 @@ describe('plugin/predicates', function()
     assert.is_true(ask('is-ci-pipeline?', gitlab))
   end)
 
+  it('reads the text of a string parser as no buffer of its own', function()
+    local workflow = h.buffer({ filetype = 'yaml.gh-action' })
+    vim.api.nvim_set_current_buf(workflow)
+    -- Text that reads as a number names no buffer
+    assert.is_true(ask('is-gh-action?', '99999'))
+  end)
+
   it('tells the language of a template by its name', function()
     local script = h.buffer({ name = '/p/run.sh.tmpl', filetype = 'gotmpl' })
     assert.is_true(ask('is-bash-file?', script))

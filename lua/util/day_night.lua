@@ -57,7 +57,10 @@ end
 function M.setup()
   if not DyNeo.day_night.enabled then return end
 
-  if timer then timer:stop() end
+  if timer then
+    timer:stop()
+    timer:close()
+  end
   timer = vim.uv.new_timer()
   local interval = 60 * 1000
   timer:start(interval, interval, vim.schedule_wrap(M.apply))
