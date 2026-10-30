@@ -27,6 +27,15 @@ describe('util.forge', function()
     assert.is_nil(forge.parse_url('/local/path'))
   end)
 
+  it('reads the host a client would connect to, not one after `?@`', function()
+    assert.is_nil(forge.parse_url('https://evil.example?@github.com/o/r'))
+    assert.is_nil(forge.parse_url('https://evil.example#@github.com/o/r'))
+    assert.same(
+      { 'evil.example', 'x/@github.com/o/r' },
+      { forge.parse_url('https://evil.example/x/@github.com/o/r') }
+    )
+  end)
+
   it('tells the forge by its host', function()
     assert.equals('github', forge.kind_of('github.com'))
     assert.equals('github', forge.kind_of('github.example.com'))

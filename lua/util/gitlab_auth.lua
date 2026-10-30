@@ -17,8 +17,10 @@ local notify = require('util.notify').titled('GitLab')
 function M.host_of(url)
   local rest = url:match('^%a[%w+.-]*://(.*)$')
   if rest then
-    local host = rest:gsub('^[^@/]*@', ''):match('^([^/:]+)')
-    return host
+    -- The authority ends at the first `/`, `?` or `#`, and its user info at
+    -- its last `@`: `https://evil.example?@gitlab.com` is evil.example's
+    local authority = rest:match('^([^/?#]*)')
+    return (authority:gsub('^.*@', ''):match('^([^:]+)'))
   end
   return url:match('^[%w_.-]+@([^:]+):')
 end
@@ -41,9 +43,12 @@ end
 ---@return string?
 function M.glab_token(host)
   if vim.fn.executable('glab') ~= 1 then return nil end
+  -- glab answers with `GITLAB_ACCESS_TOKEN` or `OAUTH_TOKEN` for any host
+  -- asked about, and the host may come from the repository
+  local env = require('util.forge').cli_env({ kind = 'gitlab', host = host })
   local result = require('util.system').sync(
     { 'glab', 'config', 'get', 'token', '--host', host },
-    { text = true }
+    { text = true, env = env, clear_env = env ~= nil }
   )
   local token = result.code == 0 and vim.trim(result.stdout or '') or ''
   return token ~= '' and token or nil

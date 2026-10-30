@@ -29,6 +29,18 @@ describe('util.gitlab_auth', function()
     assert.is_nil(auth.host_of('/a/local/path'))
   end)
 
+  it('reads the host a client would connect to, not one after `?@`', function()
+    assert.equals(
+      'evil.example',
+      auth.host_of('https://evil.example?@gitlab.com')
+    )
+    assert.equals(
+      'evil.example',
+      auth.host_of('https://evil.example#@gitlab.com')
+    )
+    assert.equals('gitlab.com', auth.host_of('https://u:p@x@gitlab.com/g/p'))
+  end)
+
   describe('through the CLIs', function()
     local calls, reply, restores
 
@@ -77,6 +89,24 @@ describe('util.gitlab_auth', function()
       )
       reply = function() return { code = 1, stdout = '' } end
       assert.is_nil(auth.glab_token('git.example.org'))
+    end)
+
+    it('keeps the tokens of the environment from another host', function()
+      local env
+      restores[1]()
+      restores[1] = h.stub(package.loaded, 'util.system', {
+        sync = function(_, opts)
+          env = opts.env
+          return { code = 1, stdout = '' }
+        end,
+      })
+      local restore_host = h.stub(vim.env, 'GITLAB_HOST', 'gitlab.corp.example')
+      local restore_token = h.stub(vim.env, 'GITLAB_ACCESS_TOKEN', 'glpat-corp')
+      auth.glab_token('evil.example')
+      restore_token()
+      restore_host()
+      assert.is_table(env)
+      assert.is_nil(env.GITLAB_ACCESS_TOKEN)
     end)
 
     it('asks nothing of a glab that is not installed', function()

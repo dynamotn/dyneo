@@ -70,8 +70,12 @@ function M.parse_url(url)
   local host, path
   local rest = url:match('^%a[%w+.-]*://(.*)$')
   if rest then
-    host, path = rest:gsub('^[^@/]*@', ''):match('^([^/]+)/(.-)/?$')
-    if host then host = host:gsub(':%d+$', '') end
+    -- The authority ends at the first `/`, `?` or `#`, and its user info at
+    -- its last `@`: `https://evil.example?@github.com/o/r` is no GitHub URL
+    local authority, tail = rest:match('^([^/?#]*)(.*)$')
+    host = authority:gsub('^.*@', ''):gsub(':%d+$', '')
+    path = tail:match('^/(.-)/?$')
+    if host == '' then host = nil end
   else
     host, path = url:match('^[%w_.-]+@([^:]+):(.-)/?$')
   end
