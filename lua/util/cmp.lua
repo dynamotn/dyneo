@@ -4,19 +4,17 @@ local M = {}
 
 --- Setup default sources of cmp
 M.setup_default_sources = function()
-  local success, node = pcall(vim.treesitter.get_node)
-  if
-    success
-    and node
-    and vim.tbl_contains(
-      { 'comment', 'line_comment', 'block_comment' },
-      node:type()
-    )
-  then
-    return M.sources('comment')
-  else
-    return M.sources('*')
+  -- While typing, the cursor sits past the character just typed, outside a
+  -- comment that ends there; and the node under it may be one inside the
+  -- comment (Lua's `comment_content`)
+  local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+  local success, node =
+    pcall(vim.treesitter.get_node, { pos = { row - 1, math.max(col - 1, 0) } })
+  while success and node do
+    if node:type():find('comment', 1, true) then return M.sources('comment') end
+    node = node:parent()
   end
+  return M.sources('*')
 end
 
 --- Sources for filetype

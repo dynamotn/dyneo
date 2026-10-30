@@ -121,14 +121,49 @@ describe('util.cmp', function()
 
     it('gives comment sources inside a comment node', function()
       restore = h.stub(vim.treesitter, 'get_node', function()
-        return { type = function() return 'line_comment' end }
+        return {
+          type = function() return 'line_comment' end,
+          parent = function() end,
+        }
       end)
       assert.same(cmp.sources('comment'), cmp.setup_default_sources())
     end)
 
+    it('gives comment sources at the end of a Lua comment', function()
+      -- The tree of `x = 1 -- hello` as Lua's parser gives it: the cursor
+      -- past the `o` just typed is past the comment, in the chunk
+      local comment = {
+        type = function() return 'comment' end,
+        parent = function() end,
+      }
+      local content = {
+        type = function() return 'comment_content' end,
+        parent = function() return comment end,
+      }
+      local chunk = {
+        type = function() return 'chunk' end,
+        parent = function() end,
+      }
+      restore = h.stub(vim.treesitter, 'get_node', function(opts)
+        local col = opts and opts.pos and opts.pos[2] or 14
+        return col >= 14 and chunk or content
+      end)
+      local restore_cursor = h.stub(
+        vim.api,
+        'nvim_win_get_cursor',
+        function() return { 1, 14 } end
+      )
+      local sources = cmp.setup_default_sources()
+      restore_cursor()
+      assert.same(cmp.sources('comment'), sources)
+    end)
+
     it('gives common sources elsewhere', function()
       restore = h.stub(vim.treesitter, 'get_node', function()
-        return { type = function() return 'identifier' end }
+        return {
+          type = function() return 'identifier' end,
+          parent = function() end,
+        }
       end)
       assert.same(common, cmp.setup_default_sources())
     end)
