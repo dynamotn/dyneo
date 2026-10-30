@@ -166,6 +166,18 @@ describe('tools.asyncapi', function()
         end
         assert.same({ 'left over' }, vim.fn.readfile(dir .. base))
       end)
+
+      it('writes nothing through a link pointing nowhere', function()
+        local target = dir .. '/planted'
+        assert(vim.uv.fs_symlink(target, dir .. base))
+        asyncapi.diff(0)
+        vim.wait(5000, function() return #notes > 0 end)
+        assert.same({
+          '.asyncapi-base-asyncapi.yaml is in the way: not written over',
+          vim.log.levels.ERROR,
+        }, notes[1])
+        assert.is_nil(vim.uv.fs_stat(target))
+      end)
     end)
 
     it('says a failed run failed', function()

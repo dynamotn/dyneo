@@ -587,7 +587,9 @@ function M.compare(bufnr, rev, file, base_text, current, modified)
       and vim.fs.joinpath(dir, '.oasdiff-revision-' .. name)
     or file
   for _, path in ipairs({ base, revision ~= file and revision or nil }) do
-    if vim.uv.fs_stat(path) then
+    -- The link itself: a dangling one would be written through, to wherever
+    -- the repository points it
+    if vim.uv.fs_lstat(path) then
       return notify(
         ('%s is in the way: not written over'):format(vim.fs.basename(path)),
         vim.log.levels.ERROR

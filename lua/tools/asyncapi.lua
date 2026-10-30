@@ -173,7 +173,9 @@ function M.diff(bufnr, rev)
       local revision = vim.fs.joinpath(dir, '.asyncapi-revision-' .. name)
       local pid, state = vim.uv.os_getpid(), read_state()
       for _, path in ipairs({ base, revision }) do
-        if vim.uv.fs_stat(path) then
+        -- The link itself: a dangling one would be written through, to
+        -- wherever the repository points it
+        if vim.uv.fs_lstat(path) then
           local owner = tonumber(state[path])
           if owner and owner ~= pid and ended(owner) then
             vim.fn.delete(path)

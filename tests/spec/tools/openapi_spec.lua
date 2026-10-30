@@ -381,6 +381,23 @@ describe('tools.openapi', function()
       cleanup()
     end)
 
+    it('writes nothing through a link pointing nowhere', function()
+      local dir, cleanup = h.tmpdir()
+      h.write(dir .. '/openapi.yaml', YAML)
+      assert(
+        vim.uv.fs_symlink(
+          dir .. '/planted',
+          dir .. '/.oasdiff-base-openapi.yaml'
+        )
+      )
+      local restore = h.stub(vim, 'notify', function() end)
+      openapi.compare(0, 'HEAD', dir .. '/openapi.yaml', 'old', {}, false)
+      restore()
+      local planted = vim.uv.fs_stat(dir .. '/planted')
+      cleanup()
+      assert.is_nil(planted)
+    end)
+
     it('keeps the FileType hook of plugin/openapi.lua', function()
       vim.cmd('runtime plugin/openapi.lua')
       local hooks = { group = 'dy_openapi', event = 'FileType' }
