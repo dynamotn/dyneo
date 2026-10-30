@@ -469,6 +469,25 @@ describe('tools.outdated', function()
         )
       end
     )
+
+    it('keeps what GOPRIVATE names off the public Go proxy', function()
+      local restore =
+        h.stub(vim.env, 'GOPRIVATE', '*.corp.example,github.com/acme')
+      local private = outdated.go_private('git.corp.example/team/svc')
+      local org = outdated.go_private('github.com/acme/tool')
+      local other = outdated.go_private('github.com/acmeco/tool')
+      -- An empty GONOPROXY is unset, and `go env` answers before either
+      local unset = h.stub(vim.env, 'GONOPROXY', '')
+      local fallback = outdated.go_private('github.com/acme/tool')
+      local from_go = outdated.go_private('example.com/x', 'example.com')
+      unset()
+      restore()
+      assert.is_true(private)
+      assert.is_true(org)
+      assert.is_false(other)
+      assert.is_true(fallback)
+      assert.is_true(from_go)
+    end)
   end)
 
   describe('in a buffer', function()

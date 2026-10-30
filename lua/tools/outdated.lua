@@ -616,6 +616,30 @@ function M.go_escape(path)
   return (path:gsub('%u', function(char) return '!' .. char:lower() end))
 end
 
+--- Whether Go keeps module `path` off the public proxy, as `GONOPROXY` (or
+--- `GOPRIVATE`, its default) says: a glob matching any leading part of it
+---@param path string
+---@param globs? string As `go env GONOPROXY` gives it, else the environment
+---@return boolean
+function M.go_private(path, globs)
+  if not globs then
+    -- Empty is unset, for Go as here
+    local nonproxy = vim.env.GONOPROXY
+    globs = nonproxy ~= nil and nonproxy ~= '' and nonproxy
+      or vim.env.GOPRIVATE
+      or ''
+  end
+  for glob in vim.gsplit(globs, ',', { trimempty = true }) do
+    local pattern = vim.glob.to_lpeg(vim.trim(glob))
+    local prefix
+    for part in vim.gsplit(path, '/', { plain = true }) do
+      prefix = prefix and (prefix .. '/' .. part) or part
+      if pattern:match(prefix) then return true end
+    end
+  end
+  return false
+end
+
 --- `text` as one segment of a URL path
 ---@param text string
 ---@return string
@@ -687,47 +711,77 @@ end
 local PYPI_FILTER = '{releases: (.releases // {}'
   .. ' | map_values(map({upload_time_iso_8601, yanked})))}'
 
+--- `go env GONOPROXY`, asked once: what `go env -w GOPRIVATE` set is in Go's
+--- own file, not in the environment. False when go cannot say.
+---@type string|false|nil
+local go_env_nonproxy
+
+---@param on_done fun(globs: string?) Nil when go cannot say
+local function go_nonproxy(on_done)
+  if go_env_nonproxy ~= nil then return on_done(go_env_nonproxy or nil) end
+  require('util.system').run(
+    { 'go', 'env', 'GONOPROXY' },
+    { timeout = 5000 },
+    function(result)
+      go_env_nonproxy = result.code == 0 and vim.trim(result.stdout) or false
+      on_done(go_env_nonproxy or nil)
+    end
+  )
+end
+
 --- The releases of Go module `path` newer than `current`: the proxy lists
 --- versions without dates, so each is asked about, newest first, until one
---- is out of quarantine or `M.GO_LOOKUPS` were asked
+--- is out of quarantine or `M.GO_LOOKUPS` were asked. A module Go keeps off
+--- the proxy is not named to it.
 ---@param path string
 ---@param current string
 ---@param on_done fun(releases: DyOutdatedRelease[]?, err: string?)
 local function go_releases(path, current, on_done)
-  local base = 'https://proxy.golang.org/' .. M.go_escape(path) .. '/@v/'
-  fetch(base .. 'list', {}, function(text, err)
-    if not text then return on_done(nil, err) end
-    local listed = vim.tbl_filter(
-      function(version) return not M.is_prerelease(version) end,
-      vim.split(text, '\n', { trimempty = true })
-    )
-    local versions = vim.tbl_filter(
-      function(version)
-        return M.compare(M.format(version, current), current) > 0
-      end,
-      listed
-    )
-    table.sort(versions, function(a, b) return M.compare(a, b) > 0 end)
-    -- An empty answer reads as no release listed: a module up to date
-    -- answers the newest it lists, which is no newer
-    if #versions == 0 and #listed > 0 then
-      table.sort(listed, function(a, b) return M.compare(a, b) > 0 end)
-      return on_done({ { version = listed[1] } })
+  go_nonproxy(function(globs)
+    if M.go_private(path, globs) then
+      return on_done(nil, 'private (GONOPROXY): not asked of the public proxy')
     end
-    local releases, index = {}, 0
-    local window = require('tools.lazy-quarantine').window()
-    local function next_version()
-      index = index + 1
-      local version = versions[index]
-      if not version or index > M.GO_LOOKUPS then return on_done(releases) end
-      fetch(base .. encode(version) .. '.info', { json = true }, function(info)
-        local time = info and epoch(info.Time)
-        table.insert(releases, { version = version, time = time })
-        if time and M.now() - time >= window then return on_done(releases) end
-        next_version()
-      end)
-    end
-    next_version()
+    local base = 'https://proxy.golang.org/' .. M.go_escape(path) .. '/@v/'
+    fetch(base .. 'list', {}, function(text, err)
+      if not text then return on_done(nil, err) end
+      local listed = vim.tbl_filter(
+        function(version) return not M.is_prerelease(version) end,
+        vim.split(text, '\n', { trimempty = true })
+      )
+      local versions = vim.tbl_filter(
+        function(version)
+          return M.compare(M.format(version, current), current) > 0
+        end,
+        listed
+      )
+      table.sort(versions, function(a, b) return M.compare(a, b) > 0 end)
+      -- An empty answer reads as no release listed: a module up to date
+      -- answers the newest it lists, which is no newer
+      if #versions == 0 and #listed > 0 then
+        table.sort(listed, function(a, b) return M.compare(a, b) > 0 end)
+        return on_done({ { version = listed[1] } })
+      end
+      local releases, index = {}, 0
+      local window = require('tools.lazy-quarantine').window()
+      local function next_version()
+        index = index + 1
+        local version = versions[index]
+        if not version or index > M.GO_LOOKUPS then return on_done(releases) end
+        fetch(
+          base .. encode(version) .. '.info',
+          { json = true },
+          function(info)
+            local time = info and epoch(info.Time)
+            table.insert(releases, { version = version, time = time })
+            if time and M.now() - time >= window then
+              return on_done(releases)
+            end
+            next_version()
+          end
+        )
+      end
+      next_version()
+    end)
   end)
 end
 
