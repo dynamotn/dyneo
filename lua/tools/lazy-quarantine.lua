@@ -70,6 +70,7 @@ end
 ---@field times table<string, integer>
 ---@field ancestors table<string, { commit: string, cutoff: integer }>
 ---@field tips table<string, { commit: string, at: integer }[]>
+---@field ancestry table<string, boolean> Per `<a>..<b>`, whether commit `a` is an ancestor of `b`: two hashes, so the answer never changes
 
 ---@type DyQuarantineCache?
 local cache
@@ -91,7 +92,7 @@ end
 ---@param path string
 ---@return DyQuarantineCache
 local function read_cache(path)
-  local read = { times = {}, ancestors = {}, tips = {} }
+  local read = { times = {}, ancestors = {}, tips = {}, ancestry = {} }
   local file = io.open(path, 'r')
   if not file then return read end
   local ok, decoded = pcall(vim.json.decode, file:read('*a'))
@@ -112,6 +113,11 @@ local function read_cache(path)
     then
       read.ancestors[hash] = found
     end
+  end
+  for pair, answer in
+    pairs(type(decoded.ancestry) == 'table' and decoded.ancestry or {})
+  do
+    if type(answer) == 'boolean' then read.ancestry[pair] = answer end
   end
   for dir, tips in pairs(type(decoded.tips) == 'table' and decoded.tips or {}) do
     if type(tips) == 'table' then
@@ -167,6 +173,10 @@ function M.merge_cache(ours, theirs, now)
   end
   for hash, found in pairs(theirs.ancestors) do
     ours.ancestors[hash] = ours.ancestors[hash] or found
+  end
+  ours.ancestry = ours.ancestry or {}
+  for pair, answer in pairs(theirs.ancestry or {}) do
+    if ours.ancestry[pair] == nil then ours.ancestry[pair] = answer end
   end
   for dir, tips in pairs(theirs.tips) do
     local at = {}
@@ -383,11 +393,26 @@ local function no_older(plugin, target, held)
   if not current or not current.commit or current.commit == held.commit then
     return held
   end
-  local _, newer = git(
-    plugin.dir,
-    { 'merge-base', '--is-ancestor', held.commit, current.commit }
-  )
-  return newer and current or held
+  -- Asked of every plugin with an update waiting, on the main loop, each
+  -- time lazy.nvim checks: two hashes always give the same answer
+  local known = load_cache()
+  local pair = held.commit .. '..' .. current.commit
+  if known.ancestry[pair] == nil then
+    local result = require('util.system').sync({
+      'git',
+      '-C',
+      plugin.dir,
+      'merge-base',
+      '--is-ancestor',
+      held.commit,
+      current.commit,
+    }, { text = true, timeout = 10000 })
+    -- 1 is no; anything else but 0 (a commit not fetched yet) is no answer
+    if result.code ~= 0 and result.code ~= 1 then return held end
+    known.ancestry[pair] = result.code == 0
+    save_cache()
+  end
+  return known.ancestry[pair] and current or held
 end
 
 --- The target the window allows, wherever the checkout is

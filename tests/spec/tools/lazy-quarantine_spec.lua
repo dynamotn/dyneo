@@ -783,6 +783,36 @@ describe('tools.lazy-quarantine', function()
     assert.are.equal(commits[2], behind.commit)
   end)
 
+  it('asks git once whether a checkout is newer than what is held', function()
+    local dir, commits, cleanup = repository({ 30 * DAY, 20 * DAY, 2 * DAY })
+    h.unload('tools.lazy-quarantine')
+    local quarantine = require('tools.lazy-quarantine')
+    local plugin = { dir = dir, name = 'spec.nvim' }
+    -- The window holds the second, and the checkout is already past it
+    git(dir, { 'reset', '--quiet', '--hard', commits[3] })
+    local function pick()
+      return quarantine.target(
+        plugin,
+        { branch = 'main', commit = commits[3] },
+        nil,
+        now
+      ).commit
+    end
+    local asked = 0
+    local system = require('util.system')
+    local sync = system.sync
+    local restore = h.stub(system, 'sync', function(cmd, opts)
+      if vim.list_contains(cmd, 'merge-base') then asked = asked + 1 end
+      return sync(cmd, opts)
+    end)
+    local first, again = pick(), pick()
+    restore()
+    cleanup()
+    assert.are.equal(commits[3], first)
+    assert.are.equal(commits[3], again)
+    assert.are.equal(1, asked)
+  end)
+
   it('stays on the checkout when git cannot answer', function()
     local dir, commits, cleanup = repository({ 30 * DAY, DAY })
     git(dir, { 'checkout', '--quiet', '--detach', commits[1] })
