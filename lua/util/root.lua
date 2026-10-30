@@ -62,7 +62,11 @@ end
 function M.detectors.pattern(buf, patterns)
   patterns = type(patterns) == 'string' and { patterns } or patterns
   local path = M.bufpath(buf) or vim.uv.cwd()
-  local pattern = vim.fs.find(function(name)
+  -- Plain names are one stat each per directory; a matcher lists every
+  -- directory up to `/`, `$HOME` among them
+  local plain =
+    not vim.iter(patterns):any(function(p) return p:sub(1, 1) == '*' end)
+  local pattern = vim.fs.find(plain and patterns or function(name)
     for _, p in ipairs(patterns) do
       if name == p then return true end
       if p:sub(1, 1) == '*' and name:find(vim.pesc(p:sub(2)) .. '$') then
