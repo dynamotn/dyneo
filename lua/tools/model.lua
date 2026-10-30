@@ -23,6 +23,9 @@ M.MAX_ITEMS = 8
 M.MAX_DIMS = 8
 --- How deep GGUF arrays may nest
 M.MAX_DEPTH = 4
+--- Tensors, and metadata entries, a header may list: a large model has a few
+--- thousand, and a crafted count would build millions of lines
+M.MAX_ENTRIES = 100000
 
 --- Names of the GGML tensor types GGUF stores, by number
 M.GGML_TYPES = {
@@ -307,6 +310,9 @@ local function gguf(r)
     error(('GGUF version %d is not read'):format(version), 0)
   end
   local tensor_count, kv_count = r.u64(), r.u64()
+  if tensor_count > M.MAX_ENTRIES or kv_count > M.MAX_ENTRIES then
+    error(('%d tensors and %d entries'):format(tensor_count, kv_count), 0)
+  end
   local header =
     { format = ('GGUF v%d'):format(version), metadata = {}, tensors = {} }
   for _ = 1, kv_count do
@@ -344,6 +350,7 @@ local function safetensors(r)
   end
   local header = { format = 'safetensors', metadata = {}, tensors = {} }
   local names = vim.tbl_keys(json)
+  if #names > M.MAX_ENTRIES then error(('%d tensors'):format(#names), 0) end
   table.sort(names)
   for _, name in ipairs(names) do
     local entry = json[name]

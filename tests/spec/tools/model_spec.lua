@@ -233,6 +233,8 @@ describe('tools.model', function()
         .. ('\1\0\0\0\0\0\0\0'):rep(9)
         .. le(0, 4)
         .. le(0, 8),
+      -- More tensors than any model has, and nothing behind the count
+      ['count.gguf'] = 'GGUF' .. le(3, 4) .. le(2 ^ 40, 8) .. le(0, 8),
       -- Arrays of arrays, five deep
       ['deep.gguf'] = 'GGUF'
         .. le(3, 4)
@@ -251,6 +253,11 @@ describe('tools.model', function()
       assert.is_nil(header, name)
       assert.is_string(err, name)
     end
+    -- Turned down by its count, before any entry is read
+    assert.matches(
+      'tensors',
+      select(2, model.header(file('count.gguf', crafted['count.gguf'])))
+    )
     -- A header longer than the cap is not read whole
     model.MAX_HEADER = 64
     assert.matches('over', select(2, model.header(file('m.gguf', GGUF))))
