@@ -116,5 +116,14 @@ describe('plugins.toolbox.dial', function()
       lua = { 'l1', 'd1', 'd2' },
       bash = { 'd1', 'd2' },
     }, registered)
+
+    -- An augend an older dial.nvim lacks is nil, not a failed group
+    spec.config(nil, {
+      groups = { default = { 'd1', nil, 'd3', nil, 'd5' }, lua = { nil, 'l2' } },
+    })
+    assert.same({
+      default = { 'd1', 'd3', 'd5' },
+      lua = { 'l2', 'd1', 'd3', 'd5' },
+    }, registered)
   end)
 end)

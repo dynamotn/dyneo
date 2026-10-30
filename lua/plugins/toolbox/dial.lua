@@ -64,6 +64,16 @@ return {
     return opts
   end,
   config = function(_, opts)
+    -- An augend the installed dial.nvim lacks is nil: an older release on the
+    -- stable channel, or a newer one still held in quarantine. It is left
+    -- out, where dial would refuse the whole group, and the mappings with it.
+    for name, group in pairs(opts.groups) do
+      local kept = {}
+      for i = 1, table.maxn(group) do
+        if group[i] ~= nil then kept[#kept + 1] = group[i] end
+      end
+      opts.groups[name] = kept
+    end
     -- copy defaults to each group
     for name, group in pairs(opts.groups) do
       if name ~= 'default' then vim.list_extend(group, opts.groups.default) end
