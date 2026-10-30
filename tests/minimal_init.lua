@@ -109,6 +109,10 @@ vim.opt.swapfile = false
 vim.opt.shadafile = 'NONE'
 -- What a module keeps between sessions -- the AI audit log among it -- goes
 -- next to the tests, not into the state of the Neovim the specs run beside.
+-- mise keeps which configs are trusted there: without them its shims of
+-- `node`, `python3` and the like fail in any directory with a `mise.toml`.
+vim.env.MISE_STATE_DIR = vim.env.MISE_STATE_DIR
+  or vim.fs.joinpath(vim.fs.dirname(vim.fn.stdpath('state')), 'mise')
 vim.env.XDG_STATE_HOME = vim.fs.joinpath(root, '.tests', 'state')
 
 -- Neovim's own `ftplugin/lua.lua` and its like call `vim.treesitter.start`,
