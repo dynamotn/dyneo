@@ -113,15 +113,25 @@ describe('lsp', function()
     local config
     before_each(function() config = load('harper_ls', dir) end)
 
-    it(
-      'points Harper at the merged dictionary',
-      function()
-        assert.are.equal(
-          dir .. '/dictionary.txt',
-          config.settings['harper-ls'].userDictPath
-        )
-      end
-    )
+    it('points Harper at the merged dictionary, once it starts', function()
+      local settings = config.settings
+      assert.is_nil(settings['harper-ls'].userDictPath)
+      config.before_init({}, config)
+      -- The very table the client sends, not a new one
+      assert.are.equal(settings, config.settings)
+      assert.are.equal(
+        dir .. '/dictionary.txt',
+        settings['harper-ls'].userDictPath
+      )
+    end)
+
+    it('starts Harper without the dictionary it cannot write', function()
+      restores[#restores + 1] = h.stub(package.loaded, 'util.harper', {
+        user_dict = function() error('E482: Cannot create file') end,
+      })
+      config.before_init({}, config)
+      assert.is_nil(config.settings['harper-ls'].userDictPath)
+    end)
 
     it('translates filetypes Harper spells differently', function()
       local id = config.get_language_id

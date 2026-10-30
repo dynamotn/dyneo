@@ -390,10 +390,16 @@ return {
   handlers = {
     ['textDocument/publishDiagnostics'] = publish_diagnostics,
   },
-  settings = {
-    ['harper-ls'] = {
-      -- See `util.harper` for why the dictionary is merged and built once
-      userDictPath = require('util.harper').user_dict(),
-    },
-  },
+  -- See `util.harper` for why the dictionary is merged and built once. Built
+  -- as Harper starts, not as this file is read: every server's config is read
+  -- on the first buffer, and a state directory that cannot be written must
+  -- not keep the other servers from starting. Filled in, not replaced: the
+  -- client already holds this table as the settings it sends.
+  settings = { ['harper-ls'] = {} },
+  before_init = function(_, config)
+    local ok, dict = pcall(require('util.harper').user_dict)
+    if not ok then return end
+    config.settings['harper-ls'] = config.settings['harper-ls'] or {}
+    config.settings['harper-ls'].userDictPath = dict
+  end,
 }
