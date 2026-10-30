@@ -177,6 +177,22 @@ describe('config.keymaps', function()
     assert.are.equal('cursor', floats[1].scope)
   end)
 
+  it('keeps the diagnostics of a sensitive buffer off the clipboard', function()
+    local bufnr = h.buffer({ lines = { 'TOKEN=abc' } })
+    vim.api.nvim_set_current_buf(bufnr)
+    require('util.sensitive').mark(bufnr, 'decrypted for the spec')
+    local ns = vim.api.nvim_create_namespace('keymaps_spec_xc')
+    vim.diagnostic.set(ns, bufnr, {
+      { lnum = 0, col = 0, message = 'unknown word "abc"' },
+    })
+    vim.fn.setreg('+', 'before')
+    local restore = h.stub(vim, 'notify', function() end)
+    map('n', ' xc').callback()
+    restore()
+    vim.diagnostic.reset(ns, bufnr)
+    assert.are.equal('before', vim.fn.getreg('+'))
+  end)
+
   it('says when the cursor line has no diagnostics to copy', function()
     vim.api.nvim_set_current_buf(h.buffer({ lines = { 'clean' } }))
     local messages = {}

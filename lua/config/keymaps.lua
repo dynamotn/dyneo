@@ -254,6 +254,13 @@ map('n', '[w', diagnostic_goto(false, 'WARN'), { desc = 'Prev Warning' })
 
 -- The diagnostics of the cursor line, to paste into an issue or a chat
 map('n', '<leader>xc', function()
+  -- A linter's message may quote the line it is about
+  if vim.b.dy_encrypted or require('util.sensitive').is_sensitive(0) then
+    return require('util.notify').titled('Keys')(
+      'Not copying a sensitive buffer to the clipboard',
+      vim.log.levels.WARN
+    )
+  end
   local lnum = vim.api.nvim_win_get_cursor(0)[1] - 1
   local messages = vim.tbl_map(
     function(diagnostic)

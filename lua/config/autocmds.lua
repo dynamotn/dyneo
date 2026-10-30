@@ -27,8 +27,9 @@ vim.api.nvim_create_autocmd({ 'VimResized' }, {
   group = augroup('resize_splits'),
   callback = function()
     local current_tab = vim.fn.tabpagenr()
-    vim.cmd('tabdo wincmd =')
-    vim.cmd('tabnext ' .. current_tab)
+    -- Visiting each tab would run every `BufEnter` handler once per resize
+    vim.cmd('noautocmd tabdo wincmd =')
+    vim.cmd('noautocmd tabnext ' .. current_tab)
   end,
 })
 
