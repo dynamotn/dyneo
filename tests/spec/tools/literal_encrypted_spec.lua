@@ -157,6 +157,23 @@ describe('tools.encrypted', function()
     assert.equals('Written, encrypted with sops', notes[#notes])
   end)
 
+  it('leaves a buffer of a URL alone, running nothing', function()
+    local bufnr = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_name(bufnr, 'fugitive://' .. dir .. '/.git//0/v.yaml')
+    vim.api.nvim_buf_set_lines(
+      bufnr,
+      0,
+      -1,
+      false,
+      { 'x: ENC[AES256_GCM,data:x]', 'sops:' }
+    )
+    vim.bo[bufnr].modifiable = false
+    assert.is_false(decrypt(bufnr))
+    assert.is_nil(vim.uv.fs_stat(log))
+    assert.same({}, notes)
+    assert.is_false(vim.bo[bufnr].modifiable)
+  end)
+
   describe('a pull request under review', function()
     --- Open `file` as the hook does, and say whether anything ran
     local function open_left(file)

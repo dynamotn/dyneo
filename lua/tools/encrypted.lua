@@ -327,6 +327,9 @@ function M.open(bufnr, on_done)
     return on_done(false)
   end
   local file = vim.api.nvim_buf_get_name(bufnr)
+  -- `fugitive://` and its like: no file the tools could read, and a buffer
+  -- its plugin set up as it wants
+  if file:match('^%a[%w+.-]*://') then return on_done(false) end
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local kind = M.kind(lines, file)
   if not kind then return on_done(false) end
