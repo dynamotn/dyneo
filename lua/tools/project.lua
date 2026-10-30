@@ -116,17 +116,19 @@ local function draw(bufnr)
   end
 end
 
---- Run `command` in `dir`, handing `on_done` its output lines or nil
+--- Run `command` in `dir`, handing `on_done` its output lines, or nil and
+--- why not
 ---@param command string[]
 ---@param dir string
----@param on_done fun(lines: string[]?)
+---@param on_done fun(lines: string[]?, result: DyRunResult?)
 ---@param separator? string What the records end with, a newline unless given
 local function run(command, dir, on_done, separator)
   require('util.system').run(
     command,
     { cwd = dir, timeout = forge.TIMEOUT },
     function(result)
-      if result.code ~= 0 then return on_done(nil) end
+      -- A list cut short would read as all there is
+      if result.code ~= 0 or result.cut then return on_done(nil, result) end
       on_done(
         vim.split(
           result.stdout or '',
@@ -164,8 +166,14 @@ function M.git(root, set)
   -- `-z`: paths as they are, where a newline-separated list C-quotes one
   -- with a space or a non-ASCII letter
   local command = { 'git', 'status', '--porcelain=v1', '--branch', '-z' }
-  run(command, root, function(lines)
-    if not lines then return set('skipped', 'not a git repository') end
+  run(command, root, function(lines, result)
+    if not lines then
+      -- git says so with exit 128; a timeout, a cut or no git is a failure
+      if result and result.code == 128 and not result.timed_out then
+        return set('skipped', 'not a git repository')
+      end
+      return set('failed', require('util.system').failure(result, 'git'))
+    end
     local head = table.remove(lines, 1) or ''
     -- `## main...origin/main [ahead 1]`, `## main`, `## No commits yet on main`
     local branch = head:match('^## No commits yet on (%S+)')

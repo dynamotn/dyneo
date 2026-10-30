@@ -103,6 +103,23 @@ describe('tools.project', function()
     assert.equals('done', got[1])
   end)
 
+  it('tells a directory out of git from a git that failed', function()
+    local got
+    local function ask(root)
+      got = nil
+      project.git(root, function(state, note) got = { state, note } end)
+      assert.is_true(vim.wait(5000, function() return got ~= nil end, 10))
+      return got
+    end
+    -- Not under any repository, whatever the temporary directory is in
+    vim.env.GIT_CEILING_DIRECTORIES = vim.fs.dirname(dir)
+    local outside = ask(dir)
+    vim.env.GIT_CEILING_DIRECTORIES = nil
+    assert.same({ 'skipped', 'not a git repository' }, outside)
+    cli('git', { 'echo "index.lock exists" >&2', 'exit 1' })
+    assert.same({ 'failed', 'index.lock exists' }, ask(dir))
+  end)
+
   it('counts the diagnostics of the project, errors first', function()
     local ns = vim.api.nvim_create_namespace('project_spec')
     local inside = h.buffer({ name = dir .. '/x.lua', lines = { 'a', 'b' } })
