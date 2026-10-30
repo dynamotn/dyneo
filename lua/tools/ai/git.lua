@@ -32,7 +32,12 @@ function M.root(bufnr, on_done)
   if name:find('/%.git/') then
     local ok, gitdir = pcall(vim.fn.readfile, dir .. '/gitdir', '', 1)
     if ok and gitdir[1] then
-      return on_done(vim.fs.dirname(vim.trim(gitdir[1])))
+      -- Relative to this directory under `worktree.useRelativePaths`
+      local path = vim.trim(gitdir[1])
+      if path:sub(1, 1) ~= '/' then
+        path = vim.fs.normalize(vim.fs.joinpath(dir, path))
+      end
+      return on_done(vim.fs.dirname(path))
     elseif dir:match('/%.git$') then
       return on_done(vim.fs.dirname(dir))
     end

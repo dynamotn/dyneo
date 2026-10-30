@@ -55,6 +55,16 @@ describe('tools.ai.git', function()
     )
   end)
 
+  it('finds a linked worktree named relative to its gitdir', function()
+    git('worktree', 'add', '-q', '--relative-paths', dir .. '/rel', '-b', 'rel')
+    local bufnr =
+      h.buffer({ name = repo .. '/.git/worktrees/rel/COMMIT_EDITMSG' })
+    assert.equals(
+      vim.uv.fs_realpath(dir .. '/rel'),
+      vim.uv.fs_realpath(await(function(cb) git_tool.root(bufnr, cb) end))
+    )
+  end)
+
   it('says when a buffer is in no work tree', function()
     local bufnr = h.buffer({ name = dir .. '/loose.txt' })
     local root, err = await(function(cb) git_tool.root(bufnr, cb) end)

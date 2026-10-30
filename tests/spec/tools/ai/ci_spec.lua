@@ -218,6 +218,18 @@ describe('tools.ai.ci', function()
       assert.equals('third', text)
     end)
 
+    it('cleans only the end of a log of megabytes, and says so', function()
+      ai_ci.TAIL = 10
+      local log = ('\27[31mnoise\27[0m\n'):rep(100000) .. 'the error\n'
+      local text, cut = ai_ci.tail(log)
+      assert.is_true(cut)
+      assert.equals('the error', text)
+      -- Coloured lines it cleans to nothing still leave the start out
+      local short, short_cut = ai_ci.tail(('\27[0m\n'):rep(20) .. 'x')
+      assert.is_true(short_cut)
+      assert.equals('x', vim.trim(short))
+    end)
+
     it(
       'keeps what a line redrawn with \\r showed last',
       function() assert.equals('100%', (ai_ci.tail('10%\r50%\r100%'))) end

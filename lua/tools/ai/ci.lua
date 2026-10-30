@@ -142,6 +142,15 @@ end
 ---@return string text
 ---@return boolean cut Whether the start was left out
 function M.tail(log)
+  -- Only the end is kept: the megabytes before it are not cleaned on the
+  -- main loop first. Four times over leaves room for what cleaning removes.
+  local precut = false
+  if #log > M.TAIL * 4 then
+    local start = log:find('\n', #log - M.TAIL * 4, true)
+    if start then
+      log, precut = log:sub(start + 1), true
+    end
+  end
   local lines = {}
   for line in (log .. '\n'):gmatch('(.-)\r?\n') do
     line = line:gsub('section_%a+:%d+:[^\r]*\r', '')
@@ -154,7 +163,7 @@ function M.tail(log)
     table.remove(lines)
   end
   local text = table.concat(lines, '\n')
-  if #text <= M.TAIL then return text, false end
+  if #text <= M.TAIL then return text, precut end
   local start = text:find('\n', #text - M.TAIL, true) or (#text - M.TAIL)
   return text:sub(start + 1), true
 end
