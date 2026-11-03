@@ -41,6 +41,7 @@
 :DyOutdated	dyneo.txt	/*:DyOutdated*
 :DyOwners	dyneo.txt	/*:DyOwners*
 :DyPostmortem	dyneo.txt	/*:DyPostmortem*
+:DyProfile	dyneo.txt	/*:DyProfile*
 :DyProject	dyneo.txt	/*:DyProject*
 :DyPromQL	dyneo.txt	/*:DyPromQL*
 :DyQuarantine	dyneo.txt	/*:DyQuarantine*
@@ -146,6 +147,7 @@ dyneo-owners	dyneo.txt	/*dyneo-owners*
 dyneo-per-machine	dyneo.txt	/*dyneo-per-machine*
 dyneo-policy	dyneo.txt	/*dyneo-policy*
 dyneo-postmortem	dyneo.txt	/*dyneo-postmortem*
+dyneo-profile	dyneo.txt	/*dyneo-profile*
 dyneo-project	dyneo.txt	/*dyneo-project*
 dyneo-promql	dyneo.txt	/*dyneo-promql*
 dyneo-quarantine	dyneo.txt	/*dyneo-quarantine*

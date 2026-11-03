@@ -223,8 +223,14 @@ one of the same keys in those buffers.
 <leader>dp  profiler
 
 `<leader>dpS`          n      Startup Time
+`<leader>dpa`          n      Toggle Profile Annotations
+`<leader>dpc`          n      Hottest Callers
+`<leader>dpf`          n      Hottest Functions
 `<leader>dph`          n      Toggle Profiler Highlights
+`<leader>dpl`          n      Hottest Lines
+`<leader>dpo`          n      Open Profile
 `<leader>dpp`          n      Toggle Profiler
+`<leader>dpr`          n      Profile Program
 `<leader>dps`          n      Profiler Scratch Buffer
 
 ==============================================================================

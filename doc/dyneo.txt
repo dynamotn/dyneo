@@ -64,6 +64,7 @@ CONTENTS                                                      *dyneo-contents*
        7.8 AsyncAPI documents ............................... |dyneo-asyncapi|
        7.9 Protobuf and GraphQL contracts ................... |dyneo-breaking|
        7.10 PromQL ............................................ |dyneo-promql|
+       7.11 Profiling ........................................ |dyneo-profile|
     8. Data and machine learning ................................ |dyneo-data|
        8.1 Data files ..................................... |dyneo-data-files|
        8.2 SQL and databases ..................................... |dyneo-sql|
@@ -1227,6 +1228,39 @@ its own host.
 (a file with `rule_files:`), or `promtool check rules` on a rule file
 (`groups:`), from the file's folder; a failure opens what promtool said.
 
+7.11 Profiling                                                 *dyneo-profile*
+
+`<leader>dpr` (|:DyProfile|) runs the program of the buffer under a
+sampling profiler, in a terminal below, where it can be typed to and
+stopped with `<C-c>`.  Once it exits, its hot lines are marked on the code
+by perfanno.nvim.  The profiler follows the filetype:
+
+  Python            `py-spy record` of `python3 {file}`; on macOS py-spy
+                    needs root, so record there by hand with `sudo` and
+                    `:DyProfile load` the result
+  Go                `go test -cpuprofile` in the package of the file
+  JavaScript and    `node --cpu-prof {file}` (TypeScript needs a Node that
+  TypeScript        strips types, 23.6 and later)
+  C, C++, Rust, Zig `perf record --call-graph dwarf`, Linux only; the
+                    program to run is required: `:DyProfile ./build/app`
+
+Arguments replace the program run: `:DyProfile uv run app.py` for Python,
+`:DyProfile -bench . -run ^$` for the flags of `go test`.
+
+`<leader>dpo` (`:DyProfile load {file}`) reads a profile recorded elsewhere:
+a pprof file (`.pprof`, `.prof`, through `go tool pprof`), a `.cpuprofile`
+or a directory of them, a `perf.data` (through `perf report`), or collapsed
+stacks as py-spy `--format raw` and flamegraph.pl write them.  Node keeps
+the line of few samples; the others fall on the line their function starts.
+
+Then:
+  `<leader>dpa`   toggle the marks
+  `<leader>dpf`   the hottest functions
+  `<leader>dpl`   the hottest lines
+  `<leader>dpc`   the hottest callers of the function under the cursor
+
+`<leader>dpp` and its neighbours profile Neovim itself (snacks.nvim).
+
 ------------------------------------------------------------------------------
 8. DATA AND MACHINE LEARNING                                      *dyneo-data*
 
@@ -2350,6 +2384,13 @@ Operations ~
                                                                     *:DyQuery*
 :DyQuery [{expr}]       Try {expr}, `.` unless given, against this JSON or
                         YAML buffer as it is typed.  See |dyneo-query|.
+
+                                                                  *:DyProfile*
+:DyProfile [{cmd}]      Run the program of the buffer, or {cmd}, under a
+                        sampling profiler and mark its hot lines.
+:DyProfile load [{file}]
+                        Read a profile recorded elsewhere.  See
+                        |dyneo-profile|.
 
 Data and machine learning ~
                                                                      *:DyData*

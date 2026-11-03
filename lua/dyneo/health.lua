@@ -566,6 +566,8 @@ local function requirements()
     dyff = '`:DyEnvDiff` on YAML, JSON and TOML (a line diff without it)',
     semgrep = 'linting a project with `.semgrep.yml` (`:MasonInstall semgrep`)',
     duckdb = '`:DyData` and opening a Parquet file (`:MasonInstall duckdb`)',
+    ['py-spy'] = '`:DyProfile` on Python (`uv tool install py-spy`)',
+    perf = '`:DyProfile` on C, C++, Rust and Zig (Linux only)',
     tofu = '`:DyTfPlan` and `:DyTfState` (or `terraform`)',
     claude = '`:DyAi commit` (`DyNeo.ai.commit_command`) and claudecode.nvim',
     ['claude-agent-acp'] = "Avante's default `claude-code` provider",

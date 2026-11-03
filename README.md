@@ -145,6 +145,9 @@ below follow the sections of `:help dyneo`.
   buffer as it is typed, the result beside it. `:DyQuery`
 - **Tasks** — run, build and test the current file or project in ~50
   languages. `<leader>oo`
+- **Profiling** — the program of the buffer run under py-spy, Go's pprof,
+  Node's `--cpu-prof` or perf, its hot lines marked on the code.
+  `:DyProfile`
 
 ### 📊 Data and ML — `<leader>D`
 

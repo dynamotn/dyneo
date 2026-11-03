@@ -146,6 +146,7 @@
   "outline.nvim": { "branch": "main", "commit": "d8e48fe265fa9c33364809bf9cf32a1f032a8ac1" },
   "overseer.nvim": { "branch": "master", "commit": "a93d9f6d6defdac4bcd6d2c8ba988650e42e0a0e" },
   "pantran.nvim": { "branch": "main", "commit": "b87c3ae48cba4659587fb75abd847e5b7a7c9ca0" },
+  "perfanno.nvim": { "branch": "master", "commit": "7b4b876374607b139a029563ad0a27065edcaf7b" },
   "persistence.nvim": { "branch": "main", "commit": "b20b2a7887bd39c1a356980b45e03250f3dce49c" },
   "plenary.nvim": { "branch": "master", "commit": "74b06c6c75e4eeb3108ec01852001636d85a932b" },
   "quarto-nvim": { "branch": "main", "commit": "17f1e5d664bc615478230dc0240666329efacf9b" },
