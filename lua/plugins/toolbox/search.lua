@@ -1,3 +1,10 @@
+--- The files of the buffer's extension, for a search to start from
+---@return string?
+local function same_extension()
+  local ext = vim.bo.buftype == '' and vim.fn.expand('%:e')
+  return ext and ext ~= '' and '*.' .. ext or nil
+end
+
 return {
   {
     -- Search and replace across files
@@ -8,17 +15,33 @@ return {
       {
         '<leader>sr',
         function()
-          local grug = require('grug-far')
-          local ext = vim.bo.buftype == '' and vim.fn.expand('%:e')
-          grug.open({
+          require('grug-far').open({
             transient = true,
-            prefills = {
-              filesFilter = ext and ext ~= '' and '*.' .. ext or nil,
-            },
+            prefills = { filesFilter = same_extension() },
           })
         end,
         mode = { 'n', 'x' },
         desc = 'Search and Replace',
+      },
+      {
+        -- Structural search: a pattern of code with `$A` holes, matched on
+        -- the syntax tree rather than the text
+        '<leader>sA',
+        function()
+          if vim.fn.executable('ast-grep') == 0 then
+            require('util.lazy_install').install_once('ast-grep')
+            return vim.notify(
+              'Installing ast-grep with Mason; press again once it is done',
+              vim.log.levels.WARN
+            )
+          end
+          require('grug-far').open({
+            engine = 'astgrep',
+            transient = true,
+            prefills = { filesFilter = same_extension() },
+          })
+        end,
+        desc = 'Structural Search and Replace',
       },
       {
         '<leader>sf',

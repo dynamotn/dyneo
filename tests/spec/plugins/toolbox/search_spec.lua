@@ -67,6 +67,41 @@ describe('plugins.toolbox.search', function()
       assert.is_nil(opened.prefills.filesFilter)
     end)
 
+    it('searches by syntax tree with ast-grep', function()
+      table.insert(
+        restores,
+        h.stub(vim.fn, 'executable', function() return 1 end)
+      )
+      vim.api.nvim_set_current_buf(h.buffer({ name = '/tmp/dy/a.go' }))
+      key('MagicDuck/grug-far.nvim', '<leader>sA')[2]()
+      assert.are.equal('astgrep', opened.engine)
+      assert.is_true(opened.transient)
+      assert.are.equal('*.go', opened.prefills.filesFilter)
+    end)
+
+    it('installs ast-grep instead of opening without it', function()
+      local installed, notified
+      table.insert(
+        restores,
+        h.stub(vim.fn, 'executable', function() return 0 end)
+      )
+      table.insert(
+        restores,
+        h.stub(package.loaded, 'util.lazy_install', {
+          install_once = function(name) installed = name end,
+        })
+      )
+      table.insert(
+        restores,
+        h.stub(vim, 'notify', function(msg) notified = msg end)
+      )
+      opened = nil
+      key('MagicDuck/grug-far.nvim', '<leader>sA')[2]()
+      assert.is_nil(opened)
+      assert.are.equal('ast-grep', installed)
+      assert.matches('ast%-grep', notified)
+    end)
+
     it('replaces within the file of the buffer', function()
       vim.api.nvim_set_current_buf(h.buffer({ name = '/tmp/dy/a.lua' }))
       key('MagicDuck/grug-far.nvim', '<leader>sf')[2]()

@@ -2026,6 +2026,10 @@ Code ~
     `<leader>cyr`      n      Hand the YAML schema back to detection
     `<leader>xw`       n      Workspace diagnostics
     `<leader>ct`       n      Translate
+    `<leader>sA`       n      Structural search and replace: a pattern of
+                              code such as `foo($A, $B)`, matched on the
+                              syntax tree by ast-grep (installed by Mason
+                              the first time)
 
 Supply chain and secrets (|dyneo-security|) ~
     `<leader>kq`       n      Updates the quarantine holds back

@@ -502,6 +502,7 @@ one of the same keys in those buffers.
 `<leader>s"`           n      Registers
 `<leader>s.`           n      All Pickers
 `<leader>s/`           n      Search History
+`<leader>sA`           n      Structural Search and Replace
 `<leader>sB`           n      Grep Open Buffers
 `<leader>sC`           n      Commands
 `<leader>sD`           n      Buffer Diagnostics
