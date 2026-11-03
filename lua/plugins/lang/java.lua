@@ -33,14 +33,14 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
           -- Looked up on `$PATH` when the server starts: Mason may still be
           -- installing it when the first Java file loads this
           local cmd = { 'jdtls' }
-          if require('util.plugin').has('mason.nvim') then
-            table.insert(
-              cmd,
-              string.format(
-                '--jvm-arg=-javaagent:%s',
-                vim.fn.expand('$MASON/share/jdtls/lombok.jar')
-              )
-            )
+          -- OpenIDEA's Lombok reads `lombok.config` again under the Equinox
+          -- jdtls ships; Mason's is the one until that is fetched
+          local lombok = require('tools.openidea').ready('lombok')
+          if not lombok and require('util.plugin').has('mason.nvim') then
+            lombok = vim.fn.expand('$MASON/share/jdtls/lombok.jar')
+          end
+          if lombok then
+            table.insert(cmd, string.format('--jvm-arg=-javaagent:%s', lombok))
           end
           return {
             root_dir = function(path)
@@ -146,7 +146,10 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
               cmd = opts.full_cmd(opts, bufnr),
               root_dir = opts.root_dir(fname),
               init_options = {
-                bundles = bundles,
+                bundles = vim.list_extend(
+                  vim.deepcopy(bundles),
+                  { require('tools.openidea').ready('usages') }
+                ),
               },
               settings = opts.settings,
               -- enable CMP capabilities
@@ -225,6 +228,9 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
                     },
                   },
                 })
+                -- References through OpenIDEA's usages, read and write told
+                -- apart, once its bundle is in the server
+                require('tools.openidea').attach(client)
                 wk.add({
                   {
                     mode = 'x',
@@ -312,6 +318,16 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
               end
             end,
           })
+
+          -- OpenIDEA's add-ons, once out of quarantine; they serve from the
+          -- next start of the server
+          require('tools.openidea').fetch(function(ok, fetched)
+            if ok and fetched > 0 then
+              require('util.notify').titled('OpenIDEA')(
+                'Java add-ons fetched; `:JdtRestart` to use them'
+              )
+            end
+          end)
 
           -- Avoid race condition by calling attach the first time, since the autocmd won't fire.
           attach_jdtls(vim.api.nvim_get_current_buf())

@@ -1,7 +1,7 @@
 local h = require('helpers')
 
 describe('plugins.lang.java', function()
-  local restores, specs
+  local restores, specs, jars, fetched, attached
 
   --- The spec of `name` among those `plugins.lang.java` returns
   local function spec(name)
@@ -12,8 +12,28 @@ describe('plugins.lang.java', function()
 
   before_each(function()
     h.globals()
-    restores = {}
+    -- OpenIDEA's jars as the spec says they are; never fetched for real
+    jars, fetched, attached = {}, 0, {}
+    restores = {
+      h.stub(package.loaded, 'tools.openidea', {
+        ready = function(name) return jars[name] end,
+        fetch = function() fetched = fetched + 1 end,
+        attach = function(client) table.insert(attached, client.id) end,
+      }),
+    }
     specs = dofile(h.root .. '/lua/plugins/lang/java.lua')
+  end)
+
+  it("runs OpenIDEA's Lombok once it is fetched, else Mason's", function()
+    table.insert(
+      restores,
+      h.stub(require('util.plugin'), 'has', function() return true end)
+    )
+    local cmd = spec('mfussenegger/nvim-jdtls').opts().cmd
+    assert.matches('lombok%.jar$', cmd[2])
+    jars.lombok = '/data/openidea/lombok-1.18.48-openidea.1.jar'
+    cmd = spec('mfussenegger/nvim-jdtls').opts().cmd
+    assert.equals('--jvm-arg=-javaagent:' .. jars.lombok, cmd[2])
   end)
   after_each(function()
     for i = #restores, 1, -1 do
@@ -86,6 +106,19 @@ describe('plugins.lang.java', function()
       function() pcall(vim.api.nvim_del_augroup_by_name, 'dyneo_jdtls') end
     )
 
+    it("hands jdtls OpenIDEA's usages bundle once it is fetched", function()
+      vim.api.nvim_set_current_buf(h.buffer({ name = '/work/six/A.java' }))
+      spec('mfussenegger/nvim-jdtls').config(nil, opts)
+      assert.equals(1, fetched)
+      assert.same({}, started[#started].config.init_options.bundles)
+      jars.usages = '/data/openidea/java-usages-1.2.0.jar'
+      h.buffer({ name = '/work/six/B.java', filetype = 'java' })
+      assert.same(
+        { jars.usages },
+        started[#started].config.init_options.bundles
+      )
+    end)
+
     it('starts the server for the buffer that turned Java', function()
       local first = h.buffer({ name = '/work/one/A.java' })
       vim.api.nvim_set_current_buf(first)
@@ -129,6 +162,8 @@ describe('plugins.lang.java', function()
         })
       end
       assert.are.equal(2, #scans)
+      -- References through OpenIDEA's usages, for every client
+      assert.same({ 7, 7, 8 }, attached)
     end)
 
     it('lets the project extend or replace the server config', function()

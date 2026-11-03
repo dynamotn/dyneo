@@ -299,4 +299,20 @@ describe('util.lsp', function()
       end)
     end)
   end)
+
+  it('labels a reference by its access, once OpenIDEA answered', function()
+    local item = { file = '/p/A.java', pos = { 3, 4 }, line = 'x = 1;' }
+    lsp.label_access(item)
+    assert.equals('x = 1;', item.line)
+    local restore = h.stub(package.loaded, 'tools.openidea', {
+      label = function(file, lnum, col)
+        if file == '/p/A.java' and lnum == 3 and col == 4 then
+          return '[write]'
+        end
+      end,
+    })
+    lsp.label_access(item)
+    restore()
+    assert.equals('[write] x = 1;', item.line)
+  end)
 end)

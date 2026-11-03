@@ -128,6 +128,7 @@ dyneo-infra	dyneo.txt	/*dyneo-infra*
 dyneo-inspect	dyneo.txt	/*dyneo-inspect*
 dyneo-install	dyneo.txt	/*dyneo-install*
 dyneo-integrations	dyneo.txt	/*dyneo-integrations*
+dyneo-java	dyneo.txt	/*dyneo-java*
 dyneo-keymaps	dyneo-keymaps.txt	/*dyneo-keymaps*
 dyneo-keymaps.txt	dyneo-keymaps.txt	/*dyneo-keymaps.txt*
 dyneo-kube	dyneo.txt	/*dyneo-kube*

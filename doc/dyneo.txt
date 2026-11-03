@@ -32,6 +32,7 @@ CONTENTS                                                      *dyneo-contents*
        4.1 Tooling that installs itself ................. |dyneo-lazy-install|
        4.2 Buffer servers and tools ....................... |dyneo-statusline|
        4.3 Workspace diagnostics ........................... |dyneo-workspace|
+       4.4 Java usages and Lombok ............................... |dyneo-java|
     5. Supply chain and secrets ............................. |dyneo-security|
        5.1 Quarantine ..................................... |dyneo-quarantine|
        5.2 SBOM and vulnerabilities ............................. |dyneo-sbom|
@@ -423,6 +424,25 @@ Unlike the plugin it replaces, the file list and the contents are read off the
 main loop, so a big repository does not freeze the editor, and each document
 is closed again before Neovim opens the same file for real, so no server ever
 sees two `didOpen` for one URI.
+
+4.4 Java usages and Lombok                                        *dyneo-java*
+
+jdtls gets two add-ons of OpenIDEA:
+
+  `java-usages`     answers the server's own references, so `gr`, Trouble
+                    and the quickfix list get a field together with its
+                    getter, setter and builder; the `gr` picker marks each
+                    one `[read]`, `[write]` or `[read/write]`.
+  Lombok            an agent that reads `lombok.config` again under the
+                    Equinox jdtls ships, in place of Mason's.
+
+Neither has a release: both are fetched from one commit of the OpenIDEA
+repository, the first time a Java file opens, and kept only when their
+SHA-256 is the one `tools.openidea` pins.  That commit waits out
+`DyNeo.quarantine_window` like any release; until then nothing is fetched
+and jdtls runs as before.  A fetched jar serves from the next start of the
+server, `:JdtRestart`.  Without it, or when it fails, references are the
+server's plain ones.
 
 ------------------------------------------------------------------------------
 5. SUPPLY CHAIN AND SECRETS                                   *dyneo-security*

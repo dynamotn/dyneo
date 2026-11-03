@@ -89,7 +89,11 @@ describe('plugins.toolbox.picker', function()
   it('lists the LSP answers of every server through the picker', function()
     local keys = lspconfig.opts.servers['*'].keys
     assert.same({ { 'lsp_definitions' } }, press(keys, 'gd'))
-    assert.same({ { 'lsp_references' } }, press(keys, 'gr'))
+    -- References are labelled read or write where OpenIDEA answered
+    assert.same(
+      { { 'lsp_references', { transform = require('util.lsp').label_access } } },
+      press(keys, 'gr')
+    )
     assert.same({ { 'lsp_implementations' } }, press(keys, 'gI'))
     assert.same({ { 'lsp_type_definitions' } }, press(keys, 'gy'))
     assert.same({ { 'lsp_incoming_calls' } }, press(keys, '<leader>cki'))

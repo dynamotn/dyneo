@@ -183,4 +183,16 @@ function M.codelens.toggle()
   codelens.enable(not codelens.is_enabled({ bufnr = buf }), { bufnr = buf })
 end
 
+--- A picker `transform` putting `[read]`, `[write]` or `[read/write]` before
+--- a reference jdtls answered through OpenIDEA's usages (`tools.openidea`)
+---@param item { file?: string, pos?: integer[], line?: string }
+function M.label_access(item)
+  local openidea = package.loaded['tools.openidea']
+  local label = openidea
+    and item.file
+    and item.pos
+    and openidea.label(item.file, item.pos[1], item.pos[2])
+  if label then item.line = label .. ' ' .. (item.line or '') end
+end
+
 return M
