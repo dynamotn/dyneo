@@ -44,7 +44,7 @@ snippet license
   chore(license): use ${1:license}
 
 snippet backup
-  chore: backup `strftime("%Y-%m-%d")`
+  chore: backup `strftime("%Y-%m-%dT%H:%M:%S") .. substitute(strftime("%z"), '\d\d$', ':&', '')`
 
 snippet break breaking changes
   BREAKING CHANGES:
