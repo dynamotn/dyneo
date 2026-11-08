@@ -1823,6 +1823,8 @@ return {
     -- lspconfig hands `djlsp` every `html` buffer as well
     lsp_servers = {
       { 'djlsp', filetypes = { 'htmldjango' } },
+      -- `hx-*` attributes and their values, the way htmx pairs with Django
+      'htmx',
       'tailwindcss',
       'harper_ls',
     },
