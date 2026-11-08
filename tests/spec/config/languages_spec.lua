@@ -377,6 +377,17 @@ describe('config.languages callbacks', function()
     )
   end)
 
+  it('starts stimulus_ls in a Rails app with Stimulus controllers', function()
+    local stimulus = entry(languages.rails.lsp_servers, 'stimulus_ls')
+    h.write(dir .. '/app/Gemfile', {})
+    local view = buffer(dir .. '/app/app/views/a/index.html.erb', {}, 'eruby')
+    assert.is_false(stimulus.enabled(view))
+    vim.fn.mkdir(dir .. '/app/app/javascript/controllers', 'p')
+    assert.is_true(stimulus.enabled(view))
+    local loose = buffer(dir .. '/loose.html.erb', {}, 'eruby')
+    assert.is_false(stimulus.enabled(loose))
+  end)
+
   describe('servers of every buffer', function()
     local servers = languages['*'].lsp_servers
 

@@ -14,7 +14,15 @@ describe('plugins.lang.ruby', function()
     specs[1].dependencies.config()
     restore()
     assert.is_true(set_up)
-    assert.same({ 'ruby' }, specs[2].dependencies.ft)
+    -- RSpec and Minitest, both loaded with a Ruby file
+    assert.same(
+      { 'olimorris/neotest-rspec', 'zidhuss/neotest-minitest' },
+      vim.tbl_map(function(dep) return dep[1] end, specs[2].dependencies)
+    )
+    for _, dep in ipairs(specs[2].dependencies) do
+      assert.same({ 'ruby' }, dep.ft)
+    end
     assert.same({}, specs[2].opts.adapters['neotest-rspec'])
+    assert.same({}, specs[2].opts.adapters['neotest-minitest'])
   end)
 end)

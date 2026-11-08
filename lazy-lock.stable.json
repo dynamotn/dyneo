@@ -95,6 +95,7 @@
   "neotest-haskell": { "branch": "main", "commit": "9e3aa597f3548cf809c23e4d2520d6656af8cb61" },
   "neotest-java": { "branch": "main", "commit": "51a1389b66e0dbdae628c1dab9f1cfd4e9b0c6f6" },
   "neotest-jest": { "branch": "main", "commit": "0e7979d51301dfae5ef839d771bd28cf593fde3f" },
+  "neotest-minitest": { "branch": "main", "commit": "4d1c19f80be0efff7656dea76a589c02bf418b68" },
   "neotest-phpunit": { "branch": "main", "commit": "40e53c4294726a16f34f1a383a94c570553c6d46" },
   "neotest-playwright": { "branch": "master", "commit": "6266945039dac27a354de33d2f2a66e75485d5e9" },
   "neotest-plenary": { "branch": "master", "commit": "3523adcf9ffaad1911960c5813b0136c1b63a2ec" },

@@ -1237,7 +1237,21 @@ return {
     parser = 'embedded_template',
     injected_parsers = { 'html', 'ruby' },
     ext = 'erb',
-    lsp_servers = { 'ruby_lsp', 'tailwindcss', 'harper_ls' },
+    lsp_servers = {
+      'ruby_lsp',
+      -- `data-controller`, its targets and actions, in an app that keeps
+      -- Stimulus controllers where Rails puts them
+      {
+        'stimulus_ls',
+        enabled = function(bufnr)
+          local root = vim.fs.root(bufnr, 'Gemfile')
+          return root ~= nil
+            and vim.fn.isdirectory(root .. '/app/javascript/controllers') == 1
+        end,
+      },
+      'tailwindcss',
+      'harper_ls',
+    },
     linters = {
       -- nvim-lint runs it through `bundle exec`, which needs a Gemfile naming
       -- it; Mason's gem is called directly instead.
@@ -1277,7 +1291,7 @@ return {
     formatters = { 'rubocop' },
     -- nvim-dap-ruby brings the adapter; `rdbg` is the debugger it runs
     dap = { { 'ruby', mason = { package = 'rdbg' } } },
-    test = { 'neotest-rspec', 'vim-test' },
+    test = { 'neotest-rspec', 'neotest-minitest', 'vim-test' },
     endwise = true,
   },
   rust = {

@@ -16,13 +16,15 @@ return vim.list_contains(DyNeo.enabled_languages, 'ruby')
       {
         -- Test adapter
         'nvim-neotest/neotest',
+        -- RSpec for `*_spec.rb`, Minitest for `*_test.rb`, Rails' default
         dependencies = {
-          'olimorris/neotest-rspec',
-          ft = language.filetypes,
+          { 'olimorris/neotest-rspec', ft = language.filetypes },
+          { 'zidhuss/neotest-minitest', ft = language.filetypes },
         },
         opts = {
           adapters = {
             ['neotest-rspec'] = {},
+            ['neotest-minitest'] = {},
           },
         },
       },
