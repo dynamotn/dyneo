@@ -319,6 +319,64 @@ describe('config.languages callbacks', function()
     )
   end)
 
+  describe('a JavaScript project', function()
+    local restores, prettier_root, biome_root
+
+    before_each(function()
+      prettier_root, biome_root = nil, nil
+      restores = {
+        h.stub(package.loaded, 'conform.formatters.prettier', {
+          cwd = function() return prettier_root end,
+        }),
+        h.stub(package.loaded, 'conform.formatters.biome', {
+          cwd = function() return biome_root end,
+        }),
+      }
+    end)
+    after_each(function()
+      for i = #restores, 1, -1 do
+        restores[i]()
+      end
+    end)
+
+    it('formats with prettier only where it is configured', function()
+      local prettier =
+        entry(languages.typescript.formatters, 'prettier_project')
+      assert.same({ inherit = 'prettier', require_cwd = true }, prettier.opts)
+      assert.equals('prettier', prettier.command)
+    end)
+
+    it('leaves biome to a prettier project without biome config', function()
+      local biome = entry(languages.typescript.formatters, 'biome_js')
+      assert.equals('biome', biome.opts.inherit)
+      assert.is_true(biome.opts.condition(nil, {}))
+      prettier_root = dir
+      assert.is_false(biome.opts.condition(nil, {}))
+      biome_root = dir
+      assert.is_true(biome.opts.condition(nil, {}))
+    end)
+
+    it('lints with biome unless the project lints with ESLint', function()
+      local biomejs = entry(languages.typescript.linters, 'biomejs')
+      local file = dir .. '/js/src/a.ts'
+      h.write(file, {})
+      assert.is_true(biomejs.opts.condition({ filename = file }))
+      h.write(dir .. '/js/eslint.config.mjs', {})
+      assert.is_false(biomejs.opts.condition({ filename = file }))
+      h.write(dir .. '/js/biome.json', {})
+      assert.is_true(biomejs.opts.condition({ filename = file }))
+    end)
+
+    it(
+      'starts the ESLint server, which looks for its own config',
+      function()
+        assert.is_true(
+          vim.list_contains(languages.typescript.lsp_servers, 'eslint')
+        )
+      end
+    )
+  end)
+
   describe('servers of every buffer', function()
     local servers = languages['*'].lsp_servers
 

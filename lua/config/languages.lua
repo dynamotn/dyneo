@@ -214,15 +214,62 @@ local djlint_formatter = {
 -- They need an entry each so that a filetype reaches the parser that actually
 -- understands it -- and so an injected ```typescript block is not handed to
 -- the formatter under a `.js` name -- but nothing else about them differs.
-local js_lsp_servers = { 'vtsls', 'harper_ls' }
+-- A project brings its own ESLint or Prettier config; biome is the default
+-- for the rest, and steps back where one of them is set up without it, so
+-- the project's rules are the ones applied. The `eslint` server attaches
+-- only below an ESLint config of its own accord.
+local js_lsp_servers = { 'vtsls', 'eslint', 'harper_ls' }
+-- shortcut: `eslintConfig` in `package.json` is not looked for, ESLint 9
+-- dropped it; add it here if an old project needs it
+local eslint_configs = {
+  'eslint.config.js',
+  'eslint.config.mjs',
+  'eslint.config.cjs',
+  'eslint.config.ts',
+  'eslint.config.mts',
+  'eslint.config.cts',
+  '.eslintrc',
+  '.eslintrc.js',
+  '.eslintrc.cjs',
+  '.eslintrc.json',
+  '.eslintrc.yaml',
+  '.eslintrc.yml',
+}
+local biome_configs =
+  { 'biome.json', 'biome.jsonc', '.biome.json', '.biome.jsonc' }
 local js_linters = {
   {
     'biomejs',
     command = 'biome',
     mason = { package = 'biome' },
+    opts = {
+      condition = function(ctx)
+        return vim.fs.root(ctx.filename, biome_configs) ~= nil
+          or vim.fs.root(ctx.filename, eslint_configs) == nil
+      end,
+    },
   },
 }
-local js_formatters = { 'biome' }
+local js_formatters = {
+  {
+    'prettier_project',
+    command = 'prettier',
+    mason = { package = 'prettier' },
+    opts = { inherit = 'prettier', require_cwd = true },
+  },
+  {
+    'biome_js',
+    command = 'biome',
+    mason = { package = 'biome' },
+    opts = {
+      inherit = 'biome',
+      condition = function(self, ctx)
+        return require('conform.formatters.biome').cwd(self, ctx) ~= nil
+          or require('conform.formatters.prettier').cwd(self, ctx) == nil
+      end,
+    },
+  },
+}
 local js_dap = { 'js', 'firefox' }
 local js_test = {
   'neotest-jest',
