@@ -348,6 +348,26 @@ function M.quiet_octo()
   end)
 end
 
+--- Keep rust-analyzer's health status out of the errors
+---
+--- With no `Cargo.toml` beside the sample, rust-analyzer checks it as a
+--- script, with flags only a nightly toolchain takes, and reports the failed
+--- check as an error. That is the toolchain of the machine, and only shows
+--- when the check ends before Neovim quits. The config merges its own
+--- settings under a `vim.g.rustaceanvim` already set.
+function M.quiet_rust_analyzer()
+  M.before_config(
+    'rustaceanvim',
+    function()
+      vim.g.rustaceanvim = vim.tbl_deep_extend(
+        'force',
+        vim.g.rustaceanvim or {},
+        { server = { status_notify_level = false } }
+      )
+    end
+  )
+end
+
 --- Keep noice from taking the script's own `vim.notify` for a rival plugin
 ---
 --- noice checks every so often that `vim.notify` is still its own, and

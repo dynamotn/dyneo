@@ -100,41 +100,20 @@ return {
     opts = {},
   },
   {
-    -- CI checks and job logs of GitHub, GitLab and Forgejo
-    -- It leaves GitHub on 2026-10-31 and warns when installed from there.
-    url = 'https://forge.barrettruth.com/barrettruth/ci.nvim',
-    name = 'ci.nvim',
+    -- CI checks and job logs of GitHub, GitLab and Forgejo. A fork of
+    -- barrettruth/ci.nvim, whose repository is no longer public.
+    'dynamotn/ci.nvim',
+    dev = true,
     -- Needs Neovim 0.13, above what the `stable` channel asks for
     cond = vim.fn.has('nvim-0.13') == 1,
     cmd = 'CI',
     keys = {
       { '<leader>pc', '<cmd>CI<cr>', desc = 'CI Checks' },
     },
-    config = function()
-      -- It picks the forge from `upstream`, else `origin`, and has no option
-      -- to say otherwise: with `origin` on GitLab, `:CI` asked a project that
-      -- runs no pipelines for the checks GitHub runs. `gh` finds the GitHub
-      -- remote by itself once it is the CLI asked.
-      local forge = require('ci.forge')
-      local host = forge.host
-      forge.host = function()
-        -- Every remote in one call: `:CI` waits on it
-        local r = require('util.system').sync(
-          { 'git', 'config', '--get-regexp', [[^remote\..*\.url$]] },
-          { text = true, timeout = 2000 }
-        )
-        local urls = {}
-        if r.code == 0 then
-          for name, url in (r.stdout or ''):gmatch('remote%.(%S+)%.url%s+(%S+)') do
-            urls[name] = url
-          end
-        end
-        for _, name in ipairs(remotes) do
-          if urls[name] then return forge.host_of(urls[name]) or host() end
-        end
-        return host()
-      end
-    end,
+    -- With `origin` on GitLab, `:CI` would ask a project that runs no
+    -- pipelines for the checks GitHub runs. `gh` finds the GitHub remote by
+    -- itself once it is the CLI asked.
+    init = function() vim.g.ci_remotes = remotes end,
   },
   -- Review GitHub pull requests and issues, when the `gh` CLI is there.
   -- Under `<leader>ph`, beside the other trackers of a project: GitLab at

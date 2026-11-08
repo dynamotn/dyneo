@@ -185,12 +185,19 @@ describe('config.keymaps', function()
     vim.diagnostic.set(ns, bufnr, {
       { lnum = 0, col = 0, message = 'unknown word "abc"' },
     })
-    vim.fn.setreg('+', 'before')
-    local restore = h.stub(vim, 'notify', function() end)
+    -- A stub, not the `+` register: with no clipboard provider (CI, no
+    -- display) the register holds nothing to compare
+    local written = {}
+    local restores = {
+      h.stub(vim, 'notify', function() end),
+      h.stub(vim.fn, 'setreg', function(reg) table.insert(written, reg) end),
+    }
     map('n', ' xc').callback()
-    restore()
+    for i = #restores, 1, -1 do
+      restores[i]()
+    end
     vim.diagnostic.reset(ns, bufnr)
-    assert.are.equal('before', vim.fn.getreg('+'))
+    assert.are.same({}, written)
   end)
 
   it('says when the cursor line has no diagnostics to copy', function()
