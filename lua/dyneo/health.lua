@@ -567,6 +567,7 @@ local function requirements()
     semgrep = 'linting a project with `.semgrep.yml` (`:MasonInstall semgrep`)',
     jscpd = '`:DyDuplicates` (installed by Mason on first use)',
     ['inferno-flamegraph'] = '`:DyProfile flame` (Mason `inferno`, installed on first use)',
+    samply = '`:DyProfile` on C, C++, Rust and Zig on macOS (`:MasonInstall samply`)',
     duckdb = '`:DyData` and opening a Parquet file (`:MasonInstall duckdb`)',
     ['ast-grep'] = '`<leader>sA` structural search (installed on first use)',
     ['py-spy'] = '`:DyProfile` on Python (`uv tool install py-spy`)',

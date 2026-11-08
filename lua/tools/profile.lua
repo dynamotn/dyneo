@@ -39,6 +39,7 @@ local UNITS = {
 ---@field record fun(out: string, args: string[]): string[]
 ---@field default? fun(file: string): string[] What runs when no args are given
 ---@field linux? boolean Only runs on Linux
+---@field darwin? DyProfiler What records instead on macOS
 ---@field env? fun(out: string, lib: string): table<string, string> The
 --- environment of the program, for an agent it loads
 ---@field roots? string[] What marks the project the program runs from
@@ -78,9 +79,26 @@ local node = {
   end,
   default = function(file) return { file } end,
 }
+-- macOS has no perf; samply samples a native program there, and its sidecar
+-- names each address with the file and line of every inlined frame
+local samply = {
+  bin = 'samply',
+  record = function(out, args)
+    return vim.list_extend({
+      'samply',
+      'record',
+      '--save-only',
+      '--unstable-presymbolicate',
+      '-o',
+      out,
+      '--',
+    }, args)
+  end,
+}
 local perf = {
   bin = 'perf',
   linux = true,
+  darwin = samply,
   record = function(out, args)
     return vim.list_extend(
       { 'perf', 'record', '--call-graph', 'dwarf', '-o', out, '--' },
@@ -258,6 +276,94 @@ function M.parse_jvm(lines, root)
   return { time = traces }
 end
 
+--- A profile samply saved -- the Firefox Profiler's processed format, with
+--- addresses only -- named through its `.syms.json` sidecar: each sampled
+--- address gives the function, file and line of every frame inlined there.
+--- An address the sidecar does not list keeps the name of the symbol whose
+--- range holds it, without a line.
+---@param profile table
+---@param syms? table
+---@return table<string, table[]>
+function M.parse_samply(profile, syms)
+  local strings = (syms or {}).string_table or {}
+  local by_lib = {}
+  for _, data in ipairs((syms or {}).data or {}) do
+    local known = {}
+    for _, pair in ipairs(data.known_addresses or {}) do
+      known[pair[1]] = data.symbol_table[pair[2] + 1]
+    end
+    by_lib[data.debug_name or ''] =
+      { known = known, symbols = data.symbol_table or {} }
+  end
+  local function at(column, index)
+    local value = column and column[index + 1]
+    if value == vim.NIL then return nil end
+    return value
+  end
+  local traces = {}
+  for _, thread in ipairs(profile.threads or {}) do
+    local stacks, frames, funcs =
+      thread.stackTable, thread.frameTable, thread.funcTable
+    local names = thread.stringArray or {}
+    ---@return table[]
+    local function frames_of(f)
+      local address = at(frames.address, f)
+      local func = at(frames.func, f)
+      local resource = func and at(funcs.resource, func)
+      local lib = resource and at(thread.resourceTable.lib, resource)
+      local name = lib and profile.libs[lib + 1]
+      local sym = name and by_lib[name.debugName or name.name]
+      local entry = sym and sym.known[address]
+      if entry and entry.frames then
+        local out = {}
+        -- The sidecar lists the innermost first; a trace starts at the root
+        for i = #entry.frames, 1, -1 do
+          local inlined = entry.frames[i]
+          table.insert(out, {
+            symbol = strings[inlined['function'] + 1],
+            file = strings[inlined.file + 1],
+            linenr = inlined.line,
+          })
+        end
+        return out
+      end
+      for _, candidate in ipairs(sym and sym.symbols or {}) do
+        if
+          address
+          and address >= candidate.rva
+          and address < candidate.rva + candidate.size
+        then
+          return { { symbol = strings[candidate.symbol + 1] } }
+        end
+      end
+      return { { symbol = func and names[at(funcs.name, func) + 1] or '?' } }
+    end
+    local by_stack = {}
+    local samples = thread.samples or {}
+    for i = 0, (samples.length or #(samples.stack or {})) - 1 do
+      local stack = at(samples.stack, i)
+      if stack then
+        local trace = by_stack[stack]
+        if not trace then
+          local chain, s = {}, stack
+          while s do
+            table.insert(chain, 1, at(stacks.frame, s))
+            s = at(stacks.prefix, s)
+          end
+          trace = { count = 0, frames = {} }
+          for _, f in ipairs(chain) do
+            vim.list_extend(trace.frames, frames_of(f))
+          end
+          by_stack[stack] = trace
+          table.insert(traces, trace)
+        end
+        trace.count = trace.count + (at(samples.weight, i) or 1)
+      end
+    end
+  end
+  return { time = traces }
+end
+
 --- `perf report -g folded,0,caller,...` output: stacks per event, root first
 ---@param lines string[]
 ---@return table<string, table[]>
@@ -389,8 +495,12 @@ function M.command(filetype, file, args, out)
         table.concat(known, ', ')
       )
   end
-  if profiler.linux and vim.uv.os_uname().sysname ~= 'Linux' then
-    return nil, ('%s only runs on Linux'):format(profiler.bin)
+  local system_name = vim.uv.os_uname().sysname
+  if profiler.linux and system_name ~= 'Linux' then
+    if not (profiler.darwin and system_name == 'Darwin') then
+      return nil, ('%s only runs on Linux'):format(profiler.bin)
+    end
+    profiler = profiler.darwin
   end
   if #args == 0 then
     if not profiler.default then
@@ -503,6 +613,22 @@ function M.load(path, root)
       M.parse_pprof
     )
   end
+  if path:match('%.json%.gz$') then
+    return system.run(
+      { 'gzip', '-dc', path },
+      { timeout = M.TIMEOUT, max_bytes = M.MAX_BYTES },
+      function(result)
+        if result.code ~= 0 or result.cut then
+          return fail(system.failure(result, 'gzip'))
+        end
+        local ok, saved = pcall(vim.json.decode, result.stdout)
+        if not ok then return fail(('%s: %s'):format(path, saved)) end
+        local sidecar = read(path:gsub('%.gz$', '') .. '.syms.json')
+        local syms = sidecar and select(2, pcall(vim.json.decode, sidecar))
+        show(M.parse_samply(saved, type(syms) == 'table' and syms or nil), path)
+      end
+    )
+  end
   if path:match('perf[^/]*%.data[^/]*$') then
     -- The arguments perfanno's own loader gives, run off the main loop
     return from({
@@ -537,7 +663,10 @@ function M.run(args)
   local out = vim.fn.tempname()
   if profiler == node or profiler == jvm then vim.fn.mkdir(out, 'p') end
   if profiler == go then out = out .. '.pprof' end
-  if profiler == perf then out = out .. '.perf.data' end
+  if profiler == perf then
+    out = out
+      .. (vim.uv.os_uname().sysname == 'Darwin' and '.json.gz' or '.perf.data')
+  end
   local cmd, cwd, env = M.command(filetype, file, args, out)
   if not cmd then return fail(cwd) end
   -- `./mvnw` is found from the project, not from here

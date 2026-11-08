@@ -1272,8 +1272,11 @@ by perfanno.nvim.  The profiler follows the filetype:
   Go                `go test -cpuprofile` in the package of the file
   JavaScript and    `node --cpu-prof {file}` (TypeScript needs a Node that
   TypeScript        strips types, 23.6 and later)
-  C, C++, Rust, Zig `perf record --call-graph dwarf`, Linux only; the
-                    program to run is required: `:DyProfile ./build/app`
+  C, C++, Rust, Zig `perf record --call-graph dwarf` on Linux, `samply
+                    record` on macOS, whose sidecar names the file and
+                    line of every inlined frame; the program to run is
+                    required: `:DyProfile ./build/app`.  Build it with
+                    debug info for the lines to show.
   Java, Kotlin,     async-profiler loaded into every JVM the command starts
   Scala             (`JAVA_TOOL_OPTIONS`), so `java -jar app.jar`,
                     `./mvnw spring-boot:run` or `./gradlew run` alike, run
@@ -1287,7 +1290,8 @@ Arguments replace the program run: `:DyProfile uv run app.py` for Python,
 
 `<leader>dpo` (`:DyProfile load {file}`) reads a profile recorded elsewhere:
 a pprof file (`.pprof`, `.prof`, through `go tool pprof`), a `.cpuprofile`
-or a directory of them, a `perf.data` (through `perf report`), or collapsed
+or a directory of them, a `perf.data` (through `perf report`), a samply
+`.json.gz` with its `.syms.json` beside it, or collapsed
 stacks as py-spy `--format raw` and flamegraph.pl write them.  Node keeps
 the line of few samples; the others fall on the line their function starts.
 

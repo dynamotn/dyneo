@@ -206,7 +206,7 @@ describe('tools.profile', function()
     restore = h.stub(
       vim.uv,
       'os_uname',
-      function() return { sysname = 'Darwin' } end
+      function() return { sysname = 'FreeBSD' } end
     )
     cmd, err = profile.command('c', '/p/a.c', { './app' }, '/o')
     restore()
@@ -342,5 +342,91 @@ describe('tools.profile', function()
       { 'main /p/a.c:3;f /p/a.c:9 5' },
       vim.fn.readfile(dir .. '/collapsed')
     )
+  end)
+  describe('with samply', function()
+    -- The shape samply 0.13 saves: a processed profile with addresses only,
+    -- and its `.syms.json` sidecar that names them, inline frames and all
+    local saved = {
+      meta = { preprocessedProfileVersion = 49, symbolicated = false },
+      libs = { { name = 'hot', debugName = 'hot', path = './hot' } },
+      threads = {
+        {
+          name = 'hot',
+          samples = { length = 3, stack = { 1, 1, 0 }, weight = { 1, 5, 2 } },
+          stackTable = { length = 2, frame = { 0, 1 }, prefix = { vim.NIL, 0 } },
+          frameTable = { length = 2, address = { 1120, 1160 }, func = { 0, 1 } },
+          funcTable = { length = 2, name = { 0, 1 }, resource = { 0, 0 } },
+          resourceTable = { length = 1, lib = { 0 } },
+          stringArray = { '0x460', '0x488' },
+        },
+      },
+    }
+    local syms = {
+      string_table = { 'UNKNOWN', 'main', 'work', '/src/hot.c' },
+      data = {
+        {
+          debug_name = 'hot',
+          symbol_table = {
+            {
+              rva = 1120,
+              size = 136,
+              symbol = 1,
+              frames = {
+                { ['function'] = 2, file = 3, line = 6 },
+                { ['function'] = 1, file = 3, line = 13 },
+              },
+            },
+          },
+          known_addresses = { { 1160, 0 } },
+        },
+      },
+    }
+
+    it('names each frame through the sidecar, inline ones too', function()
+      local traces = profile.parse_samply(saved, syms).time
+      assert.equals(2, #traces)
+      -- Stack 1: the frame at 1120 above the one at 1160, which inlines
+      -- `work` into `main`
+      local hot = traces[1]
+      assert.equals(6, hot.count)
+      assert.same({
+        -- No line for an address the sidecar does not list, but its symbol
+        { symbol = 'main' },
+        { symbol = 'main', file = '/src/hot.c', linenr = 13 },
+        { symbol = 'work', file = '/src/hot.c', linenr = 6 },
+      }, hot.frames)
+      assert.equals(2, traces[2].count)
+    end)
+
+    it('records with samply on macOS, perf on Linux', function()
+      local restore = h.stub(
+        vim.uv,
+        'os_uname',
+        function() return { sysname = 'Darwin' } end
+      )
+      local cmd =
+        profile.command('rust', '/p/src/main.rs', { './app' }, '/o.json.gz')
+      restore()
+      assert.same({
+        'samply',
+        'record',
+        '--save-only',
+        '--unstable-presymbolicate',
+        '-o',
+        '/o.json.gz',
+        '--',
+        './app',
+      }, cmd)
+    end)
+
+    it('reads a saved profile and its sidecar', function()
+      local file = dir .. '/prof.json'
+      h.write(file, { vim.json.encode(saved) })
+      h.write(file .. '.syms.json', { vim.json.encode(syms) })
+      vim.fn.system({ 'gzip', file })
+      profile.load(file .. '.gz')
+      assert.is_true(vim.wait(3000, function() return loaded ~= nil end))
+      assert.equals('work', loaded.time[1].frames[3].symbol)
+    end)
   end)
 end)
