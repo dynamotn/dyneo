@@ -1149,7 +1149,9 @@ return {
     filetypes = { 'php' },
     parser = 'php',
     injected_parsers = { 'bash', 'html', 'phpdoc' },
-    lsp_servers = { 'intelephense', 'harper_ls' },
+    -- `phpactor` only for rename and refactoring, which intelephense keeps
+    -- for its paid tier; see `lsp/phpactor.lua`
+    lsp_servers = { 'intelephense', 'phpactor', 'harper_ls' },
     linters = { 'phpcs' },
     formatters = {
       {
