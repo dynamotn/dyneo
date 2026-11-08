@@ -651,7 +651,7 @@ return {
     parser = 'angular',
     injected_parsers = { 'css', 'javascript', 'json' },
     ext = 'html',
-    lsp_servers = { 'angularls', 'tailwindcss', 'harper_ls' },
+    lsp_servers = { 'angularls', 'tailwindcss', 'unocss', 'harper_ls' },
     linters = {
       {
         'biomejs',
@@ -680,7 +680,7 @@ return {
     injected_parsers = { 'css', 'javascript', 'json', 'scss', 'typescript' },
     -- `prettier` needs `prettier-plugin-astro` for a component file, so
     -- formatting is left to the language server.
-    lsp_servers = { 'astro', 'tailwindcss', 'harper_ls' },
+    lsp_servers = { 'astro', 'tailwindcss', 'unocss', 'harper_ls' },
     linters = js_linters,
     dap = { 'js' },
   },
@@ -758,7 +758,7 @@ return {
       'python',
       'toml',
     },
-    lsp_servers = { 'laravel_ls', 'htmx', 'tailwindcss', 'harper_ls' },
+    lsp_servers = { 'laravel_ls', 'htmx', 'tailwindcss', 'unocss', 'harper_ls' },
     formatters = { 'blade-formatter' },
     autopairs = mustache_autopairs,
     endwise = true,
@@ -777,7 +777,7 @@ return {
   css = {
     filetypes = { 'css', 'less' },
     parser = 'css',
-    lsp_servers = { 'tailwindcss' },
+    lsp_servers = { 'tailwindcss', 'unocss' },
     linters = { 'stylelint' },
     formatters = { 'prettier' },
     null_ls = {
@@ -932,7 +932,22 @@ return {
     -- a root: it would run in every repository once installed
     lsp_servers = {
       { 'ember', filetypes = { 'handlebars' } },
+      -- TypeScript's types checked in the templates of an app that brings
+      -- Glint; lspconfig would start it below any `package.json`
+      {
+        'glint',
+        filetypes = { 'handlebars' },
+        enabled = function(bufnr)
+          local root = vim.fs.root(bufnr, 'package.json')
+          local f = root and io.open(root .. '/package.json')
+          if not f then return false end
+          local manifest = f:read(1024 * 1024) or ''
+          f:close()
+          return manifest:find('"@glint/core"', 1, true) ~= nil
+        end,
+      },
       'tailwindcss',
+      'unocss',
       'harper_ls',
     },
     autopairs = mustache_autopairs,
@@ -976,7 +991,7 @@ return {
     injected_parsers = { 'elixir' },
     -- A Phoenix template is part of an Elixir project: the same server reads
     -- it and the same `mix format` writes it back.
-    lsp_servers = { 'expert', 'htmx', 'tailwindcss', 'harper_ls' },
+    lsp_servers = { 'expert', 'htmx', 'tailwindcss', 'unocss', 'harper_ls' },
     formatters = { { 'mix', command = 'mix', mason = { package = 'elixir' } } },
     autopairs = function(filetypes, rule)
       return {
@@ -991,7 +1006,7 @@ return {
     filetypes = { 'html' },
     parser = 'html',
     injected_parsers = { 'css', 'javascript', 'json', 'python', 'toml' },
-    lsp_servers = { 'tailwindcss', 'html', 'harper_ls' },
+    lsp_servers = { 'tailwindcss', 'unocss', 'html', 'harper_ls' },
     linters = { 'htmlhint' },
     formatters = { html_beautify_formatter },
   },
@@ -1282,6 +1297,7 @@ return {
         end,
       },
       'tailwindcss',
+      'unocss',
       'harper_ls',
     },
     linters = {
@@ -1348,7 +1364,7 @@ return {
   sass = {
     filetypes = { 'scss', 'sass' },
     parser = 'scss',
-    lsp_servers = { 'tailwindcss' },
+    lsp_servers = { 'tailwindcss', 'unocss' },
     linters = { 'stylelint' },
     -- Prettier has no parser for the indented `.sass` syntax
     formatters = { { 'prettier', filetypes = { 'scss' } } },
@@ -1452,7 +1468,7 @@ return {
     },
     -- `prettier` needs `prettier-plugin-svelte` for a single-file component,
     -- so formatting is left to the language server.
-    lsp_servers = { 'svelte', 'tailwindcss', 'harper_ls' },
+    lsp_servers = { 'svelte', 'tailwindcss', 'unocss', 'harper_ls' },
     linters = js_linters,
     dap = { 'js' },
   },
@@ -1472,7 +1488,7 @@ return {
     parser = 'templ',
     injected_parsers = { 'css', 'javascript', 'printf', 're2c' },
     -- one `templ` binary again: `templ lsp` and `templ fmt`
-    lsp_servers = { 'templ', 'htmx', 'tailwindcss', 'harper_ls' },
+    lsp_servers = { 'templ', 'htmx', 'tailwindcss', 'unocss', 'harper_ls' },
     formatters = { 'templ' },
     autopairs = function(filetypes, rule)
       return vim.list_extend(
@@ -1575,7 +1591,7 @@ return {
       'tsx',
       'typescript',
     },
-    lsp_servers = { 'vue_ls', 'vtsls', 'tailwindcss', 'harper_ls' },
+    lsp_servers = { 'vue_ls', 'vtsls', 'tailwindcss', 'unocss', 'harper_ls' },
     -- `biome` cannot read a single-file component, so a Vue file goes to
     -- `prettier` the way the stylesheets already do.
     formatters = { 'prettier' },
@@ -1872,6 +1888,7 @@ return {
       -- `hx-*` attributes and their values, the way htmx pairs with Django
       'htmx',
       'tailwindcss',
+      'unocss',
       'harper_ls',
     },
     formatters = { djlint_formatter },

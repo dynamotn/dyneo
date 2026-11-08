@@ -405,6 +405,30 @@ describe('config.languages callbacks', function()
     assert.is_false(symfony.enabled(ci))
   end)
 
+  it('starts glint only in an app that depends on it', function()
+    local glint = entry(languages.handlebars.lsp_servers, 'glint')
+    assert.same({ 'handlebars' }, glint.filetypes)
+    h.write(dir .. '/app/package.json', { '{ "devDependencies": {} }' })
+    local hbs = buffer(dir .. '/app/app/templates/a.hbs', {}, 'handlebars')
+    assert.is_false(glint.enabled(hbs))
+    h.write(
+      dir .. '/app/package.json',
+      { '{ "devDependencies": { "@glint/core": "^1.5.2" } }' }
+    )
+    assert.is_true(glint.enabled(hbs))
+  end)
+
+  it('runs UnoCSS wherever Tailwind runs', function()
+    for _, name in ipairs(require('util.languages').names()) do
+      local servers = languages[name].lsp_servers or {}
+      assert.equals(
+        vim.list_contains(servers, 'tailwindcss'),
+        vim.list_contains(servers, 'unocss'),
+        name
+      )
+    end
+  end)
+
   describe('servers of every buffer', function()
     local servers = languages['*'].lsp_servers
 
