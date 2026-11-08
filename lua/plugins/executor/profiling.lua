@@ -19,6 +19,7 @@ return {
     keys = {
       { '<leader>dpr', '<cmd>DyProfile<cr>', desc = 'Profile Program' },
       { '<leader>dpo', '<cmd>DyProfile load<cr>', desc = 'Open Profile' },
+      { '<leader>dpg', '<cmd>DyProfile flame<cr>', desc = 'Profile as Flame Graph' },
       { '<leader>dpa', '<cmd>PerfToggleAnnotations<cr>', desc = 'Toggle Profile Annotations' },
       { '<leader>dpf', '<cmd>PerfHottestSymbols<cr>', desc = 'Hottest Functions' },
       { '<leader>dpl', '<cmd>PerfHottestLines<cr>', desc = 'Hottest Lines' },

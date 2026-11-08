@@ -234,4 +234,113 @@ describe('tools.profile', function()
     assert.is_nil(loaded)
     assert.matches('no samples', notes[#notes])
   end)
+  describe('on the JVM', function()
+    local lib, installed, restores
+
+    before_each(function()
+      lib, installed = dir .. '/libasyncProfiler', nil
+      restores = {
+        h.stub(
+          profile,
+          'async_profiler',
+          function() return vim.uv.fs_stat(lib) and lib or nil end
+        ),
+        h.stub(vim.env, 'JAVA_TOOL_OPTIONS', nil),
+        h.stub(package.loaded, 'util.lazy_install', {
+          install_once = function(name) installed = name end,
+        }),
+      }
+    end)
+    after_each(function()
+      for i = #restores, 1, -1 do
+        restores[i]()
+      end
+    end)
+
+    it('loads async-profiler into the program, from its project', function()
+      h.write(lib, {})
+      h.write(dir .. '/app/pom.xml', {})
+      local file = dir .. '/app/src/main/java/a/A.java'
+      local cmd, cwd, env =
+        profile.command('java', file, { './mvnw', 'exec:java' }, '/o')
+      assert.same({ './mvnw', 'exec:java' }, cmd)
+      assert.equals(dir .. '/app', cwd)
+      assert.equals(
+        '-agentpath:'
+          .. lib
+          .. '=start,event=cpu,interval=10ms,collapsed,lines,file=/o/%p.collapsed',
+        env.JAVA_TOOL_OPTIONS
+      )
+      -- Options already set stay, the agent after them
+      vim.env.JAVA_TOOL_OPTIONS = '-Xmx1g'
+      _, _, env = profile.command('java', file, { 'java', 'A' }, '/o')
+      assert.matches('^%-Xmx1g %-agentpath:', env.JAVA_TOOL_OPTIONS)
+      local _, err = profile.command('kotlin', file, {}, '/o')
+      assert.matches('the program to profile', err)
+    end)
+
+    it('has Mason install async-profiler when it is missing', function()
+      local cmd, err =
+        profile.command('java', '/p/A.java', { 'java', 'A' }, '/o')
+      assert.is_nil(cmd)
+      assert.matches('async%-profiler', err)
+      assert.equals('async-profiler', installed)
+    end)
+
+    it('finds the source of each JVM frame in the project', function()
+      local root = dir .. '/app'
+      h.write(root .. '/src/main/java/com/acme/Bar.java', {})
+      h.write(root .. '/src/main/kotlin/com/acme/Baz.kt', {})
+      h.write(root .. '/build/generated/com/acme/Bar.java', {})
+      local traces = profile.parse_jvm({
+        'java/lang/Thread.run:829;com/acme/Bar.work:42;com/acme/Bar$Inner.go:7 9',
+        'com/acme/Baz.spin:3 2',
+        'not a stack',
+      }, root)
+      local bar = root .. '/src/main/java/com/acme/Bar.java'
+      assert.same({
+        { symbol = 'java/lang/Thread.run:829' },
+        { symbol = 'Bar.work', file = bar, linenr = 42 },
+        { symbol = 'Bar$Inner.go', file = bar, linenr = 7 },
+      }, traces.time[1].frames)
+      assert.equals(9, traces.time[1].count)
+      assert.equals(
+        root .. '/src/main/kotlin/com/acme/Baz.kt',
+        traces.time[2].frames[1].file
+      )
+    end)
+
+    it('reads a directory of JVM profiles, one per process', function()
+      h.write(dir .. '/app/src/A.java', {})
+      h.write(dir .. '/out/1.collapsed', { 'A.main:1 3' })
+      h.write(dir .. '/out/2.collapsed', { 'A.main:1 4' })
+      profile.load(dir .. '/out', dir .. '/app')
+      assert.equals(2, #loaded.time)
+      assert.equals(dir .. '/app/src/A.java', loaded.time[1].frames[1].file)
+    end)
+  end)
+
+  it('draws the loaded profile as a flame graph', function()
+    local opened
+    local restore_open = h.stub(vim.ui, 'open', function(p) opened = p end)
+    profile.flame()
+    assert.matches('No profile', notes[#notes])
+    h.write(dir .. '/stacks.txt', { 'main /p/a.c:3;f /p/a.c:9 5' })
+    profile.load(dir .. '/stacks.txt')
+    h.write(dir .. '/bin/inferno-flamegraph', {
+      '#!/bin/sh',
+      'cat > "' .. dir .. '/collapsed"',
+      'echo "<svg/>"',
+    })
+    vim.fn.setfperm(dir .. '/bin/inferno-flamegraph', 'rwxr-xr-x')
+    profile.flame()
+    assert.is_true(vim.wait(3000, function() return opened ~= nil end))
+    restore_open()
+    assert.matches('%.svg$', opened)
+    assert.same({ '<svg/>' }, vim.fn.readfile(opened))
+    assert.same(
+      { 'main /p/a.c:3;f /p/a.c:9 5' },
+      vim.fn.readfile(dir .. '/collapsed')
+    )
+  end)
 end)

@@ -1274,6 +1274,13 @@ by perfanno.nvim.  The profiler follows the filetype:
   TypeScript        strips types, 23.6 and later)
   C, C++, Rust, Zig `perf record --call-graph dwarf`, Linux only; the
                     program to run is required: `:DyProfile ./build/app`
+  Java, Kotlin,     async-profiler loaded into every JVM the command starts
+  Scala             (`JAVA_TOOL_OPTIONS`), so `java -jar app.jar`,
+                    `./mvnw spring-boot:run` or `./gradlew run` alike, run
+                    from the project root; the command is required.  Each
+                    frame is matched to its source under the project, so
+                    the marks fall on the project's own lines.  Mason
+                    installs async-profiler the first time.
 
 Arguments replace the program run: `:DyProfile uv run app.py` for Python,
 `:DyProfile -bench . -run ^$` for the flags of `go test`.
@@ -1289,6 +1296,8 @@ Then:
   `<leader>dpf`   the hottest functions
   `<leader>dpl`   the hottest lines
   `<leader>dpc`   the hottest callers of the function under the cursor
+  `<leader>dpg`   the whole profile as a flame graph (`:DyProfile flame`),
+                drawn by inferno as an SVG the system viewer opens
 
 `<leader>dpp` and its neighbours profile Neovim itself (snacks.nvim).
 
@@ -2455,7 +2464,8 @@ Operations ~
 :DyProfile [{cmd}]      Run the program of the buffer, or {cmd}, under a
                         sampling profiler and mark its hot lines.
 :DyProfile load [{file}]
-                        Read a profile recorded elsewhere.  See
+                        Read a profile recorded elsewhere.
+:DyProfile flame        Draw the loaded profile as a flame graph.  See
                         |dyneo-profile|.
 
 Data and machine learning ~

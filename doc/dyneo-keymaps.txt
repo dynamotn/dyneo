@@ -227,6 +227,7 @@ one of the same keys in those buffers.
 `<leader>dpa`          n      Toggle Profile Annotations
 `<leader>dpc`          n      Hottest Callers
 `<leader>dpf`          n      Hottest Functions
+`<leader>dpg`          n      Profile as Flame Graph
 `<leader>dph`          n      Toggle Profiler Highlights
 `<leader>dpl`          n      Hottest Lines
 `<leader>dpo`          n      Open Profile
