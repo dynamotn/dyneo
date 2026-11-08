@@ -308,7 +308,7 @@ M.ACTIONS = {
     name = 'History',
     plugin = 'avante.nvim',
     key = '<leader>avh',
-    run = function() vim.cmd.AvanteHistory() end,
+    run = function() require('avante.api').select_history() end,
   },
   {
     group = 'Sidekick',
