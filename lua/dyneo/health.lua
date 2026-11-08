@@ -565,6 +565,7 @@ local function requirements()
     opa = '`:DyRego` (`:MasonInstall opa`)',
     dyff = '`:DyEnvDiff` on YAML, JSON and TOML (a line diff without it)',
     semgrep = 'linting a project with `.semgrep.yml` (`:MasonInstall semgrep`)',
+    jscpd = '`:DyDuplicates` (installed by Mason on first use)',
     duckdb = '`:DyData` and opening a Parquet file (`:MasonInstall duckdb`)',
     ['ast-grep'] = '`<leader>sA` structural search (installed on first use)',
     ['py-spy'] = '`:DyProfile` on Python (`uv tool install py-spy`)',

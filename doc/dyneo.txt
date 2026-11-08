@@ -89,6 +89,7 @@ CONTENTS                                                      *dyneo-contents*
        9.15 Code owners ....................................... |dyneo-owners|
        9.16 Pull request review ............................. |dyneo-review|
        9.17 Local history .............................. |dyneo-local-history|
+       9.18 Duplicated code ............................... |dyneo-duplicates|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -2046,6 +2047,14 @@ No sensitive buffer is copied (|dyneo-ai-guard|): a decrypted file or a
 `.env` would otherwise leave its clear text on disk.  Neither is a file
 larger than 1 MiB, nor one written while quitting.
 
+9.18 Duplicated code                                        *dyneo-duplicates*
+
+`<leader>pD` (|:DyDuplicates|) lists the duplicated blocks of the project in
+the quickfix list, each with where its clone is.  jscpd finds them, in some
+200 languages, honouring a `.jscpd.json` of the project (`minTokens`,
+`ignore`, ...); Mason installs it the first time.  Its SARIF report is read
+against the project and removed once read.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -2530,6 +2539,10 @@ Project ~
                                                              *:DyLocalHistory*
 :DyLocalHistory         Show a copy of the file kept at an earlier write
                         against the buffer.  See |dyneo-local-history|.
+
+                                                               *:DyDuplicates*
+:DyDuplicates [{dir}]   The duplicated code of the project, or of {dir}, in
+                        the quickfix list.  See |dyneo-duplicates|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose

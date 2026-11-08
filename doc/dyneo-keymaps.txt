@@ -361,6 +361,7 @@ one of the same keys in those buffers.
 ==============================================================================
 <leader>p  project
 
+`<leader>pD`           n      Duplicated Code
 `<leader>pR`           n      Project Roots
 `<leader>pa`           n      Open alternative file
 `<leader>pc`           n      CI Checks

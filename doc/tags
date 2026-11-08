@@ -16,6 +16,7 @@
 :DyData	dyneo.txt	/*:DyData*
 :DyDeps	dyneo.txt	/*:DyDeps*
 :DyDiagram	dyneo.txt	/*:DyDiagram*
+:DyDuplicates	dyneo.txt	/*:DyDuplicates*
 :DyEncryptedDiff	dyneo.txt	/*:DyEncryptedDiff*
 :DyEncryptedKeys	dyneo.txt	/*:DyEncryptedKeys*
 :DyEncryptedRotate	dyneo.txt	/*:DyEncryptedRotate*
@@ -116,6 +117,7 @@ dyneo-deps	dyneo.txt	/*dyneo-deps*
 dyneo-detection	dyneo.txt	/*dyneo-detection*
 dyneo-development	dyneo.txt	/*dyneo-development*
 dyneo-diagram	dyneo.txt	/*dyneo-diagram*
+dyneo-duplicates	dyneo.txt	/*dyneo-duplicates*
 dyneo-encrypted	dyneo.txt	/*dyneo-encrypted*
 dyneo-envdiff	dyneo.txt	/*dyneo-envdiff*
 dyneo-features	dyneo.txt	/*dyneo-features*
