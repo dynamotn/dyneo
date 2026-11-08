@@ -41,6 +41,50 @@ describe('plugins.lang.java', function()
     end
   end)
 
+  describe('spring-boot.nvim', function()
+    local installed, asked, set_up
+
+    before_each(function()
+      installed, asked, set_up = false, nil, nil
+      vim.list_extend(restores, {
+        h.stub(package.loaded, 'mason-registry', {
+          is_installed = function() return installed end,
+        }),
+        h.stub(package.loaded, 'util.lazy_install', {
+          install_once = function(name) asked = name end,
+        }),
+        h.stub(package.loaded, 'spring_boot', {
+          setup = function(o) set_up = o end,
+        }),
+        h.stub(package.loaded, 'spring_boot.util', {
+          has_spring_boot_dependency = function(root) return root == '/boot' end,
+        }),
+      })
+    end)
+
+    it('loads with Java and Spring config files, not every YAML', function()
+      local boot = spec('JavaHello/spring-boot.nvim')
+      assert.same({ 'java', 'jproperties' }, boot.ft)
+      for _, event in ipairs(boot.event) do
+        assert.matches('^BufReadPre application%*%.ya?ml$', event)
+      end
+    end)
+
+    it('has Mason install its tools before it starts', function()
+      spec('JavaHello/spring-boot.nvim').config()
+      assert.equals('vscode-spring-boot-tools', asked)
+      assert.is_nil(set_up)
+    end)
+
+    it('starts only in a project that depends on Spring Boot', function()
+      installed = true
+      spec('JavaHello/spring-boot.nvim').config()
+      assert.is_nil(asked)
+      assert.is_true(set_up.project_filter('/boot'))
+      assert.is_false(set_up.project_filter('/plain'))
+    end)
+  end)
+
   it('gives two projects of the same name a workspace each', function()
     local opts = spec('mfussenegger/nvim-jdtls').opts()
     local one = opts.project_name('/work/a/api')
@@ -105,6 +149,25 @@ describe('plugins.lang.java', function()
     after_each(
       function() pcall(vim.api.nvim_del_augroup_by_name, 'dyneo_jdtls') end
     )
+
+    it('hands jdtls the Spring Boot jars once Mason has them', function()
+      vim.list_extend(restores, {
+        h.stub(package.loaded, 'mason-registry', {
+          is_installed = function(name)
+            return name == 'vscode-spring-boot-tools'
+          end,
+        }),
+        h.stub(package.loaded, 'spring_boot', {
+          java_extensions = function() return { '/mason/spring/jdt.jar' } end,
+        }),
+      })
+      vim.api.nvim_set_current_buf(h.buffer({ name = '/work/seven/A.java' }))
+      spec('mfussenegger/nvim-jdtls').config(nil, opts)
+      assert.same(
+        { '/mason/spring/jdt.jar' },
+        started[#started].config.init_options.bundles
+      )
+    end)
 
     it("hands jdtls OpenIDEA's usages bundle once it is fetched", function()
       vim.api.nvim_set_current_buf(h.buffer({ name = '/work/six/A.java' }))
@@ -214,7 +277,10 @@ describe('plugins.lang.java', function()
         table.insert(
           restores,
           h.stub(package.loaded, 'mason-registry', {
-            is_installed = function() return true end,
+            -- The debugger and the test runner, not Spring Boot's tools
+            is_installed = function(name)
+              return name ~= 'vscode-spring-boot-tools'
+            end,
           })
         )
         table.insert(

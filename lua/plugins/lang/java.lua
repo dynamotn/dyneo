@@ -133,6 +133,21 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
               end
             end
           end
+          --- The jdtls side of Spring Boot (bean hints, its code actions),
+          --- once Mason has the tools spring-boot.nvim reads them from
+          ---@return string[]
+          local function spring_jars()
+            if
+              not require('util.plugin').has('spring-boot.nvim')
+              or not require('mason-registry').is_installed(
+                'vscode-spring-boot-tools'
+              )
+            then
+              return {}
+            end
+            return require('spring_boot').java_extensions()
+          end
+
           ---@param bufnr integer
           local function attach_jdtls(bufnr)
             -- jdtls imports the build (Gradle scripts, Maven plugins), so not
@@ -147,7 +162,7 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
               root_dir = opts.root_dir(fname),
               init_options = {
                 bundles = vim.list_extend(
-                  vim.deepcopy(bundles),
+                  vim.list_extend(vim.deepcopy(bundles), spring_jars()),
                   { require('tools.openidea').ready('usages') }
                 ),
               },
@@ -331,6 +346,36 @@ return vim.list_contains(DyNeo.enabled_languages, 'java')
 
           -- Avoid race condition by calling attach the first time, since the autocmd won't fire.
           attach_jdtls(vim.api.nvim_get_current_buf())
+        end,
+      },
+      {
+        -- Spring Boot: beans, endpoints, and the keys of `application.yml`
+        -- and `.properties`, in a project that depends on Spring Boot. Loaded
+        -- for those files only, not every YAML buffer.
+        'JavaHello/spring-boot.nvim',
+        ft = { 'java', 'jproperties' },
+        event = {
+          'BufReadPre application*.yml',
+          'BufReadPre application*.yaml',
+        },
+        config = function()
+          if
+            not require('mason-registry').is_installed(
+              'vscode-spring-boot-tools'
+            )
+          then
+            -- It serves from the next session, once Mason has it
+            return require('util.lazy_install').install_once(
+              'vscode-spring-boot-tools'
+            )
+          end
+          require('spring_boot').setup({
+            project_filter = function(root)
+              return require('spring_boot.util').has_spring_boot_dependency(
+                root
+              )
+            end,
+          })
         end,
       },
       {

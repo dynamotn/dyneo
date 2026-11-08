@@ -444,6 +444,14 @@ and jdtls runs as before.  A fetched jar serves from the next start of the
 server, `:JdtRestart`.  Without it, or when it fails, references are the
 server's plain ones.
 
+In a project that depends on Spring Boot (its `pom.xml` or Gradle build
+says so), spring-boot.nvim adds the Spring Boot language server and its
+jdtls side: beans, injection and endpoints, and completion and checks of
+the keys of `application.yml` and `application.properties`.  `:SpringBoot`
+lists the beans, the request mappings and the annotations.  Mason installs
+`vscode-spring-boot-tools` the first time a Java file opens; it serves from
+the next session.
+
 ------------------------------------------------------------------------------
 5. SUPPLY CHAIN AND SECRETS                                   *dyneo-security*
 
