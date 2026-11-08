@@ -792,7 +792,9 @@ return {
     parser = 'elixir',
     injected_parsers = { 'eex', 'heex', 'json', 'surface', 'zig' },
     ext = 'exs',
-    lsp_servers = { 'elixirls', 'harper_ls' },
+    -- The Elixir team's own server, which ElixirLS, Lexical and Next LS were
+    -- merged into; the debugger still comes from ElixirLS, through `dap`
+    lsp_servers = { 'expert', 'harper_ls' },
     -- `mix credo` and `mix format` are tasks of the Elixir toolchain, which
     -- dytoy installs.
     linters = { { 'credo', command = 'mix', mason = { package = 'elixir' } } },
@@ -943,7 +945,7 @@ return {
     injected_parsers = { 'elixir' },
     -- A Phoenix template is part of an Elixir project: the same server reads
     -- it and the same `mix format` writes it back.
-    lsp_servers = { 'elixirls', 'tailwindcss', 'harper_ls' },
+    lsp_servers = { 'expert', 'tailwindcss', 'harper_ls' },
     formatters = { { 'mix', command = 'mix', mason = { package = 'elixir' } } },
     autopairs = function(filetypes, rule)
       return {
