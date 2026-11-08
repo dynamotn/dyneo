@@ -776,7 +776,6 @@ g  goto
 `gcO`                  n      Add Comment Above
 `gco`                  n      Add Comment Below
 `gd`                   n      Goto Definition  (LSP)
-`gd`                   n      Goto Definition  (LSP: omnisharp)
 `ge`                   nox    End of previous subword
 `gh`                   ia     https://github.com/
 `gl`                   ia     https://gitlab.com/

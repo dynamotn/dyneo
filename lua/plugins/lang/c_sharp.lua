@@ -3,39 +3,6 @@ local language = require('config.languages').c_sharp
 return vim.list_contains(DyNeo.enabled_languages, 'c_sharp')
     and {
       {
-        -- Extended LSP
-        'Hoffs/omnisharp-extended-lsp.nvim',
-        ft = language.filetypes,
-      },
-      {
-        -- Config for LSP
-        'neovim/nvim-lspconfig',
-        opts = {
-          servers = {
-            omnisharp = {
-              -- `vim.lsp.buf.definition` no longer goes through a handler
-              -- since 0.11, so the decompiled sources come from this key
-              keys = {
-                {
-                  'gd',
-                  function() require('omnisharp_extended').lsp_definitions() end,
-                  desc = 'Goto Definition',
-                },
-              },
-              -- The server's own settings; the snake_case options of the
-              -- old lspconfig framework are read by nothing any more
-              settings = {
-                FormattingOptions = { OrganizeImports = true },
-                RoslynExtensionsOptions = {
-                  EnableAnalyzersSupport = true,
-                  EnableImportCompletion = true,
-                },
-              },
-            },
-          },
-        },
-      },
-      {
         -- Debug adapters & configurations
         'mfussenegger/nvim-dap',
         opts = function()

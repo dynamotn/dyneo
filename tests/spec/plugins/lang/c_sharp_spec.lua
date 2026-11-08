@@ -24,18 +24,16 @@ describe('plugins.lang.c_sharp', function()
     end
   end)
 
-  it('goes to decompiled definitions through omnisharp-extended', function()
-    local asked = false
-    table.insert(
-      restores,
-      h.stub(package.loaded, 'omnisharp_extended', {
-        lsp_definitions = function() asked = true end,
-      })
+  it('leaves the language server to roslyn_ls as lspconfig sets it', function()
+    -- Roslyn decompiles a definition itself; no extension takes over `gd`
+    assert.has_error(function() spec('Hoffs/omnisharp-extended-lsp.nvim') end)
+    assert.has_error(function() spec('neovim/nvim-lspconfig') end)
+    assert.is_true(
+      vim.list_contains(
+        require('config.languages').c_sharp.lsp_servers,
+        'roslyn_ls'
+      )
     )
-    local keys = spec('neovim/nvim-lspconfig').opts.servers.omnisharp.keys
-    assert.are.equal('gd', keys[1][1])
-    keys[1][2]()
-    assert.is_true(asked)
   end)
 
   it('debugs through netcoredbg, asking for the dll', function()

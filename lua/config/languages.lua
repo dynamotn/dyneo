@@ -731,7 +731,9 @@ return {
     filetypes = { 'cs' },
     parser = 'c_sharp',
     ext = 'cs',
-    lsp_servers = { 'omnisharp', 'harper_ls' },
+    -- Microsoft's own Roslyn server, which C# Dev Kit runs; it replaces
+    -- OmniSharp, which Microsoft no longer develops
+    lsp_servers = { 'roslyn_ls', 'harper_ls' },
     formatters = {
       {
         'csharpier',
