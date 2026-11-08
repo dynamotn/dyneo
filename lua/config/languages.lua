@@ -1171,7 +1171,9 @@ return {
     ext = 'py',
     -- The `ruff` server publishes ruff's diagnostics itself; running it as a
     -- linter too would list each of them twice
-    lsp_servers = { 'pyright', 'ruff', 'harper_ls' },
+    -- `pylsp` only for the rope refactorings pyright has none of; see
+    -- `lsp/pylsp.lua`
+    lsp_servers = { 'pyright', 'ruff', 'pylsp', 'harper_ls' },
     formatters = {
       { 'ruff_fix', command = 'ruff' },
       { 'ruff_format', command = 'ruff' },
