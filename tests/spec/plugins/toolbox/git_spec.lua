@@ -180,50 +180,11 @@ describe('plugins.toolbox.git', function()
   end)
 
   describe('ci.nvim', function()
-    local forge, sync_result, sync_cmd, hosts
-
-    before_each(function()
-      hosts = {}
-      forge = {
-        host = function() return 'fallback.example' end,
-        host_of = function(url) return hosts[url] end,
-      }
-      table.insert(restores, h.stub(package.loaded, 'ci.forge', forge))
-      table.insert(
-        restores,
-        h.stub(require('util.system'), 'sync', function(cmd, opts)
-          sync_cmd = { cmd = cmd, opts = opts }
-          return sync_result
-        end)
-      )
-      load()['ci.nvim'].config()
-    end)
-
     it('asks the GitHub remote before origin', function()
-      hosts['git@github.com:me/x.git'] = 'github.com'
-      hosts['git@gitlab.com:me/x.git'] = 'gitlab.com'
-      sync_result = {
-        code = 0,
-        stdout = 'remote.origin.url git@gitlab.com:me/x.git\n'
-          .. 'remote.gh.url git@github.com:me/x.git\n',
-      }
-      assert.are.equal('github.com', forge.host())
-      assert.are.equal('git', sync_cmd.cmd[1])
-      assert.are.equal(2000, sync_cmd.opts.timeout)
-
-      sync_result.stdout = 'remote.origin.url git@gitlab.com:me/x.git\n'
-      assert.are.equal('gitlab.com', forge.host())
-    end)
-
-    it("falls back to the plugin's own choice", function()
-      sync_result = { code = 0, stdout = 'remote.fork.url x\n' }
-      assert.are.equal('fallback.example', forge.host())
-      -- A remote with a URL the plugin cannot place
-      sync_result = { code = 0, stdout = 'remote.origin.url x\n' }
-      assert.are.equal('fallback.example', forge.host())
-      -- git did not answer
-      sync_result = { code = 1 }
-      assert.are.equal('fallback.example', forge.host())
+      local saved = vim.g.ci_remotes
+      load()['dynamotn/ci.nvim'].init()
+      assert.same({ 'upstream', 'gh', 'github', 'origin' }, vim.g.ci_remotes)
+      vim.g.ci_remotes = saved
     end)
   end)
 

@@ -22,7 +22,7 @@
   "catppuccin": { "branch": "main", "commit": "605b4603797de970e9f3a4238c199c850da03186" },
   "chezmoi-template.nvim": { "branch": "main", "commit": "87a12d3d57819f84ee69d286f573d4f0b85b1d96" },
   "chezmoi.nvim": { "branch": "main", "commit": "4167bbec76f693f481a5243f1be521ff0ccf1a6d" },
-  "ci.nvim": { "branch": "main", "commit": "f43ff341aeab093dabbfd82dc79973a5a31d241e" },
+  "ci.nvim": { "branch": "main", "commit": "6aeb611c824e0acc13fe08b6b31987afdf4d5339" },
   "clangd_extensions.nvim": { "branch": "main", "commit": "78c2ecd659d54972be17aa6ba2deac3c53223b80" },
   "claudecode.nvim": { "branch": "main", "commit": "2e6ea6f2a63cdf4fd3c05e6a054151d46848d319" },
   "cmake-tools.nvim": { "branch": "master", "commit": "ee807ac4e62591720de2f6ad0abbfb966c4c7b97" },
