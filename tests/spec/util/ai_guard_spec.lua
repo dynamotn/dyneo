@@ -9,6 +9,7 @@ describe('util.ai_guard', function()
     'avante.llm_tools.helpers',
     'avante.utils',
     'avante.libs.acp_client',
+    'avante.utils.file',
     'sidekick.cli',
     'sidekick.status',
     'sidekick.config',
@@ -173,6 +174,21 @@ describe('util.ai_guard', function()
       assert.equals('the file is sensitive', err)
       assert.equals('content', utils.read_file_from_buf_or_disk(plain))
     end)
+  end)
+
+  it('writes no sensitive file through the writer of a newer Avante', function()
+    package.loaded['avante.libs.acp_client'] = {}
+    local file, writes = {}, nil
+    file.write_atomically, writes = fn(true)
+    package.loaded['avante.utils.file'] = file
+    ai_guard.guard_avante()
+    local ok, err = file.write_atomically(secret, 'TOKEN=x')
+    assert.is_nil(ok)
+    assert.equals('the file is sensitive', err)
+    assert.equals(0, #writes)
+    assert.is_true(file.write_atomically(plain, 'x'))
+    assert.equals(1, #writes)
+    assert.equals('guarded', ai_guard.status['Avante ACP file writer'])
   end)
 
   it('warns and leaves a plugin alone when a function is missing', function()

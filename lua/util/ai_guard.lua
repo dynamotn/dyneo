@@ -338,22 +338,45 @@ M.guard_avante = function()
   -- writes the path as given. Its `fs/read_text_file` goes through the
   -- reader above. Claude Code reads and writes with its own tools instead,
   -- which none of this reaches.
+  ---@param path any
+  ---@return boolean
+  local function refuse_write(path)
+    if
+      type(path) ~= 'string'
+      or path == ''
+      or not sensitive.is_sensitive_path(vim.fn.fnamemodify(path, ':p'))
+    then
+      return false
+    end
+    log('Avante', 'refused', path, 'ACP write')
+    return true
+  end
   local ok_acp, acp = pcall(require, 'avante.libs.acp_client')
-  wrap(
-    ok_acp and acp or nil,
-    '_handle_write_text_file',
-    'Avante ACP file writer',
-    function(write, self, message_id, params, ...)
-      local path = type(params) == 'table' and params.path
-      if
-        type(path) == 'string'
-        and path ~= ''
-        and sensitive.is_sensitive_path(vim.fn.fnamemodify(path, ':p'))
-      then
-        log('Avante', 'refused', path, 'ACP write')
-        return self:_send_error(message_id, 'the file is sensitive')
+  if ok_acp and type(acp) == 'table' and acp._handle_write_text_file then
+    -- The release `stable` follows answers the request in Lua
+    wrap(
+      acp,
+      '_handle_write_text_file',
+      'Avante ACP file writer',
+      function(write, self, message_id, params, ...)
+        if refuse_write(type(params) == 'table' and params.path) then
+          return self:_send_error(message_id, 'the file is sensitive')
+        end
+        return write(self, message_id, params, ...)
       end
-      return write(self, message_id, params, ...)
+    )
+    return
+  end
+  -- Its native protocol layer hands the request to `on_write_file`, which
+  -- writes through this one function
+  local ok_file, file = pcall(require, 'avante.utils.file')
+  wrap(
+    ok_file and file or nil,
+    'write_atomically',
+    'Avante ACP file writer',
+    function(write, filepath, ...)
+      if refuse_write(filepath) then return nil, 'the file is sensitive' end
+      return write(filepath, ...)
     end
   )
 end
