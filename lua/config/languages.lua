@@ -270,6 +270,35 @@ local js_formatters = {
     },
   },
 }
+--- The root of the Symfony app `bufnr` belongs to: a Composer project with
+--- Flex's `symfony.lock` or the `bin/console` of the framework
+---@param bufnr integer
+---@return string?
+local function symfony_root(bufnr)
+  local root = vim.fs.root(bufnr, 'composer.json')
+  if
+    root
+    and (
+      vim.uv.fs_stat(root .. '/symfony.lock')
+      or vim.uv.fs_stat(root .. '/bin/console')
+    )
+  then
+    return root
+  end
+end
+-- Services, routes, parameters and translations of a Symfony app, in its PHP,
+-- its Twig and the YAML of its `config/`. It asks before it runs the app to
+-- index the container.
+local symfony_lsp = {
+  'symfony_lsp',
+  enabled = function(bufnr)
+    local root = symfony_root(bufnr)
+    if not root then return false end
+    -- YAML only where the app is configured, not its CI or Compose files
+    if not vim.startswith(vim.bo[bufnr].filetype, 'yaml') then return true end
+    return vim.startswith(vim.api.nvim_buf_get_name(bufnr), root .. '/config/')
+  end,
+}
 local js_dap = { 'js', 'firefox' }
 local js_test = {
   'neotest-jest',
@@ -1153,7 +1182,7 @@ return {
     injected_parsers = { 'bash', 'html', 'phpdoc' },
     -- `phpactor` only for rename and refactoring, which intelephense keeps
     -- for its paid tier; see `lsp/phpactor.lua`
-    lsp_servers = { 'intelephense', 'phpactor', 'harper_ls' },
+    lsp_servers = { 'intelephense', 'phpactor', symfony_lsp, 'harper_ls' },
     linters = { 'phpcs' },
     formatters = {
       {
@@ -1477,7 +1506,7 @@ return {
     filetypes = { 'twig' },
     parser = 'twig',
     injected_parsers = { 'html' },
-    lsp_servers = { 'twiggy_language_server', 'harper_ls' },
+    lsp_servers = { 'twiggy_language_server', symfony_lsp, 'harper_ls' },
     -- Two tools with one purpose between them: `twigcs` only reports and
     -- `twig-cs-fixer` only rewrites.
     linters = { 'twigcs' },
@@ -2253,6 +2282,7 @@ return {
       },
       { 'helm_ls', filetypes = { 'yaml.helm-values' } },
       { 'vacuum', filetypes = { 'yaml.openapi' } },
+      symfony_lsp,
     },
     -- Policy checks of a Kubernetes manifest (`checkov`, `kube_linter`, and
     -- `conftest` where the project keeps a `policy/` directory) decide in

@@ -388,6 +388,23 @@ describe('config.languages callbacks', function()
     assert.is_false(stimulus.enabled(loose))
   end)
 
+  it('starts symfony_lsp in a Symfony app, on YAML of its config', function()
+    local symfony = entry(languages.php.lsp_servers, 'symfony_lsp')
+    assert.equals(symfony, entry(languages.twig.lsp_servers, 'symfony_lsp'))
+    assert.equals(symfony, entry(languages.yaml.lsp_servers, 'symfony_lsp'))
+    h.write(dir .. '/app/composer.json', {})
+    local php = buffer(dir .. '/app/src/Kernel.php', {}, 'php')
+    assert.is_false(symfony.enabled(php))
+    h.write(dir .. '/app/symfony.lock', {})
+    assert.is_true(symfony.enabled(php))
+    local twig = buffer(dir .. '/app/templates/a.html.twig', {}, 'twig')
+    assert.is_true(symfony.enabled(twig))
+    local services = buffer(dir .. '/app/config/services.yaml', {}, 'yaml')
+    assert.is_true(symfony.enabled(services))
+    local ci = buffer(dir .. '/app/.gitlab-ci.yml', {}, 'yaml.gitlab')
+    assert.is_false(symfony.enabled(ci))
+  end)
+
   describe('servers of every buffer', function()
     local servers = languages['*'].lsp_servers
 
