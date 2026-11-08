@@ -976,7 +976,10 @@ return {
     parser = 'kotlin',
     injected_parsers = { 'printf' },
     ext = 'kt',
-    lsp_servers = { 'kotlin_language_server', 'harper_ls' },
+    -- JetBrains' own server, the IntelliJ analysis behind the Kotlin plugin;
+    -- `kotlin_language_server` is a separate reimplementation that falls
+    -- behind on Gradle projects and newer Kotlin
+    lsp_servers = { 'kotlin_lsp', 'harper_ls' },
     -- `ktlint` can format too, but it only knows its own style; `ktfmt`
     -- takes the formatting and `ktlint` is left to report.
     linters = { 'ktlint' },
