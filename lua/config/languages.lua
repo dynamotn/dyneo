@@ -727,7 +727,7 @@ return {
       'python',
       'toml',
     },
-    lsp_servers = { 'laravel_ls', 'tailwindcss', 'harper_ls' },
+    lsp_servers = { 'laravel_ls', 'htmx', 'tailwindcss', 'harper_ls' },
     formatters = { 'blade-formatter' },
     autopairs = mustache_autopairs,
     endwise = true,
@@ -945,7 +945,7 @@ return {
     injected_parsers = { 'elixir' },
     -- A Phoenix template is part of an Elixir project: the same server reads
     -- it and the same `mix format` writes it back.
-    lsp_servers = { 'expert', 'tailwindcss', 'harper_ls' },
+    lsp_servers = { 'expert', 'htmx', 'tailwindcss', 'harper_ls' },
     formatters = { { 'mix', command = 'mix', mason = { package = 'elixir' } } },
     autopairs = function(filetypes, rule)
       return {
@@ -1239,6 +1239,7 @@ return {
     ext = 'erb',
     lsp_servers = {
       'ruby_lsp',
+      'htmx',
       -- `data-controller`, its targets and actions, in an app that keeps
       -- Stimulus controllers where Rails puts them
       {
@@ -1440,7 +1441,7 @@ return {
     parser = 'templ',
     injected_parsers = { 'css', 'javascript', 'printf', 're2c' },
     -- one `templ` binary again: `templ lsp` and `templ fmt`
-    lsp_servers = { 'templ', 'tailwindcss', 'harper_ls' },
+    lsp_servers = { 'templ', 'htmx', 'tailwindcss', 'harper_ls' },
     formatters = { 'templ' },
     autopairs = function(filetypes, rule)
       return vim.list_extend(
@@ -1886,7 +1887,7 @@ return {
     parser = 'jinja',
     injected_parsers = { 'jinja_inline' },
     ext = 'j2',
-    lsp_servers = { 'jinja_lsp', 'harper_ls' },
+    lsp_servers = { 'jinja_lsp', 'htmx', 'harper_ls' },
     formatters = { djlint_formatter },
     autopairs = jinja_autopairs,
     endwise = true,
