@@ -123,6 +123,8 @@ below follow the sections of `:help dyneo`.
   `<localleader>r`
 - **Logs** of files, the journal and pods read as records, filtered by level,
   request or jq. `:DyLog`
+- **Stack traces** of Java, Kotlin, Python, Go, Rust and Node as a quickfix
+  list of the project's frames. `<leader>xs`
 - **Certificates & tokens** — the certificate, key or JWT under the cursor
   decoded, held back from AI; expired or expiring certificates flagged;
   PEM, DER and PKCS#7 files read as their chain, checked, and the chain a

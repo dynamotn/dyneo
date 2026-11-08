@@ -91,6 +91,7 @@ CONTENTS                                                      *dyneo-contents*
        9.17 Local history .............................. |dyneo-local-history|
        9.18 Duplicated code ............................... |dyneo-duplicates|
        9.19 Class diagrams ............................. |dyneo-class-diagram|
+       9.20 Stack traces .................................. |dyneo-stacktrace|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -2079,6 +2080,27 @@ beside the buffer as a Mermaid block of a Markdown scratch buffer, where
 `<localleader>d` (|:DyDiagram|) draws it; it can be copied into a decision
 record as it is.
 
+9.20 Stack traces                                           *dyneo-stacktrace*
+
+`<leader>xs` (|:DyStackTrace|) turns a stack trace into the quickfix list,
+one item per frame, like IntelliJ's Analyze Stack Trace.  It reads, in this
+order: the range or the visual selection; the whole buffer of a log
+(|:DyLog|, or a `log` file); the clipboard; the unnamed register.  A register
+without a frame is passed over for the next one.
+
+Frames of Java, Kotlin and Scala (`at pkg.Class.method(File.java:42)`, across
+`Caused by:`), Python (`File "x.py", line 3, in fn`), Go (the file line under
+its function), Rust (`at ./src/main.rs:5:9` of `RUST_BACKTRACE`) and Node
+(`at fn (/x.js:3:7)`) are read; each format is one entry of `M.FORMATS` in
+`lua/tools/stacktrace.lua`.  A JVM frame names a class, found among the
+project's files (`git ls-files`, else `rg --files`) by its package path; a
+relative path is read against the project root.
+
+Frames outside the project -- the JDK, site-packages, GOROOT, `node_modules`,
+the cargo registry, or a file that is nowhere -- stay in the list as `I`
+items, and the cursor lands on the project's first frame.  The trace never
+leaves the editor.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -2572,6 +2594,11 @@ Project ~
                                                              *:DyClassDiagram*
 :DyClassDiagram         A Mermaid class diagram of the buffer, from its
                         language server.  See |dyneo-class-diagram|.
+
+                                                               *:DyStackTrace*
+:[range]DyStackTrace    The frames of a stack trace in the quickfix list: the
+                        range, a log buffer, or the clipboard.  See
+                        |dyneo-stacktrace|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose

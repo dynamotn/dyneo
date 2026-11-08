@@ -652,6 +652,8 @@ one of the same keys in those buffers.
 `<leader>xc`           n      Copy Line Diagnostics
 `<leader>xl`           n      Location List
 `<leader>xq`           n      Quickfix List
+`<leader>xs`           n      Stack Trace
+`<leader>xs`           x      Stack Trace (selection)
 `<leader>xt`           n      Todo (Trouble)
 `<leader>xw`           n      Workspace Diagnostics
 `<leader>xx`           n      Diagnostics (Trouble)

@@ -59,6 +59,7 @@
 :DySonarlintDeactivateRule	dyneo.txt	/*:DySonarlintDeactivateRule*
 :DySonarlintToken	dyneo.txt	/*:DySonarlintToken*
 :DySpell	dyneo.txt	/*:DySpell*
+:DyStackTrace	dyneo.txt	/*:DyStackTrace*
 :DySudoWrite	dyneo.txt	/*:DySudoWrite*
 :DyTfPlan	dyneo.txt	/*:DyTfPlan*
 :DyTfState	dyneo.txt	/*:DyTfState*
@@ -172,6 +173,7 @@ dyneo-security	dyneo.txt	/*dyneo-security*
 dyneo-slo	dyneo.txt	/*dyneo-slo*
 dyneo-spell	dyneo.txt	/*dyneo-spell*
 dyneo-sql	dyneo.txt	/*dyneo-sql*
+dyneo-stacktrace	dyneo.txt	/*dyneo-stacktrace*
 dyneo-statusline	dyneo.txt	/*dyneo-statusline*
 dyneo-tfplan	dyneo.txt	/*dyneo-tfplan*
 dyneo-tfstate	dyneo.txt	/*dyneo-tfstate*
