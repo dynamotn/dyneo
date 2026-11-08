@@ -140,6 +140,7 @@ one of the same keys in those buffers.
 `<leader>cR`           n      Rename File
 `<leader>cS`           n      LSP references/definitions/... (Trouble)
 `<leader>cT`           n      Formatters and linters of buffer
+`<leader>cU`           n      Class Diagram
 `<leader>cV`           n      Select TS workspace version  (LSP: vtsls)
 `<leader>cY`           n      Yank Rule Code
 `<leader>cZ`           nx     Suppress Formatter

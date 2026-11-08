@@ -341,6 +341,8 @@ end, { desc = "Git Browse (copy)" })
 map("n", "<leader>pp", "<cmd>DyProject<cr>", { desc = "Project Overview" })
 -- duplicated code of the project (`tools.duplicates`)
 map("n", "<leader>pD", "<cmd>DyDuplicates<cr>", { desc = "Duplicated Code" })
+-- the classes of the buffer as a Mermaid diagram (`tools.class_diagram`)
+map("n", "<leader>cU", "<cmd>DyClassDiagram<cr>", { desc = "Class Diagram" })
 
 -- jira, on the issue the branch is named after or one picked (`tools.jira`)
 map("n", "<leader>pjj", "<cmd>DyJira<cr>", { desc = "My Issues" })

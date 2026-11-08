@@ -12,6 +12,7 @@
 :DyCiLint	dyneo.txt	/*:DyCiLint*
 :DyCiStatus	dyneo.txt	/*:DyCiStatus*
 :DyCidr	dyneo.txt	/*:DyCidr*
+:DyClassDiagram	dyneo.txt	/*:DyClassDiagram*
 :DyCron	dyneo.txt	/*:DyCron*
 :DyData	dyneo.txt	/*:DyData*
 :DyDeps	dyneo.txt	/*:DyDeps*
@@ -107,6 +108,7 @@ dyneo-ci-data-pipelines	dyneo.txt	/*dyneo-ci-data-pipelines*
 dyneo-ci-jenkins	dyneo.txt	/*dyneo-ci-jenkins*
 dyneo-ci-prefect	dyneo.txt	/*dyneo-ci-prefect*
 dyneo-cidr	dyneo.txt	/*dyneo-cidr*
+dyneo-class-diagram	dyneo.txt	/*dyneo-class-diagram*
 dyneo-commands	dyneo.txt	/*dyneo-commands*
 dyneo-configuration	dyneo.txt	/*dyneo-configuration*
 dyneo-contents	dyneo.txt	/*dyneo-contents*

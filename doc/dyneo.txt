@@ -90,6 +90,7 @@ CONTENTS                                                      *dyneo-contents*
        9.16 Pull request review ............................. |dyneo-review|
        9.17 Local history .............................. |dyneo-local-history|
        9.18 Duplicated code ............................... |dyneo-duplicates|
+       9.19 Class diagrams ............................. |dyneo-class-diagram|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -2055,6 +2056,16 @@ the quickfix list, each with where its clone is.  jscpd finds them, in some
 `ignore`, ...); Mason installs it the first time.  Its SARIF report is read
 against the project and removed once read.
 
+9.19 Class diagrams                                      *dyneo-class-diagram*
+
+`<leader>cU` (|:DyClassDiagram|) draws the classes, interfaces and enums of
+the buffer with their fields and methods, as the language server lists them,
+and what each extends (`<|--`) or implements (`<|..`), where the server
+answers `typeHierarchy/supertypes` (jdtls, clangd, ...).  The diagram opens
+beside the buffer as a Mermaid block of a Markdown scratch buffer, where
+`<localleader>d` (|:DyDiagram|) draws it; it can be copied into a decision
+record as it is.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -2543,6 +2554,10 @@ Project ~
                                                                *:DyDuplicates*
 :DyDuplicates [{dir}]   The duplicated code of the project, or of {dir}, in
                         the quickfix list.  See |dyneo-duplicates|.
+
+                                                             *:DyClassDiagram*
+:DyClassDiagram         A Mermaid class diagram of the buffer, from its
+                        language server.  See |dyneo-class-diagram|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose
