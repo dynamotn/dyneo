@@ -33,6 +33,7 @@
 :DyInspect	dyneo.txt	/*:DyInspect*
 :DyJira	dyneo.txt	/*:DyJira*
 :DyKube	dyneo.txt	/*:DyKube*
+:DyLocalHistory	dyneo.txt	/*:DyLocalHistory*
 :DyLog	dyneo.txt	/*:DyLog*
 :DyMatrix	dyneo.txt	/*:DyMatrix*
 :DyNfr	dyneo.txt	/*:DyNfr*
@@ -136,6 +137,7 @@ dyneo-languages	dyneo.txt	/*dyneo-languages*
 dyneo-launch-json	dyneo.txt	/*dyneo-launch-json*
 dyneo-layout	dyneo.txt	/*dyneo-layout*
 dyneo-lazy-install	dyneo.txt	/*dyneo-lazy-install*
+dyneo-local-history	dyneo.txt	/*dyneo-local-history*
 dyneo-logs	dyneo.txt	/*dyneo-logs*
 dyneo-mappings	dyneo.txt	/*dyneo-mappings*
 dyneo-matrix	dyneo.txt	/*dyneo-matrix*

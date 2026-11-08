@@ -247,6 +247,7 @@ one of the same keys in those buffers.
 `<leader>fe`           n      Explorer Snacks (root dir)
 `<leader>ff`           n      Find Files (Root Dir)
 `<leader>fg`           n      Find Files (git-files)
+`<leader>fh`           n      Local History
 `<leader>fl`           n      Find Plugin Source File
 `<leader>fn`           n      New File
 `<leader>fp`           n      Projects

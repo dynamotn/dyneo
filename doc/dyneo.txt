@@ -88,6 +88,7 @@ CONTENTS                                                      *dyneo-contents*
        9.14 Function history ................................. |dyneo-history|
        9.15 Code owners ....................................... |dyneo-owners|
        9.16 Pull request review ............................. |dyneo-review|
+       9.17 Local history .............................. |dyneo-local-history|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -2032,6 +2033,19 @@ source; Jenkins through `git config dyneo.jenkinsUrl` and
 them.  State lives in `stdpath('state')/dyneo/review/` (directories 0700,
 files 0600), and the commits it needs in private refs `refs/dyneo/review/`.
 
+9.17 Local history                                       *dyneo-local-history*
+
+The undo file is dropped once a file changes behind the editor's back: a
+checkout, a formatter, another editor.  So each write also keeps a copy of
+the file, when its content changed since the last copy, in
+`stdpath('state')/local-history/` (directories 0700, copies 0600), the newest
+50 per file.  `<leader>fh` (|:DyLocalHistory|) picks one and shows it beside
+the buffer, in diff mode; `do` takes a hunk back from it.
+
+No sensitive buffer is copied (|dyneo-ai-guard|): a decrypted file or a
+`.env` would otherwise leave its clear text on disk.  Neither is a file
+larger than 1 MiB, nor one written while quitting.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -2512,6 +2526,10 @@ Project ~
                         `pick` (the default), `branch`, `ai`, `drafts`,
                         `since`, `submit`, `trust` or `close`.  See
                         |dyneo-review|.
+
+                                                             *:DyLocalHistory*
+:DyLocalHistory         Show a copy of the file kept at an earlier write
+                        against the buffer.  See |dyneo-local-history|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose

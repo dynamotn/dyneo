@@ -207,6 +207,7 @@ map('n', '<leader>l', '<cmd>Lazy<cr>', { desc = 'Lazy' })
 
 -- new file
 map('n', '<leader>fn', '<cmd>enew<cr>', { desc = 'New File' })
+map('n', '<leader>fh', '<cmd>DyLocalHistory<cr>', { desc = 'Local History' })
 
 -- `[q` and `]q` are Neovim's own, which take a count; `trouble.nvim` claims
 -- them when it is loaded.
