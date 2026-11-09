@@ -217,6 +217,11 @@ describe('plugins.lsp.server', function()
       assert.is_true(opts.diagnostics.underline)
     end)
 
+    it('waits for every server to close on quit', function()
+      local opts = spec.opts(nil, {})
+      assert.are.equal('number', type(opts.servers['*'].exit_timeout))
+    end)
+
     it('reads the project settings into every server', function()
       local opts = spec.opts(nil, {})
       local config = { name = 'lua_ls' }
