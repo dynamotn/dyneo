@@ -193,6 +193,8 @@ below follow the sections of `:help dyneo`.
   a diagnostic from its code action; prompts per project; a commit message,
   a review of the staged diff, a pull request, why a CI job failed; projects
   that keep AI local. `<leader>ai` · `:DyAi commit` · `:DyAi pr`
+- **Dead and duplicated code** — what nothing uses, by knip, vulture,
+  deadcode and cargo-machete; clones by jscpd. `<leader>pu` · `<leader>pD`
 
 ### 🏛 Architecture — `<leader>pA`
 

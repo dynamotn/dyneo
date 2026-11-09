@@ -92,6 +92,7 @@ CONTENTS                                                      *dyneo-contents*
        9.18 Duplicated code ............................... |dyneo-duplicates|
        9.19 Class diagrams ............................. |dyneo-class-diagram|
        9.20 Stack traces .................................. |dyneo-stacktrace|
+       9.21 Dead code ...................................... |dyneo-deadcode|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -2101,6 +2102,33 @@ the cargo registry, or a file that is nowhere -- stay in the list as `I`
 items, and the cursor lands on the project's first frame.  The trace never
 leaves the editor.
 
+9.21 Dead code                                                *dyneo-deadcode*
+
+`<leader>pu` (|:DyDeadCode|) lists what nothing uses in the project, like
+IntelliJ's Unused declaration inspection, in the quickfix list.  The files at
+the root of the project say which tools apply, and a polyglot root runs each:
+
+  `package.json`, `tsconfig.json`      knip: unused files, exports, types and
+                                     dependencies.  The project's own
+                                     `node_modules/.bin/knip` is preferred,
+                                     and its `knip.json` honoured.
+  `pyproject.toml`, `setup.py`,        vulture, from a confidence of 60 (an
+  `requirements*.txt`                unused function) and skipping virtual
+                                     environments, unless `[tool.vulture]`
+                                     of `pyproject.toml` says otherwise.
+  `go.mod`                             `deadcode -test`: the functions no
+                                     `main` nor test reaches.
+  `Cargo.toml`                         cargo-machete: unused dependencies, on
+                                     the line declaring them.
+
+`:DyDeadCode {tool}` runs one of them alone; completion lists those of the
+project.  knip loads the configuration of the project's tools by running it,
+so it asks whether the project is trusted first, once a session.  Mason
+installs a tool missing the first time.  A tool that is missing, fails or
+times out says so, and what the others found is still listed: a failed run
+never reads as a project without dead code.  "No dead code" is said only
+when every tool ran.  Paths outside the project are listed but not opened.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -2599,6 +2627,11 @@ Project ~
 :[range]DyStackTrace    The frames of a stack trace in the quickfix list: the
                         range, a log buffer, or the clipboard.  See
                         |dyneo-stacktrace|.
+
+                                                                 *:DyDeadCode*
+:DyDeadCode [{tool}]    What nothing uses in the project, by every tool that
+                        applies to it or by {tool} alone, in the quickfix
+                        list.  See |dyneo-deadcode|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose

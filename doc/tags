@@ -15,6 +15,7 @@
 :DyClassDiagram	dyneo.txt	/*:DyClassDiagram*
 :DyCron	dyneo.txt	/*:DyCron*
 :DyData	dyneo.txt	/*:DyData*
+:DyDeadCode	dyneo.txt	/*:DyDeadCode*
 :DyDeps	dyneo.txt	/*:DyDeps*
 :DyDiagram	dyneo.txt	/*:DyDiagram*
 :DyDuplicates	dyneo.txt	/*:DyDuplicates*
@@ -116,6 +117,7 @@ dyneo-contents	dyneo.txt	/*dyneo-contents*
 dyneo-cron	dyneo.txt	/*dyneo-cron*
 dyneo-data	dyneo.txt	/*dyneo-data*
 dyneo-data-files	dyneo.txt	/*dyneo-data-files*
+dyneo-deadcode	dyneo.txt	/*dyneo-deadcode*
 dyneo-deps	dyneo.txt	/*dyneo-deps*
 dyneo-detection	dyneo.txt	/*dyneo-detection*
 dyneo-development	dyneo.txt	/*dyneo-development*
