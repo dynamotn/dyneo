@@ -94,6 +94,7 @@ CONTENTS                                                      *dyneo-contents*
        9.20 Stack traces .................................. |dyneo-stacktrace|
        9.21 Dead code ...................................... |dyneo-deadcode|
        9.22 Call graphs .................................... |dyneo-callgraph|
+       9.23 Hotspots ........................................ |dyneo-hotspots|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -2144,6 +2145,33 @@ class diagram (|dyneo-class-diagram|), as a Mermaid flowchart that
 `<localleader>d` draws.  It says so when it was cut at 60 functions, or when
 the server took over five seconds and only what came by then is drawn.
 
+9.23 Hotspots                                                 *dyneo-hotspots*
+
+`<leader>pH` (|:DyHotspots|) lists the files of the project most worth
+refactoring or reviewing, as "code as a crime scene" ranks them: code that is
+both complex and often changed.  Its score is churn times complexity:
+
+  churn         the commits that touched the file in the last 12 months,
+                from `git log --numstat`, counted below the project's
+                directory when it is a part of a repository.  Only files
+                git still tracks count; lockfiles, `go.sum`, `vendor/`,
+                `node_modules/` and minified files never do.
+  complexity    the sum of the cyclomatic complexity (CCN) of the file's
+                functions, from lizard, so a file of many tangled functions
+                ranks above one with a single bad one.
+
+The top 20 go to the quickfix list, each on the file's most complex function,
+with its score, commits, total CCN and that function.  The 1000 most churned
+files are read by one lizard run, in the background.  Mason installs lizard
+the first time it is missing.  Outside a git repository, or when git or
+lizard fails, it says so and why: a failed run never reads as a project
+without hotspots.  A history too large to read is cut at 16 MiB and says so.
+
+`:DyHotspots buffer` toggles hints on the functions of the buffer whose CCN
+is over 15 (lizard's own warning), from one lizard run on its file as saved,
+read again after each write while on.  `M.SINCE`, `M.LIMIT` and `M.CCN_WARN`
+of `tools.hotspots` change the window, the length of the list and the bar.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -2653,6 +2681,12 @@ Project ~
 :DyDeadCode [{tool}]    What nothing uses in the project, by every tool that
                         applies to it or by {tool} alone, in the quickfix
                         list.  See |dyneo-deadcode|.
+
+                                                                 *:DyHotspots*
+:DyHotspots [buffer]    The files of the project most worth refactoring, by
+                        git churn times complexity, in the quickfix list;
+                        `buffer` toggles hints on the complex functions of
+                        the buffer.  See |dyneo-hotspots|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose

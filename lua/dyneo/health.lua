@@ -566,6 +566,7 @@ local function requirements()
     dyff = '`:DyEnvDiff` on YAML, JSON and TOML (a line diff without it)',
     semgrep = 'linting a project with `.semgrep.yml` (`:MasonInstall semgrep`)',
     jscpd = '`:DyDuplicates` (installed by Mason on first use)',
+    lizard = '`:DyHotspots` (installed by Mason on first use)',
     knip = '`:DyDeadCode` in a JavaScript or TypeScript project (installed by Mason on first use)',
     vulture = '`:DyDeadCode` in a Python project (installed by Mason on first use)',
     deadcode = '`:DyDeadCode` in a Go project (installed by Mason on first use)',

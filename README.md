@@ -197,6 +197,8 @@ below follow the sections of `:help dyneo`.
   deadcode and cargo-machete; clones by jscpd. `<leader>pu` · `<leader>pD`
 - **Call graphs** — callers and callees of the function under the cursor as
   Mermaid, from its language server. `<leader>cG` · `:DyCallGraph`
+- **Hotspots** — files ranked by git churn times lizard complexity; hints on
+  the complex functions of a buffer. `<leader>pH` · `:DyHotspots buffer`
 
 ### 🏛 Architecture — `<leader>pA`
 
