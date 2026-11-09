@@ -98,6 +98,7 @@ CONTENTS                                                      *dyneo-contents*
        9.23 Hotspots ........................................ |dyneo-hotspots|
        9.24 Mutation testing .................................. |dyneo-mutate|
        9.25 Affected tests ............................. |dyneo-test-affected|
+       9.26 Patch coverage ............................ |dyneo-patch-coverage|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -2313,6 +2314,30 @@ is affected" are said only when the change was read and mapped: when git or
 a tool fails or is missing, it says which and why instead.  Path aliases of
 JavaScript and a `go.work` of several modules are not followed.
 
+9.26 Patch coverage                                     *dyneo-patch-coverage*
+
+`<leader>tp` (|:DyPatchCoverage|) shows how much of the current change the
+tests run, the way diff-cover and Codecov's patch coverage count it.  The
+change is every line added or modified since the merge base of `HEAD` with
+the default branch (as |dyneo-test-affected| finds it), committed or not,
+and every line of an untracked file; `:DyPatchCoverage {ref}` takes the
+merge base with {ref}.
+
+The coverage is the newest report of the project: `lcov.info` or `*.lcov`,
+Cobertura `coverage.xml`, a Go `coverage.out` or `cover.out`, or a
+coverage.py `coverage.json`, in the project root or a directory
+crazy-coverage searches (`coverage/`, `build/`, `target/coverage/`, ...).
+Only the changed lines the report calls executable count; a changed file the
+report does not know is listed apart and not counted.
+
+A summary split gives the percentage of the whole and of each file.  The
+changed lines no test runs go in the quickfix list and show as hints in their
+buffers; `<leader>tp` again, or `:DyPatchCoverage clear`, removes them.  A
+report older than a changed file it covers is marked STALE, file by file,
+and the notification warns.  With no report, it says how to make one;
+`<leader>tc` then shows the whole report in the editor.  A Python `.coverage`
+database is not read: `coverage xml` turns it into one.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -2855,6 +2880,14 @@ Project ~
 :DyTestAffected [{ref}] Run the tests affected by the change since the merge
                         base with the default branch, or with {ref}.  See
                         |dyneo-test-affected|.
+
+                                                            *:DyPatchCoverage*
+:DyPatchCoverage [{ref}|toggle|clear]
+                        Show the coverage of the lines changed since the
+                        merge base with the default branch, or with {ref},
+                        and mark those no test runs; `toggle` removes the
+                        marks when shown, `clear` removes them.  See
+                        |dyneo-patch-coverage|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose

@@ -48,6 +48,7 @@
 :DyOpenApiRequest	dyneo.txt	/*:DyOpenApiRequest*
 :DyOutdated	dyneo.txt	/*:DyOutdated*
 :DyOwners	dyneo.txt	/*:DyOwners*
+:DyPatchCoverage	dyneo.txt	/*:DyPatchCoverage*
 :DyPostmortem	dyneo.txt	/*:DyPostmortem*
 :DyProfile	dyneo.txt	/*:DyProfile*
 :DyProject	dyneo.txt	/*:DyProject*
@@ -163,6 +164,7 @@ dyneo-openapi	dyneo.txt	/*dyneo-openapi*
 dyneo-ops	dyneo.txt	/*dyneo-ops*
 dyneo-outdated	dyneo.txt	/*dyneo-outdated*
 dyneo-owners	dyneo.txt	/*dyneo-owners*
+dyneo-patch-coverage	dyneo.txt	/*dyneo-patch-coverage*
 dyneo-per-machine	dyneo.txt	/*dyneo-per-machine*
 dyneo-policy	dyneo.txt	/*dyneo-policy*
 dyneo-postmortem	dyneo.txt	/*dyneo-postmortem*

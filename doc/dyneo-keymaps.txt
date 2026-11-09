@@ -571,6 +571,7 @@ one of the same keys in those buffers.
 `<leader>tf`           n      Run File (Vimtest)
 `<leader>tl`           n      Run Last (Neotest)
 `<leader>to`           n      Show Output (Neotest)
+`<leader>tp`           n      Toggle Patch Coverage
 `<leader>tr`           n      Run Nearest (Neotest)
 `<leader>ts`           n      Toggle Summary (Neotest)
 `<leader>tt`           n      Run File (Neotest)

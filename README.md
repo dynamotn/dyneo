@@ -207,6 +207,9 @@ below follow the sections of `:help dyneo`.
 - **Affected tests** — only the tests the change since the default branch
   reaches, by jest, imports, `go list` or `cargo metadata`, through neotest.
   `<leader>tA` · `:DyTestAffected`
+- **Patch coverage** — the coverage of only the lines the change adds or
+  modifies, from LCOV, Cobertura, Go or coverage.py reports.
+  `<leader>tp` · `:DyPatchCoverage`
 
 ### 🏛 Architecture — `<leader>pA`
 
