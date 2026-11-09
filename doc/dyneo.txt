@@ -95,6 +95,7 @@ CONTENTS                                                      *dyneo-contents*
        9.21 Dead code ...................................... |dyneo-deadcode|
        9.22 Call graphs .................................... |dyneo-callgraph|
        9.23 Hotspots ........................................ |dyneo-hotspots|
+       9.24 Mutation testing .................................. |dyneo-mutate|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -2172,6 +2173,43 @@ is over 15 (lizard's own warning), from one lizard run on its file as saved,
 read again after each write while on.  `M.SINCE`, `M.LIMIT` and `M.CCN_WARN`
 of `tools.hotspots` change the window, the length of the list and the bar.
 
+9.24 Mutation testing                                           *dyneo-mutate*
+
+Coverage says which lines the tests run; mutation testing says which of them
+they check.  `<leader>tM` (|:DyMutate|) runs the mutation tool of the project
+in a terminal split: it changes the code one small way at a time, a mutant,
+and runs the tests on each.  Once it exits, every mutant the tests still
+passed on -- one that survived -- is a warning on the line it changed, with
+the change; one no test reaches, or that timed out, is a hint.  All of them
+go to the quickfix list too, and a count of every status is told.
+
+  `pyproject.toml`, `setup.cfg`,       mutmut 3.  The project's own
+  `setup.py`                         `.venv/bin/mutmut` is preferred, as it
+                                     runs the tests in its own process;
+                                     `[tool.mutmut]` says where the code is.
+  `package.json`                       Stryker, from the project's
+                                     `node_modules` only, with the `json`
+                                     reporter added to its usual ones.
+  `go.mod`                             gremlins, which tests only what the
+                                     coverage reaches, and reports in JSON.
+  `Cargo.toml`                         cargo-mutants.
+
+The tool of the buffer's filetype wins in a project of several languages.
+`:DyMutate %` (or `file`) mutates the buffer's file alone: a mutmut pattern
+of its module, Stryker's `--mutate`, cargo-mutants' `--file`; gremlins only
+takes a package, so it mutates the file's package.  `:DyMutate load` reads
+the last report again without a run (mutmut's `mutants/`,
+`reports/mutation/mutation.json`, `mutants.out/outcomes.json`; gremlins'
+report is kept in the cache directory), and `:DyMutate clear` removes the
+marks.
+
+Running the mutants runs the tests of the project, so it asks whether the
+project is trusted first, once a session.  Mason installs mutmut, gremlins
+or cargo-mutants the first time one is missing; Stryker is installed in the
+project.  A run that exits with an error loads nothing and says so, as does
+a report that is missing or unreadable: "No mutant survived" is said only
+when the report holds mutants and every one was killed.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -2687,6 +2725,14 @@ Project ~
                         git churn times complexity, in the quickfix list;
                         `buffer` toggles hints on the complex functions of
                         the buffer.  See |dyneo-hotspots|.
+
+                                                                   *:DyMutate*
+:DyMutate [%|file|load|clear]
+                        Run the mutation tool of the project in a terminal
+                        and mark the mutants that survived its tests; `%` or
+                        `file` limits it to the buffer's file, `load` reads
+                        the last report, `clear` removes the marks.  See
+                        |dyneo-mutate|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose

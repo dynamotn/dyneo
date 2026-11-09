@@ -557,6 +557,7 @@ one of the same keys in those buffers.
 <leader>t  test
 
 `<leader>tC`           n      Coverage Summary
+`<leader>tM`           n      Mutation Testing
 `<leader>tO`           n      Toggle Output Panel (Neotest)
 `<leader>tS`           n      Stop (Neotest)
 `<leader>tT`           n      Run All Test Files (Neotest)

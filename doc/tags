@@ -41,6 +41,7 @@
 :DyLocalHistory	dyneo.txt	/*:DyLocalHistory*
 :DyLog	dyneo.txt	/*:DyLog*
 :DyMatrix	dyneo.txt	/*:DyMatrix*
+:DyMutate	dyneo.txt	/*:DyMutate*
 :DyNfr	dyneo.txt	/*:DyNfr*
 :DyOpenApiDiff	dyneo.txt	/*:DyOpenApiDiff*
 :DyOpenApiRequest	dyneo.txt	/*:DyOpenApiRequest*
@@ -153,6 +154,7 @@ dyneo-logs	dyneo.txt	/*dyneo-logs*
 dyneo-mappings	dyneo.txt	/*dyneo-mappings*
 dyneo-matrix	dyneo.txt	/*dyneo-matrix*
 dyneo-model	dyneo.txt	/*dyneo-model*
+dyneo-mutate	dyneo.txt	/*dyneo-mutate*
 dyneo-nfr	dyneo.txt	/*dyneo-nfr*
 dyneo-openapi	dyneo.txt	/*dyneo-openapi*
 dyneo-ops	dyneo.txt	/*dyneo-ops*
