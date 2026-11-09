@@ -100,6 +100,7 @@ CONTENTS                                                      *dyneo-contents*
        9.25 Affected tests ............................. |dyneo-test-affected|
        9.26 Patch coverage ............................ |dyneo-patch-coverage|
        9.27 Flaky tests ........................................ |dyneo-flaky|
+       9.28 Snapshot review ................................ |dyneo-snapshots|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -2377,6 +2378,46 @@ is trusted first, once a session.  A tool that is missing, a build that
 fails, or a name no test matches stops the whole run and says so: nothing
 of it is counted as a pass.
 
+9.28 Snapshot review                                         *dyneo-snapshots*
+
+`<leader>tu` (|:DySnapshots|) lists the pending snapshot-test changes of the
+project in a picker, the diff in its preview.  Choosing one opens a tab of
+two read-only buffers in diff mode, the snapshot as stored on the left and
+the new one on the right, with keys of their own:
+
+  `a`                 accept it, and show the next one
+  `x`                 reject it, and show the next one
+  `n`                 skip to the next one
+  `q`                 stop the review
+
+Three kinds are found, by what the project holds:
+
+  insta (Rust)        a `x.snap.new` next to `x.snap`; the diff is of the
+                      bodies, without the `---` headers.  Accepting moves
+                      the new file over the old, its header with it;
+                      rejecting deletes it, once confirmed.  Inline
+                      snapshots (`.pending-snap` files) are counted, not
+                      shown: `cargo insta review` takes them.
+  jest, vitest        no pending file: the project's own runner in
+                      `node_modules/.bin` runs the suite once with `--json`
+                      (and `CI=true`, so nothing is written), and each
+                      failing snapshot is listed.  vitest's report has no
+                      new value, so its right side says so.
+  syrupy (Python)     `__snapshots__/*.ambr`: the project's pytest (its
+                      `.venv` first) runs once with a JUnit report.
+
+For jest, vitest and syrupy, accepting runs the test file again with
+`-u` (`--runTestsByPath`, `vitest run -u`, `pytest --snapshot-update`),
+once confirmed: it rewrites every snapshot of that file, so the others of
+the file leave the list too.  Rejecting has no file to delete there: the
+snapshot stays and the test keeps failing.
+
+`:DySnapshots accept-all` and `:DySnapshots reject-all` act on every one at
+once after a confirmation giving the count; reject-all deletes only insta's
+`.snap.new` files.  Running a suite runs code of the project, so it asks
+whether the project is trusted first, once a session.  A runner that fails
+or gives no report says so; its snapshots are not read as none pending.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -2934,6 +2975,12 @@ Project ~
                         tests of the file, [count] times (10 unless given)
                         and report how often it passes; `stop` ends a run.
                         See |dyneo-flaky|.
+
+                                                                *:DySnapshots*
+:DySnapshots [accept-all|reject-all]
+                        Review the pending snapshot-test changes (insta,
+                        jest, vitest, syrupy) and accept or reject each, or
+                        all at once.  See |dyneo-snapshots|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose

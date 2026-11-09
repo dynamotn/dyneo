@@ -354,6 +354,8 @@ map("n", "<leader>tA", "<cmd>DyTestAffected<cr>", { desc = "Run Affected Tests" 
 map("n", "<leader>tp", "<cmd>DyPatchCoverage toggle<cr>", { desc = "Toggle Patch Coverage" })
 -- the test under the cursor run [count] times, flaky or broken (`tools.flaky`)
 map("n", "<leader>tF", function() require("tools.flaky").run("", vim.v.count) end, { desc = "Flaky Test (run N times)" })
+-- pending snapshot-test changes, accepted or rejected (`tools.snapshots`)
+map("n", "<leader>tu", "<cmd>DySnapshots<cr>", { desc = "Review Snapshots" })
 -- files ranked by git churn times complexity (`tools.hotspots`)
 map("n", "<leader>pH", "<cmd>DyHotspots<cr>", { desc = "Hotspots" })
 -- the classes of the buffer as a Mermaid diagram (`tools.class_diagram`)

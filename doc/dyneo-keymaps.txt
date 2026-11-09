@@ -576,6 +576,7 @@ one of the same keys in those buffers.
 `<leader>tr`           n      Run Nearest (Neotest)
 `<leader>ts`           n      Toggle Summary (Neotest)
 `<leader>tt`           n      Run File (Neotest)
+`<leader>tu`           n      Review Snapshots
 `<leader>tw`           n      Toggle Watch (Neotest)
 
 ==============================================================================

@@ -212,6 +212,8 @@ below follow the sections of `:help dyneo`.
   `<leader>tp` · `:DyPatchCoverage`
 - **Flaky tests** — the test under the cursor run N times by its own tool:
   passes, distinct failures, durations, and a verdict. `<leader>tF` · `:DyFlaky`
+- **Snapshot review** — pending insta, jest, vitest and syrupy snapshots in
+  a diff tab, accepted or rejected one by one. `<leader>tu` · `:DySnapshots`
 
 ### 🏛 Architecture — `<leader>pA`
 

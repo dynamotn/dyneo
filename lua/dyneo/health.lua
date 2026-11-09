@@ -571,6 +571,7 @@ local function requirements()
     vulture = '`:DyDeadCode` in a Python project (installed by Mason on first use)',
     deadcode = '`:DyDeadCode` in a Go project (installed by Mason on first use)',
     ['cargo-machete'] = '`:DyDeadCode` in a Rust project (installed by Mason on first use)',
+    pytest = '`:DySnapshots` on syrupy snapshots (or in the project `.venv`)',
     mutmut = '`:DyMutate` in a Python project (best in its virtual environment; else Mason on first use)',
     gremlins = '`:DyMutate` in a Go project (installed by Mason on first use)',
     ['cargo-mutants'] = '`:DyMutate` in a Rust project (installed by Mason on first use)',

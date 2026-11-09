@@ -63,6 +63,7 @@
 :DyRunbook	dyneo.txt	/*:DyRunbook*
 :DySarif	dyneo.txt	/*:DySarif*
 :DySbom	dyneo.txt	/*:DySbom*
+:DySnapshots	dyneo.txt	/*:DySnapshots*
 :DySonarlintDeactivateRule	dyneo.txt	/*:DySonarlintDeactivateRule*
 :DySonarlintToken	dyneo.txt	/*:DySonarlintToken*
 :DySpell	dyneo.txt	/*:DySpell*
@@ -186,6 +187,7 @@ dyneo-sbom	dyneo.txt	/*dyneo-sbom*
 dyneo-schema	dyneo.txt	/*dyneo-schema*
 dyneo-security	dyneo.txt	/*dyneo-security*
 dyneo-slo	dyneo.txt	/*dyneo-slo*
+dyneo-snapshots	dyneo.txt	/*dyneo-snapshots*
 dyneo-spell	dyneo.txt	/*dyneo-spell*
 dyneo-sql	dyneo.txt	/*dyneo-sql*
 dyneo-stacktrace	dyneo.txt	/*dyneo-stacktrace*
