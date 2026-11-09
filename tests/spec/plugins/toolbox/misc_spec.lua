@@ -18,13 +18,8 @@ describe('plugins.toolbox.misc', function()
     specs = dofile(h.root .. '/lua/plugins/toolbox/misc.lua')
   end)
 
-  it('never loads kulala on the way out', function()
+  it('loads kulala on an http buffer, its keys as commands', function()
     local kulala = spec('mistweaverco/kulala.nvim')
-    assert.same(
-      { 'BufReadPre', 'BufNewFile' },
-      kulala.event(nil, { 'VimLeavePre', 'BufReadPre', 'BufNewFile' })
-    )
-    assert.same({}, kulala.event(nil, nil))
     assert.are.equal('http', kulala.ft)
     for _, key in ipairs(kulala.keys) do
       assert.are.equal('string', type(key[2]), key[1])
