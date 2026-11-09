@@ -53,7 +53,8 @@ return {
     opts = {
       servers = {
         copilot = {
-          -- nvim-lspconfig ships Copilot with `telemetryLevel = 'all'`.
+          -- The nvim-lspconfig release `stable` follows ships Copilot with
+          -- `telemetryLevel = 'all'`.
           settings = {
             telemetry = {
               telemetryLevel = 'off',
