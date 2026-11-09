@@ -210,6 +210,8 @@ below follow the sections of `:help dyneo`.
 - **Patch coverage** — the coverage of only the lines the change adds or
   modifies, from LCOV, Cobertura, Go or coverage.py reports.
   `<leader>tp` · `:DyPatchCoverage`
+- **Flaky tests** — the test under the cursor run N times by its own tool:
+  passes, distinct failures, durations, and a verdict. `<leader>tF` · `:DyFlaky`
 
 ### 🏛 Architecture — `<leader>pA`
 

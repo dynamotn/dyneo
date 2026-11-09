@@ -25,6 +25,7 @@
 :DyEncryptedKeys	dyneo.txt	/*:DyEncryptedKeys*
 :DyEncryptedRotate	dyneo.txt	/*:DyEncryptedRotate*
 :DyEnvDiff	dyneo.txt	/*:DyEnvDiff*
+:DyFlaky	dyneo.txt	/*:DyFlaky*
 :DyFormat	dyneo.txt	/*:DyFormat*
 :DyFormatInfo	dyneo.txt	/*:DyFormatInfo*
 :DyHelmUnused	dyneo.txt	/*:DyHelmUnused*
@@ -135,6 +136,7 @@ dyneo-encrypted	dyneo.txt	/*dyneo-encrypted*
 dyneo-envdiff	dyneo.txt	/*dyneo-envdiff*
 dyneo-features	dyneo.txt	/*dyneo-features*
 dyneo-findings	dyneo.txt	/*dyneo-findings*
+dyneo-flaky	dyneo.txt	/*dyneo-flaky*
 dyneo-globals	dyneo.txt	/*dyneo-globals*
 dyneo-helm	dyneo.txt	/*dyneo-helm*
 dyneo-hex	dyneo.txt	/*dyneo-hex*

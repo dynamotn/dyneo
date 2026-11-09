@@ -99,6 +99,7 @@ CONTENTS                                                      *dyneo-contents*
        9.24 Mutation testing .................................. |dyneo-mutate|
        9.25 Affected tests ............................. |dyneo-test-affected|
        9.26 Patch coverage ............................ |dyneo-patch-coverage|
+       9.27 Flaky tests ........................................ |dyneo-flaky|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -2338,6 +2339,44 @@ and the notification warns.  With no report, it says how to make one;
 `<leader>tc` then shows the whole report in the editor.  A Python `.coverage`
 database is not read: `coverage xml` turns it into one.
 
+9.27 Flaky tests                                                 *dyneo-flaky*
+
+`<leader>tF` (|:DyFlaky|) runs the test under the cursor many times, 10
+unless a count is given (`:20DyFlaky`, `20<leader>tF`), and says how often
+it passes: a test that fails now and then is flaky, one that always fails
+is broken.  `:DyFlaky file` runs every test of the buffer's file instead, and
+`:DyFlaky stop` ends a run going on; the runs that finished are reported.
+
+The test is neotest's nearest position when an adapter has parsed the
+buffer, else the enclosing test function: `func TestX` in Go, `def test_x`
+(in its `class Test...`) in Python, `it(...)` or `test(...)` in JavaScript
+and TypeScript, a `#[test]` function (in its `mod`s) in Rust.  It runs by
+the tool's own command, not through neotest, so each run is independent:
+
+  Go                  `go test -json -count=N -run ^(TestX)$`, one process;
+                      each iteration is read from its events, subtests
+                      counted with their test.
+  Python              `pytest -p no:cacheprovider -p no:randomly
+                      file::Class::test` per run (the project's virtual
+                      environment first); pytest-randomly is kept when the
+                      project names it.
+  JavaScript          the project's jest `-t` or `vitest run -t` per run,
+                      matching the test's own name.
+  Rust                `cargo test -- --exact module::test` per run; cargo
+                      builds once.
+
+Runs go one after the other in the background, each with its own deadline
+(5 minutes); a progress notification replaces itself.  The report opens in
+a scratch buffer: passes of N and the failure rate, the distinct failure
+messages (first lines) with how often each came and the start of one
+output of each, the durations (min, median, max), and the verdict: stable
+pass, flaky, or always fails.  A run past its deadline counts as a failure.
+
+Running the tests runs code of the project, so it asks whether the project
+is trusted first, once a session.  A tool that is missing, a build that
+fails, or a name no test matches stops the whole run and says so: nothing
+of it is counted as a pass.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -2888,6 +2927,13 @@ Project ~
                         and mark those no test runs; `toggle` removes the
                         marks when shown, `clear` removes them.  See
                         |dyneo-patch-coverage|.
+
+                                                                    *:DyFlaky*
+:[count]DyFlaky [file|stop]
+                        Run the test under the cursor, or with `file` the
+                        tests of the file, [count] times (10 unless given)
+                        and report how often it passes; `stop` ends a run.
+                        See |dyneo-flaky|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose

@@ -561,6 +561,7 @@ one of the same keys in those buffers.
 
 `<leader>tA`           n      Run Affected Tests
 `<leader>tC`           n      Coverage Summary
+`<leader>tF`           n      Flaky Test (run N times)
 `<leader>tM`           n      Mutation Testing
 `<leader>tO`           n      Toggle Output Panel (Neotest)
 `<leader>tS`           n      Stop (Neotest)
