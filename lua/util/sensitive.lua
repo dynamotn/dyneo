@@ -35,6 +35,49 @@ local function path_is_sensitive(path)
   return false
 end
 
+--- Links followed before a path is given up on, as the kernel does
+local MAX_LINKS = 40
+
+--- Where a write to `path` lands once every link on the way is followed
+---
+--- A file not made yet has no real path of its own, but a write creates it
+--- where its nearest existing directory resolves to: that one is followed and
+--- the rest put back after it. Two things only the kernel would do otherwise:
+--- `..` is taken after the link before it, so `path` must not be normalized
+--- first, and a link whose target is missing is followed to that target,
+--- which a write creates.
+---@param path string Absolute path, its `..` not collapsed
+---@param hops? integer Links followed so far
+---@return string? real Normalized; nil for a name that is not a file path
+M.resolve = function(path, hops)
+  hops = hops or 0
+  -- A `term://` or `oil://` name is no file, and must not be looked up
+  if hops > MAX_LINKS or path:match('^%a[%w+.-]*://') then return nil end
+  -- The kernel expands neither `$VAR` nor `~` in what it is handed
+  local keep = { expand_env = false }
+  local real = vim.uv.fs_realpath(path)
+  if real then return vim.fs.normalize(real, keep) end
+  local rest, dir = {}, path:gsub('(.)/+$', '%1')
+  while true do
+    local target = vim.uv.fs_readlink(dir)
+    if target then
+      if not vim.startswith(target, '/') then
+        target = vim.fs.dirname(dir) .. '/' .. target
+      end
+      table.insert(rest, 1, target)
+      return M.resolve(table.concat(rest, '/'), hops + 1)
+    end
+    local parent = vim.fs.dirname(dir)
+    if not parent or parent == dir or parent == '.' then return nil end
+    table.insert(rest, 1, vim.fs.basename(dir))
+    dir = parent
+    real = vim.uv.fs_realpath(dir)
+    if real then
+      return vim.fs.normalize(vim.fs.joinpath(real, unpack(rest)), keep)
+    end
+  end
+end
+
 --- Whether a file's content must not leave the machine
 ---
 --- Both the path as given and the path it resolves to are checked: in a
@@ -44,13 +87,12 @@ end
 ---@return boolean
 M.is_sensitive_path = function(path)
   if path == '' then return false end
-  path = vim.fs.normalize(vim.fn.fnamemodify(path, ':p'))
+  local absolute = vim.fn.fnamemodify(path, ':p')
+  path = vim.fs.normalize(absolute)
   if path_is_sensitive(path) then return true end
 
-  local real = vim.uv.fs_realpath(path)
-  return real ~= nil
-    and real ~= path
-    and path_is_sensitive(vim.fs.normalize(real))
+  local real = M.resolve(absolute)
+  return real ~= nil and real ~= path and path_is_sensitive(real)
 end
 
 --- The credential format `text` has the shape of, if any
