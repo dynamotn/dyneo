@@ -182,6 +182,8 @@ below follow the sections of `:help dyneo`.
 - **Code history & owners** — the commits that changed the function under
   the cursor; who CODEOWNERS says owns the file, on the statusline, and the
   files nobody owns. `:DyHistory` · `:DyOwners`
+- **Bisect** — the commit that broke a check, found by `git bisect run` in a
+  throwaway worktree and shown. `<leader>gi` · `:DyBisect`
 - **Forges & trackers** — GitHub (Octo), GitLab merge requests, CI checks,
   Jira issues to branches and worklogs. `<leader>ph` `pl` `pc` `pj`
 - **Pull request review** — GitHub, GitLab and Azure DevOps in one UI:

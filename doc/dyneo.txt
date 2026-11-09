@@ -101,6 +101,7 @@ CONTENTS                                                      *dyneo-contents*
        9.26 Patch coverage ............................ |dyneo-patch-coverage|
        9.27 Flaky tests ........................................ |dyneo-flaky|
        9.28 Snapshot review ................................ |dyneo-snapshots|
+       9.29 Bisect ............................................ |dyneo-bisect|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -2418,6 +2419,38 @@ once after a confirmation giving the count; reject-all deletes only insta's
 whether the project is trusted first, once a session.  A runner that fails
 or gives no report says so; its snapshots are not read as none pending.
 
+9.29 Bisect                                                     *dyneo-bisect*
+
+`<leader>gi` (|:DyBisect|) finds the commit that broke a check with `git
+bisect run`, then opens it as `git show` in a tab and says its subject,
+author and date.  It asks for the good ref (the merge base with the default
+branch, else the last tag before the bad one) and the check command (the
+test under the cursor, through the command of |:DyFlaky|, else the last one
+used in the repository this session); the bad ref is `HEAD`.
+`:DyBisect {good} [{bad}] [-- {cmd}]` takes them directly.
+
+The check is a shell command run at each commit; its exit code decides:
+
+  `0`                 good
+  `125`               skip: the commit cannot be tested (it does not build)
+  `1`-`127`           bad
+  `128` and above     abort the bisect
+
+Your working tree, index and branch are never touched: the run happens in a
+throwaway detached worktree under `stdpath("cache")/dyneo/bisect/`, so the
+check runs against committed code only, and what is not committed is
+ignored.  Submodules are as git leaves them in a new worktree.  The
+worktree and its bisect state are removed when the run ends, fails, times
+out (after 30 minutes), is stopped with `:DyBisect stop`, or Neovim quits.
+
+The run shows in a terminal split, the last 200 lines of each step's output
+kept.  Before bisecting, the check runs once at the bad commit, which must
+fail, and once at the good one, which must pass.  When either does not, the
+good ref is not an ancestor of the bad one, or only skipped commits are
+left, it says so, never naming a first bad commit it did not find.  It runs
+code of the project at old commits, so it asks whether the project is
+trusted first, once a session.  One bisect runs at a time.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -2903,6 +2936,13 @@ Project ~
 :DyOwners               Who CODEOWNERS says owns the file of the buffer.
 :DyOwners unowned       Every file git tracks that nobody owns, in the
                         quickfix list.  See |dyneo-owners|.
+
+                                                                   *:DyBisect*
+:DyBisect [{good} [{bad}]] [-- {cmd}]
+                        Find the commit that broke {cmd} with `git bisect
+                        run` in a throwaway worktree, and show it; what is
+                        not given is asked.  See |dyneo-bisect|.
+:DyBisect stop          End the bisect going on and remove its worktree.
 
                                                                        *:DyC4*
 :DyC4 [{view}]          Draw {view} of the LikeC4 workspace of the buffer,

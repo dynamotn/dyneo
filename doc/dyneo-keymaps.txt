@@ -291,6 +291,7 @@ one of the same keys in those buffers.
 `<leader>gd`           n      Git Diff (hunks)
 `<leader>gf`           n      Git Current File History
 `<leader>gg`           n      Lazygit (Root Dir)
+`<leader>gi`           n      Bisect (find the breaking commit)
 `<leader>gl`           n      Git Log
 `<leader>gp`           n      Git Grep
 `<leader>gr`           n      Git Branches

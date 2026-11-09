@@ -7,6 +7,7 @@
 :DyArchitecture	dyneo.txt	/*:DyArchitecture*
 :DyAsyncApiDiff	dyneo.txt	/*:DyAsyncApiDiff*
 :DyBench	dyneo.txt	/*:DyBench*
+:DyBisect	dyneo.txt	/*:DyBisect*
 :DyBreaking	dyneo.txt	/*:DyBreaking*
 :DyC4	dyneo.txt	/*:DyC4*
 :DyCallGraph	dyneo.txt	/*:DyCallGraph*
@@ -107,6 +108,7 @@ dyneo-ai-review	dyneo.txt	/*dyneo-ai-review*
 dyneo-architecture	dyneo.txt	/*dyneo-architecture*
 dyneo-asyncapi	dyneo.txt	/*dyneo-asyncapi*
 dyneo-bench	dyneo.txt	/*dyneo-bench*
+dyneo-bisect	dyneo.txt	/*dyneo-bisect*
 dyneo-breaking	dyneo.txt	/*dyneo-breaking*
 dyneo-callgraph	dyneo.txt	/*dyneo-callgraph*
 dyneo-cert-file	dyneo.txt	/*dyneo-cert-file*
