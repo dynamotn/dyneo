@@ -66,6 +66,7 @@
 :DySpell	dyneo.txt	/*:DySpell*
 :DyStackTrace	dyneo.txt	/*:DyStackTrace*
 :DySudoWrite	dyneo.txt	/*:DySudoWrite*
+:DyTestAffected	dyneo.txt	/*:DyTestAffected*
 :DyTfPlan	dyneo.txt	/*:DyTfPlan*
 :DyTfState	dyneo.txt	/*:DyTfState*
 :DyThreat	dyneo.txt	/*:DyThreat*
@@ -185,6 +186,7 @@ dyneo-spell	dyneo.txt	/*dyneo-spell*
 dyneo-sql	dyneo.txt	/*dyneo-sql*
 dyneo-stacktrace	dyneo.txt	/*dyneo-stacktrace*
 dyneo-statusline	dyneo.txt	/*dyneo-statusline*
+dyneo-test-affected	dyneo.txt	/*dyneo-test-affected*
 dyneo-tfplan	dyneo.txt	/*dyneo-tfplan*
 dyneo-tfstate	dyneo.txt	/*dyneo-tfstate*
 dyneo-threat	dyneo.txt	/*dyneo-threat*

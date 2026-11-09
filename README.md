@@ -204,6 +204,9 @@ below follow the sections of `:help dyneo`.
   the complex functions of a buffer. `<leader>pH` · `:DyHotspots buffer`
 - **Mutation testing** — the lines whose mutants survive the tests, by
   mutmut, Stryker, gremlins or cargo-mutants. `<leader>tM` · `:DyMutate %`
+- **Affected tests** — only the tests the change since the default branch
+  reaches, by jest, imports, `go list` or `cargo metadata`, through neotest.
+  `<leader>tA` · `:DyTestAffected`
 
 ### 🏛 Architecture — `<leader>pA`
 

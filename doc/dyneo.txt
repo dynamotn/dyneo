@@ -97,6 +97,7 @@ CONTENTS                                                      *dyneo-contents*
        9.22 Call graphs .................................... |dyneo-callgraph|
        9.23 Hotspots ........................................ |dyneo-hotspots|
        9.24 Mutation testing .................................. |dyneo-mutate|
+       9.25 Affected tests ............................. |dyneo-test-affected|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -2274,6 +2275,44 @@ project.  A run that exits with an error loads nothing and says so, as does
 a report that is missing or unreadable: "No mutant survived" is said only
 when the report holds mutants and every one was killed.
 
+9.25 Affected tests                                      *dyneo-test-affected*
+
+`<leader>tA` (|:DyTestAffected|) runs only the tests the current change
+affects.  The change is every file that differs from the merge base of `HEAD`
+with the default branch (`origin/HEAD`, else `main`, else `master`), committed
+or not, plus the untracked files; `:DyTestAffected {ref}` takes the merge base
+with {ref} instead.  Each language of the project maps it to tests:
+
+  `package.json`                       jest's own `--listTests
+                                     --findRelatedTests` when the project
+                                     has jest; else (Vitest's `list` has no
+                                     related mode) the test files whose
+                                     relative imports reach a changed file.
+  `go.mod`                             the packages of the changed files,
+                                     those importing them, directly or not,
+                                     and those whose tests import one, from
+                                     `go list`.
+  `pyproject.toml`, `setup.py`,        the test files whose `import` and
+  `setup.cfg`, `pytest.ini`            `from` lines reach a changed module,
+                                     read by `git grep`; a changed
+                                     `conftest.py` takes its directory.  With
+                                     `.testmondata`, `pytest --testmon` picks
+                                     them itself.
+  `Cargo.toml`                         the crates of the workspace holding a
+                                     changed file and those depending on
+                                     them, from `cargo metadata --no-deps`.
+
+A changed test file is always affected.  neotest runs the files, packages or
+crates when the language has an adapter; else the tool's own command (jest,
+`vitest run`, `go test`, `pytest`, `cargo test -p`) runs in a terminal split.
+A notification says which ran and why: changed, or which change it imports.
+
+Listing and running the tests runs code of the project, so it asks whether
+the project is trusted first, once a session.  "Nothing changed" and "No test
+is affected" are said only when the change was read and mapped: when git or
+a tool fails or is missing, it says which and why instead.  Path aliases of
+JavaScript and a `go.work` of several modules are not followed.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -2811,6 +2850,11 @@ Project ~
                         `file` limits it to the buffer's file, `load` reads
                         the last report, `clear` removes the marks.  See
                         |dyneo-mutate|.
+
+                                                             *:DyTestAffected*
+:DyTestAffected [{ref}] Run the tests affected by the change since the merge
+                        base with the default branch, or with {ref}.  See
+                        |dyneo-test-affected|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose
