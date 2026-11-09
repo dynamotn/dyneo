@@ -297,6 +297,18 @@ describe('tools.bench', function()
     assert.is_true(noted('hyperfine is not installed', vim.log.levels.ERROR))
     assert.same({ 'hyperfine' }, installed)
     assert.same(0, #jobs)
+    -- `go` may sit in `/usr/bin`, which this spec keeps for git
+    local executable = vim.fn.executable
+    table.insert(
+      restores,
+      h.stub(
+        vim.fn,
+        'executable',
+        function(name)
+          return vim.fs.basename(name) == 'go' and 0 or executable(name)
+        end
+      )
+    )
     go_buffer()
     bench.run()
     assert.is_true(noted('go is not installed', vim.log.levels.ERROR))
