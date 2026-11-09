@@ -162,6 +162,21 @@ describe('tools.ai', function()
     end
   end)
 
+  it('opens the Avante history without its deprecated command', function()
+    local opened = 0
+    package.loaded['avante.api'].select_history = function() opened = opened + 1 end
+    table.insert(
+      restores,
+      h.stub(vim.cmd, 'AvanteHistory', function() error('deprecated') end)
+    )
+    for _, action in ipairs(ai.ACTIONS) do
+      if action.group == 'Avante' and action.name == 'History' then
+        action.run()
+      end
+    end
+    assert.equals(1, opened)
+  end)
+
   it('warns when the code was cut to fit the prompt', function()
     code_buffer()
     require('tools.ai.prompts').MAX_BYTES = 2
