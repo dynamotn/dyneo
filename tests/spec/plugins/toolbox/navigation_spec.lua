@@ -81,14 +81,20 @@ describe('plugins.toolbox.navigation', function()
       h.stub(package.loaded, 'smart-splits', recorder(calls))
     )
     local splits = load()['mrjones2014/smart-splits.nvim']
-    local called = {}
+    local called, rhs = {}, {}
     for _, key in ipairs(splits.keys) do
-      key[2]()
-      called[key[1]] = calls[#calls][1]
+      if type(key[2]) == 'function' then
+        key[2]()
+        called[key[1]] = calls[#calls][1]
+      else
+        rhs[key[1]] = key[2]
+      end
     end
-    assert.are.equal(#splits.keys, #calls)
+    assert.are.equal(#splits.keys, #calls + vim.tbl_count(rhs))
     assert.are.equal('move_cursor_left', called['<S-Left>'])
-    assert.are.equal('move_cursor_previous', called['<C-\\>'])
+    -- smart-splits 3 has no `move_cursor_previous`
+    assert.is_nil(called['<C-\\>'])
+    assert.are.equal('<C-w>p', rhs['<C-\\>'])
     assert.are.equal('resize_up', called['<C-Up>'])
     assert.are.equal('swap_buf_right', called['<leader>w<Right>'])
     assert.are.equal('stop', splits.opts.move.at_edge)

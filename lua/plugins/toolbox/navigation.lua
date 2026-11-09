@@ -60,8 +60,10 @@ return {
         mode = { 'n', 't' },
       },
       {
+        -- Neovim's own: smart-splits cannot follow the previous window
+        -- across a multiplexer, and offers no key for it
         '<C-\\>',
-        function() require('smart-splits').move_cursor_previous() end,
+        '<C-w>p',
         desc = 'Navigate to previous window',
         -- Not in a terminal, where `<C-\><C-n>` leaves terminal mode
         mode = 'n',
