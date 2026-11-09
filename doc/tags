@@ -6,6 +6,7 @@
 :DyAiGuardLog	dyneo.txt	/*:DyAiGuardLog*
 :DyArchitecture	dyneo.txt	/*:DyArchitecture*
 :DyAsyncApiDiff	dyneo.txt	/*:DyAsyncApiDiff*
+:DyBench	dyneo.txt	/*:DyBench*
 :DyBreaking	dyneo.txt	/*:DyBreaking*
 :DyC4	dyneo.txt	/*:DyC4*
 :DyCallGraph	dyneo.txt	/*:DyCallGraph*
@@ -101,6 +102,7 @@ dyneo-ai-prompts	dyneo.txt	/*dyneo-ai-prompts*
 dyneo-ai-review	dyneo.txt	/*dyneo-ai-review*
 dyneo-architecture	dyneo.txt	/*dyneo-architecture*
 dyneo-asyncapi	dyneo.txt	/*dyneo-asyncapi*
+dyneo-bench	dyneo.txt	/*dyneo-bench*
 dyneo-breaking	dyneo.txt	/*dyneo-breaking*
 dyneo-callgraph	dyneo.txt	/*dyneo-callgraph*
 dyneo-cert-file	dyneo.txt	/*dyneo-cert-file*

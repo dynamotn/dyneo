@@ -314,6 +314,9 @@ Snacks.toggle.indent():map("<leader>ug")
 Snacks.toggle.scroll():map("<leader>uS")
 Snacks.toggle.profiler():map("<leader>dpp")
 Snacks.toggle.profiler_highlights():map("<leader>dph")
+-- the project's benchmarks, compared with the last run (`tools.bench`)
+map("n", "<leader>dpb", "<cmd>DyBench<cr>", { desc = "Benchmark" })
+map("n", "<leader>dpB", "<cmd>DyBench compare<cr>", { desc = "Compare Benchmarks" })
 
 Snacks.toggle.inlay_hints():map("<leader>uh")
 

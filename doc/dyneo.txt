@@ -66,6 +66,7 @@ CONTENTS                                                      *dyneo-contents*
        7.9 Protobuf and GraphQL contracts ................... |dyneo-breaking|
        7.10 PromQL ............................................ |dyneo-promql|
        7.11 Profiling ........................................ |dyneo-profile|
+       7.12 Benchmarks ........................................ |dyneo-bench|
     8. Data and machine learning ................................ |dyneo-data|
        8.1 Data files ..................................... |dyneo-data-files|
        8.2 SQL and databases ..................................... |dyneo-sql|
@@ -1309,6 +1310,46 @@ Then:
                 drawn by inferno as an SVG the system viewer opens
 
 `<leader>dpp` and its neighbours profile Neovim itself (snacks.nvim).
+
+7.12 Benchmarks                                                  *dyneo-bench*
+
+`<leader>dpb` (|:DyBench|) runs the benchmarks of the project in a terminal
+split, keeps the result and compares it with the previous one of its kind.
+The harness follows the project:
+
+  `go.mod`            `go test -run '^$' -bench . -benchmem -count=6 ./...`;
+                    benchstat gives the p-value of each change
+  `Cargo.toml`        `cargo bench -- --save-baseline dyneo`, criterion read
+                    from `target/criterion`; its confidence interval of the
+                    change is shown when the previous result is the run it
+                    compared with
+  `pyproject.toml`,   pytest-benchmark (`--benchmark-only --benchmark-json`),
+  `setup.cfg`, ...    from the project's `.venv` when it has one
+
+`:DyBench cmd {command}` times any command with hyperfine instead, and
+compares it with the last time of the same command.  hyperfine 2 runs the
+command without a shell: write `sh -c '...'` for a pipeline.
+
+The comparison opens in a tab: one row per benchmark with the old and new
+mean, the spread of each run, the change in percent and the significance
+where the tool gives one.  Slower benchmarks come first, highlighted, then
+faster ones, then the unchanged, the added and the removed.  A change under
+2% (`M.NOISE`), one the tool's test calls noise, or one inside the spread of
+a run is unchanged.  A first result says there is nothing to compare with;
+a run that fails, or whose output holds no benchmark or cannot be read, is
+not kept and says so.
+
+Results are kept per project in `stdpath('state')/dyneo/bench/`, with their
+time and git HEAD, the 20 most recent (`M.KEEP`).  `<leader>dpB`
+(`:DyBench compare`) compares the last two again; `:DyBench compare {ref}`
+compares the last with the one recorded at git {ref}, `main` say.
+`:DyBench list` picks a kept result and compares the latest of its kind with
+it.
+
+Running benchmarks runs the code of the project, so it asks whether the
+project is trusted first, once a session.  Mason installs hyperfine and
+benchstat the first time they are missing; criterion and pytest-benchmark
+are dependencies of the project.
 
 ------------------------------------------------------------------------------
 8. DATA AND MACHINE LEARNING                                      *dyneo-data*
@@ -2602,6 +2643,17 @@ Operations ~
                         Read a profile recorded elsewhere.
 :DyProfile flame        Draw the loaded profile as a flame graph.  See
                         |dyneo-profile|.
+
+                                                                    *:DyBench*
+:DyBench                Run the benchmarks of the project and compare them
+                        with the last run.
+:DyBench cmd {command}  Time {command} with hyperfine and compare it with
+                        its last time.
+:DyBench compare [{ref}]
+                        Compare the last two results, or the last with the
+                        one recorded at git {ref}.
+:DyBench list           Pick a kept result to compare with.  See
+                        |dyneo-bench|.
 
 Data and machine learning ~
                                                                      *:DyData*

@@ -574,6 +574,8 @@ local function requirements()
     mutmut = '`:DyMutate` in a Python project (best in its virtual environment; else Mason on first use)',
     gremlins = '`:DyMutate` in a Go project (installed by Mason on first use)',
     ['cargo-mutants'] = '`:DyMutate` in a Rust project (installed by Mason on first use)',
+    hyperfine = '`:DyBench cmd` (installed by Mason on first use)',
+    benchstat = 'significance of `:DyBench` in a Go project (installed by Mason on first use)',
     ['inferno-flamegraph'] = '`:DyProfile flame` (Mason `inferno`, installed on first use)',
     samply = '`:DyProfile` on C, C++, Rust and Zig on macOS (`:MasonInstall samply`)',
     duckdb = '`:DyData` and opening a Parquet file (`:MasonInstall duckdb`)',

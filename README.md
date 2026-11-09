@@ -150,6 +150,9 @@ below follow the sections of `:help dyneo`.
 - **Profiling** — the program of the buffer run under py-spy, Go's pprof,
   Node's `--cpu-prof` or perf, its hot lines marked on the code.
   `:DyProfile`
+- **Benchmarks** — go test, criterion, pytest-benchmark or hyperfine runs
+  kept and compared with the last, regressions first. `<leader>dpb` ·
+  `:DyBench`
 
 ### 📊 Data and ML — `<leader>D`
 

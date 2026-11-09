@@ -224,8 +224,10 @@ one of the same keys in those buffers.
 ==============================================================================
 <leader>dp  profiler
 
+`<leader>dpB`          n      Compare Benchmarks
 `<leader>dpS`          n      Startup Time
 `<leader>dpa`          n      Toggle Profile Annotations
+`<leader>dpb`          n      Benchmark
 `<leader>dpc`          n      Hottest Callers
 `<leader>dpf`          n      Hottest Functions
 `<leader>dpg`          n      Profile as Flame Graph
