@@ -93,6 +93,7 @@ CONTENTS                                                      *dyneo-contents*
        9.19 Class diagrams ............................. |dyneo-class-diagram|
        9.20 Stack traces .................................. |dyneo-stacktrace|
        9.21 Dead code ...................................... |dyneo-deadcode|
+       9.22 Call graphs .................................... |dyneo-callgraph|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -2129,6 +2130,20 @@ times out says so, and what the others found is still listed: a failed run
 never reads as a project without dead code.  "No dead code" is said only
 when every tool ran.  Paths outside the project are listed but not opened.
 
+9.22 Call graphs                                             *dyneo-callgraph*
+
+`<leader>cG` (|:DyCallGraph|) draws who calls the function under the cursor
+and what it calls, as the language server answers
+`callHierarchy/incomingCalls` and `callHierarchy/outgoingCalls`, to a depth
+of two (`:3DyCallGraph` or `:DyCallGraph 3` goes further).  `:DyCallGraph
+incoming` or `outgoing` follows one side only.  Each function is one node,
+keyed by where it is defined, so recursion and cycles are drawn once; an
+arrow goes from a caller to its callee.  The first server of the buffer that
+names a function under the cursor answers the rest.  The graph opens like a
+class diagram (|dyneo-class-diagram|), as a Mermaid flowchart that
+`<localleader>d` draws.  It says so when it was cut at 60 functions, or when
+the server took over five seconds and only what came by then is drawn.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -2622,6 +2637,12 @@ Project ~
                                                              *:DyClassDiagram*
 :DyClassDiagram         A Mermaid class diagram of the buffer, from its
                         language server.  See |dyneo-class-diagram|.
+
+                                                                *:DyCallGraph*
+:[count]DyCallGraph [incoming|outgoing|both] [{depth}]
+                        A Mermaid graph of the callers and callees of the
+                        function under the cursor, [count] or {depth} levels
+                        deep (2).  See |dyneo-callgraph|.
 
                                                                *:DyStackTrace*
 :[range]DyStackTrace    The frames of a stack trace in the quickfix list: the

@@ -133,6 +133,7 @@ one of the same keys in those buffers.
 `<leader>cD`           n      Fix all diagnostics  (LSP: vtsls)
 `<leader>cE`           n      Edit Snippets
 `<leader>cF`           nx     Format Injected Langs
+`<leader>cG`           n      Call Graph
 `<leader>cI`           n      Rule Docs
 `<leader>cL`           n      Language servers of buffer
 `<leader>cM`           n      Add missing imports  (LSP: vtsls)

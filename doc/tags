@@ -8,6 +8,7 @@
 :DyAsyncApiDiff	dyneo.txt	/*:DyAsyncApiDiff*
 :DyBreaking	dyneo.txt	/*:DyBreaking*
 :DyC4	dyneo.txt	/*:DyC4*
+:DyCallGraph	dyneo.txt	/*:DyCallGraph*
 :DyCert	dyneo.txt	/*:DyCert*
 :DyCiLint	dyneo.txt	/*:DyCiLint*
 :DyCiStatus	dyneo.txt	/*:DyCiStatus*
@@ -99,6 +100,7 @@ dyneo-ai-review	dyneo.txt	/*dyneo-ai-review*
 dyneo-architecture	dyneo.txt	/*dyneo-architecture*
 dyneo-asyncapi	dyneo.txt	/*dyneo-asyncapi*
 dyneo-breaking	dyneo.txt	/*dyneo-breaking*
+dyneo-callgraph	dyneo.txt	/*dyneo-callgraph*
 dyneo-cert-file	dyneo.txt	/*dyneo-cert-file*
 dyneo-cert-host	dyneo.txt	/*dyneo-cert-host*
 dyneo-channels	dyneo.txt	/*dyneo-channels*

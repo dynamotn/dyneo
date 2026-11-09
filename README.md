@@ -195,6 +195,8 @@ below follow the sections of `:help dyneo`.
   that keep AI local. `<leader>ai` · `:DyAi commit` · `:DyAi pr`
 - **Dead and duplicated code** — what nothing uses, by knip, vulture,
   deadcode and cargo-machete; clones by jscpd. `<leader>pu` · `<leader>pD`
+- **Call graphs** — callers and callees of the function under the cursor as
+  Mermaid, from its language server. `<leader>cG` · `:DyCallGraph`
 
 ### 🏛 Architecture — `<leader>pA`
 
