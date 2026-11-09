@@ -66,6 +66,7 @@ CONTENTS                                                      *dyneo-contents*
        7.9 Protobuf and GraphQL contracts ................... |dyneo-breaking|
        7.10 PromQL ............................................ |dyneo-promql|
        7.11 Profiling ........................................ |dyneo-profile|
+       7.12 Benchmarks ........................................ |dyneo-bench|
     8. Data and machine learning ................................ |dyneo-data|
        8.1 Data files ..................................... |dyneo-data-files|
        8.2 SQL and databases ..................................... |dyneo-sql|
@@ -91,6 +92,11 @@ CONTENTS                                                      *dyneo-contents*
        9.17 Local history .............................. |dyneo-local-history|
        9.18 Duplicated code ............................... |dyneo-duplicates|
        9.19 Class diagrams ............................. |dyneo-class-diagram|
+       9.20 Stack traces .................................. |dyneo-stacktrace|
+       9.21 Dead code ...................................... |dyneo-deadcode|
+       9.22 Call graphs .................................... |dyneo-callgraph|
+       9.23 Hotspots ........................................ |dyneo-hotspots|
+       9.24 Mutation testing .................................. |dyneo-mutate|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -1288,11 +1294,33 @@ by perfanno.nvim.  The profiler follows the filetype:
 Arguments replace the program run: `:DyProfile uv run app.py` for Python,
 `:DyProfile -bench . -run ^$` for the flags of `go test`.
 
+`<leader>dpm` (`:DyProfile memory`) records allocations instead, and marks
+the lines that allocate most, in bytes (perfanno's event `memory (bytes)`):
+
+  Python            `memray run {file}` (Linux and macOS only; Mason
+                    installs it the first time); the marks are what is
+                    still allocated at the peak of the program's memory.
+                    memray runs the script under the Python it is installed
+                    with: for a project's dependencies, install it in the
+                    project's virtual environment.  Arguments replace the
+                    script: `:DyProfile memory -m app`
+  Go                `go test -memprofile -memprofilerate=1`, every
+                    allocation of the tests.  A `main` package writes its
+                    own with `runtime/pprof.WriteHeapProfile`; load it with
+                    `:DyProfile load`
+  Java, Kotlin,     async-profiler with `event=alloc,total`, each stack
+  Scala             weighed by the bytes it allocated
+
+There is no memory profiler for Node or the native languages.
+
 `<leader>dpo` (`:DyProfile load {file}`) reads a profile recorded elsewhere:
-a pprof file (`.pprof`, `.prof`, through `go tool pprof`), a `.cpuprofile`
-or a directory of them, a `perf.data` (through `perf report`), a samply
-`.json.gz` with its `.syms.json` beside it, or collapsed
-stacks as py-spy `--format raw` and flamegraph.pl write them.  Node keeps
+a pprof file (`.pprof`, `.prof`, `.out`, through `go tool pprof`; a heap or
+allocation profile counts bytes), a `.cpuprofile` or a directory of them, a
+`perf.data` (through `perf report`), a samply `.json.gz` with its
+`.syms.json` beside it, a memray `.bin` or the `.csv` of `memray transform
+csv`, a directory of async-profiler `.collapsed` files (`.alloc.collapsed`
+for allocations), or collapsed stacks as py-spy `--format raw` and
+flamegraph.pl write them.  Node keeps
 the line of few samples; the others fall on the line their function starts.
 
 Then:
@@ -1301,9 +1329,50 @@ Then:
   `<leader>dpl`   the hottest lines
   `<leader>dpc`   the hottest callers of the function under the cursor
   `<leader>dpg`   the whole profile as a flame graph (`:DyProfile flame`),
-                drawn by inferno as an SVG the system viewer opens
+                drawn by inferno as an SVG the system viewer opens; a
+                memory profile counts bytes
 
 `<leader>dpp` and its neighbours profile Neovim itself (snacks.nvim).
+
+7.12 Benchmarks                                                  *dyneo-bench*
+
+`<leader>dpb` (|:DyBench|) runs the benchmarks of the project in a terminal
+split, keeps the result and compares it with the previous one of its kind.
+The harness follows the project:
+
+  `go.mod`            `go test -run '^$' -bench . -benchmem -count=6 ./...`;
+                    benchstat gives the p-value of each change
+  `Cargo.toml`        `cargo bench -- --save-baseline dyneo`, criterion read
+                    from `target/criterion`; its confidence interval of the
+                    change is shown when the previous result is the run it
+                    compared with
+  `pyproject.toml`,   pytest-benchmark (`--benchmark-only --benchmark-json`),
+  `setup.cfg`, ...    from the project's `.venv` when it has one
+
+`:DyBench cmd {command}` times any command with hyperfine instead, and
+compares it with the last time of the same command.  hyperfine 2 runs the
+command without a shell: write `sh -c '...'` for a pipeline.
+
+The comparison opens in a tab: one row per benchmark with the old and new
+mean, the spread of each run, the change in percent and the significance
+where the tool gives one.  Slower benchmarks come first, highlighted, then
+faster ones, then the unchanged, the added and the removed.  A change under
+2% (`M.NOISE`), one the tool's test calls noise, or one inside the spread of
+a run is unchanged.  A first result says there is nothing to compare with;
+a run that fails, or whose output holds no benchmark or cannot be read, is
+not kept and says so.
+
+Results are kept per project in `stdpath('state')/dyneo/bench/`, with their
+time and git HEAD, the 20 most recent (`M.KEEP`).  `<leader>dpB`
+(`:DyBench compare`) compares the last two again; `:DyBench compare {ref}`
+compares the last with the one recorded at git {ref}, `main` say.
+`:DyBench list` picks a kept result and compares the latest of its kind with
+it.
+
+Running benchmarks runs the code of the project, so it asks whether the
+project is trusted first, once a session.  Mason installs hyperfine and
+benchstat the first time they are missing; criterion and pytest-benchmark
+are dependencies of the project.
 
 ------------------------------------------------------------------------------
 8. DATA AND MACHINE LEARNING                                      *dyneo-data*
@@ -2079,6 +2148,132 @@ beside the buffer as a Mermaid block of a Markdown scratch buffer, where
 `<localleader>d` (|:DyDiagram|) draws it; it can be copied into a decision
 record as it is.
 
+9.20 Stack traces                                           *dyneo-stacktrace*
+
+`<leader>xs` (|:DyStackTrace|) turns a stack trace into the quickfix list,
+one item per frame, like IntelliJ's Analyze Stack Trace.  It reads, in this
+order: the range or the visual selection; the whole buffer of a log
+(|:DyLog|, or a `log` file); the clipboard; the unnamed register.  A register
+without a frame is passed over for the next one.
+
+Frames of Java, Kotlin and Scala (`at pkg.Class.method(File.java:42)`, across
+`Caused by:`), Python (`File "x.py", line 3, in fn`), Go (the file line under
+its function), Rust (`at ./src/main.rs:5:9` of `RUST_BACKTRACE`) and Node
+(`at fn (/x.js:3:7)`) are read; each format is one entry of `M.FORMATS` in
+`lua/tools/stacktrace.lua`.  A JVM frame names a class, found among the
+project's files (`git ls-files`, else `rg --files`) by its package path; a
+relative path is read against the project root.
+
+Frames outside the project -- the JDK, site-packages, GOROOT, `node_modules`,
+the cargo registry, or a file that is nowhere -- stay in the list as `I`
+items, and the cursor lands on the project's first frame.  The trace never
+leaves the editor.
+
+9.21 Dead code                                                *dyneo-deadcode*
+
+`<leader>pu` (|:DyDeadCode|) lists what nothing uses in the project, like
+IntelliJ's Unused declaration inspection, in the quickfix list.  The files at
+the root of the project say which tools apply, and a polyglot root runs each:
+
+  `package.json`, `tsconfig.json`      knip: unused files, exports, types and
+                                     dependencies.  The project's own
+                                     `node_modules/.bin/knip` is preferred,
+                                     and its `knip.json` honoured.
+  `pyproject.toml`, `setup.py`,        vulture, from a confidence of 60 (an
+  `requirements*.txt`                unused function) and skipping virtual
+                                     environments, unless `[tool.vulture]`
+                                     of `pyproject.toml` says otherwise.
+  `go.mod`                             `deadcode -test`: the functions no
+                                     `main` nor test reaches.
+  `Cargo.toml`                         cargo-machete: unused dependencies, on
+                                     the line declaring them.
+
+`:DyDeadCode {tool}` runs one of them alone; completion lists those of the
+project.  knip loads the configuration of the project's tools by running it,
+so it asks whether the project is trusted first, once a session.  Mason
+installs a tool missing the first time.  A tool that is missing, fails or
+times out says so, and what the others found is still listed: a failed run
+never reads as a project without dead code.  "No dead code" is said only
+when every tool ran.  Paths outside the project are listed but not opened.
+
+9.22 Call graphs                                             *dyneo-callgraph*
+
+`<leader>cG` (|:DyCallGraph|) draws who calls the function under the cursor
+and what it calls, as the language server answers
+`callHierarchy/incomingCalls` and `callHierarchy/outgoingCalls`, to a depth
+of two (`:3DyCallGraph` or `:DyCallGraph 3` goes further).  `:DyCallGraph
+incoming` or `outgoing` follows one side only.  Each function is one node,
+keyed by where it is defined, so recursion and cycles are drawn once; an
+arrow goes from a caller to its callee.  The first server of the buffer that
+names a function under the cursor answers the rest.  The graph opens like a
+class diagram (|dyneo-class-diagram|), as a Mermaid flowchart that
+`<localleader>d` draws.  It says so when it was cut at 60 functions, or when
+the server took over five seconds and only what came by then is drawn.
+
+9.23 Hotspots                                                 *dyneo-hotspots*
+
+`<leader>pH` (|:DyHotspots|) lists the files of the project most worth
+refactoring or reviewing, as "code as a crime scene" ranks them: code that is
+both complex and often changed.  Its score is churn times complexity:
+
+  churn         the commits that touched the file in the last 12 months,
+                from `git log --numstat`, counted below the project's
+                directory when it is a part of a repository.  Only files
+                git still tracks count; lockfiles, `go.sum`, `vendor/`,
+                `node_modules/` and minified files never do.
+  complexity    the sum of the cyclomatic complexity (CCN) of the file's
+                functions, from lizard, so a file of many tangled functions
+                ranks above one with a single bad one.
+
+The top 20 go to the quickfix list, each on the file's most complex function,
+with its score, commits, total CCN and that function.  The 1000 most churned
+files are read by one lizard run, in the background.  Mason installs lizard
+the first time it is missing.  Outside a git repository, or when git or
+lizard fails, it says so and why: a failed run never reads as a project
+without hotspots.  A history too large to read is cut at 16 MiB and says so.
+
+`:DyHotspots buffer` toggles hints on the functions of the buffer whose CCN
+is over 15 (lizard's own warning), from one lizard run on its file as saved,
+read again after each write while on.  `M.SINCE`, `M.LIMIT` and `M.CCN_WARN`
+of `tools.hotspots` change the window, the length of the list and the bar.
+
+9.24 Mutation testing                                           *dyneo-mutate*
+
+Coverage says which lines the tests run; mutation testing says which of them
+they check.  `<leader>tM` (|:DyMutate|) runs the mutation tool of the project
+in a terminal split: it changes the code one small way at a time, a mutant,
+and runs the tests on each.  Once it exits, every mutant the tests still
+passed on -- one that survived -- is a warning on the line it changed, with
+the change; one no test reaches, or that timed out, is a hint.  All of them
+go to the quickfix list too, and a count of every status is told.
+
+  `pyproject.toml`, `setup.cfg`,       mutmut 3.  The project's own
+  `setup.py`                         `.venv/bin/mutmut` is preferred, as it
+                                     runs the tests in its own process;
+                                     `[tool.mutmut]` says where the code is.
+  `package.json`                       Stryker, from the project's
+                                     `node_modules` only, with the `json`
+                                     reporter added to its usual ones.
+  `go.mod`                             gremlins, which tests only what the
+                                     coverage reaches, and reports in JSON.
+  `Cargo.toml`                         cargo-mutants.
+
+The tool of the buffer's filetype wins in a project of several languages.
+`:DyMutate %` (or `file`) mutates the buffer's file alone: a mutmut pattern
+of its module, Stryker's `--mutate`, cargo-mutants' `--file`; gremlins only
+takes a package, so it mutates the file's package.  `:DyMutate load` reads
+the last report again without a run (mutmut's `mutants/`,
+`reports/mutation/mutation.json`, `mutants.out/outcomes.json`; gremlins'
+report is kept in the cache directory), and `:DyMutate clear` removes the
+marks.
+
+Running the mutants runs the tests of the project, so it asks whether the
+project is trusted first, once a session.  Mason installs mutmut, gremlins
+or cargo-mutants the first time one is missing; Stryker is installed in the
+project.  A run that exits with an error loads nothing and says so, as does
+a report that is missing or unreadable: "No mutant survived" is said only
+when the report holds mutants and every one was killed.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -2467,10 +2662,24 @@ Operations ~
                                                                   *:DyProfile*
 :DyProfile [{cmd}]      Run the program of the buffer, or {cmd}, under a
                         sampling profiler and mark its hot lines.
+:DyProfile memory [{cmd}]
+                        The same with a memory profiler, marking the lines
+                        that allocate most.
 :DyProfile load [{file}]
                         Read a profile recorded elsewhere.
 :DyProfile flame        Draw the loaded profile as a flame graph.  See
                         |dyneo-profile|.
+
+                                                                    *:DyBench*
+:DyBench                Run the benchmarks of the project and compare them
+                        with the last run.
+:DyBench cmd {command}  Time {command} with hyperfine and compare it with
+                        its last time.
+:DyBench compare [{ref}]
+                        Compare the last two results, or the last with the
+                        one recorded at git {ref}.
+:DyBench list           Pick a kept result to compare with.  See
+                        |dyneo-bench|.
 
 Data and machine learning ~
                                                                      *:DyData*
@@ -2572,6 +2781,36 @@ Project ~
                                                              *:DyClassDiagram*
 :DyClassDiagram         A Mermaid class diagram of the buffer, from its
                         language server.  See |dyneo-class-diagram|.
+
+                                                                *:DyCallGraph*
+:[count]DyCallGraph [incoming|outgoing|both] [{depth}]
+                        A Mermaid graph of the callers and callees of the
+                        function under the cursor, [count] or {depth} levels
+                        deep (2).  See |dyneo-callgraph|.
+
+                                                               *:DyStackTrace*
+:[range]DyStackTrace    The frames of a stack trace in the quickfix list: the
+                        range, a log buffer, or the clipboard.  See
+                        |dyneo-stacktrace|.
+
+                                                                 *:DyDeadCode*
+:DyDeadCode [{tool}]    What nothing uses in the project, by every tool that
+                        applies to it or by {tool} alone, in the quickfix
+                        list.  See |dyneo-deadcode|.
+
+                                                                 *:DyHotspots*
+:DyHotspots [buffer]    The files of the project most worth refactoring, by
+                        git churn times complexity, in the quickfix list;
+                        `buffer` toggles hints on the complex functions of
+                        the buffer.  See |dyneo-hotspots|.
+
+                                                                   *:DyMutate*
+:DyMutate [%|file|load|clear]
+                        Run the mutation tool of the project in a terminal
+                        and mark the mutants that survived its tests; `%` or
+                        `file` limits it to the buffer's file, `load` reads
+                        the last report, `clear` removes the marks.  See
+                        |dyneo-mutate|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose

@@ -133,6 +133,7 @@ one of the same keys in those buffers.
 `<leader>cD`           n      Fix all diagnostics  (LSP: vtsls)
 `<leader>cE`           n      Edit Snippets
 `<leader>cF`           nx     Format Injected Langs
+`<leader>cG`           n      Call Graph
 `<leader>cI`           n      Rule Docs
 `<leader>cL`           n      Language servers of buffer
 `<leader>cM`           n      Add missing imports  (LSP: vtsls)
@@ -223,13 +224,16 @@ one of the same keys in those buffers.
 ==============================================================================
 <leader>dp  profiler
 
+`<leader>dpB`          n      Compare Benchmarks
 `<leader>dpS`          n      Startup Time
 `<leader>dpa`          n      Toggle Profile Annotations
+`<leader>dpb`          n      Benchmark
 `<leader>dpc`          n      Hottest Callers
 `<leader>dpf`          n      Hottest Functions
 `<leader>dpg`          n      Profile as Flame Graph
 `<leader>dph`          n      Toggle Profiler Highlights
 `<leader>dpl`          n      Hottest Lines
+`<leader>dpm`          n      Profile Memory
 `<leader>dpo`          n      Open Profile
 `<leader>dpp`          n      Toggle Profiler
 `<leader>dpr`          n      Profile Program
@@ -364,10 +368,12 @@ one of the same keys in those buffers.
 <leader>p  project
 
 `<leader>pD`           n      Duplicated Code
+`<leader>pH`           n      Hotspots
 `<leader>pR`           n      Project Roots
 `<leader>pa`           n      Open alternative file
 `<leader>pc`           n      CI Checks
 `<leader>pp`           n      Project Overview
+`<leader>pu`           n      Unused Code
 
 ==============================================================================
 <leader>pA  architecture
@@ -554,6 +560,7 @@ one of the same keys in those buffers.
 <leader>t  test
 
 `<leader>tC`           n      Coverage Summary
+`<leader>tM`           n      Mutation Testing
 `<leader>tO`           n      Toggle Output Panel (Neotest)
 `<leader>tS`           n      Stop (Neotest)
 `<leader>tT`           n      Run All Test Files (Neotest)
@@ -652,6 +659,8 @@ one of the same keys in those buffers.
 `<leader>xc`           n      Copy Line Diagnostics
 `<leader>xl`           n      Location List
 `<leader>xq`           n      Quickfix List
+`<leader>xs`           n      Stack Trace
+`<leader>xs`           x      Stack Trace (selection)
 `<leader>xt`           n      Todo (Trouble)
 `<leader>xw`           n      Workspace Diagnostics
 `<leader>xx`           n      Diagnostics (Trouble)

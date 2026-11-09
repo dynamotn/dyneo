@@ -123,6 +123,8 @@ below follow the sections of `:help dyneo`.
   `<localleader>r`
 - **Logs** of files, the journal and pods read as records, filtered by level,
   request or jq. `:DyLog`
+- **Stack traces** of Java, Kotlin, Python, Go, Rust and Node as a quickfix
+  list of the project's frames. `<leader>xs`
 - **Certificates & tokens** — the certificate, key or JWT under the cursor
   decoded, held back from AI; expired or expiring certificates flagged;
   PEM, DER and PKCS#7 files read as their chain, checked, and the chain a
@@ -146,8 +148,11 @@ below follow the sections of `:help dyneo`.
 - **Tasks** — run, build and test the current file or project in ~50
   languages. `<leader>oo`
 - **Profiling** — the program of the buffer run under py-spy, Go's pprof,
-  Node's `--cpu-prof` or perf, its hot lines marked on the code.
-  `:DyProfile`
+  Node's `--cpu-prof` or perf, its hot lines marked on the code; or its
+  allocations, under memray, `-memprofile` or async-profiler. `:DyProfile`
+- **Benchmarks** — go test, criterion, pytest-benchmark or hyperfine runs
+  kept and compared with the last, regressions first. `<leader>dpb` ·
+  `:DyBench`
 
 ### 📊 Data and ML — `<leader>D`
 
@@ -191,6 +196,14 @@ below follow the sections of `:help dyneo`.
   a diagnostic from its code action; prompts per project; a commit message,
   a review of the staged diff, a pull request, why a CI job failed; projects
   that keep AI local. `<leader>ai` · `:DyAi commit` · `:DyAi pr`
+- **Dead and duplicated code** — what nothing uses, by knip, vulture,
+  deadcode and cargo-machete; clones by jscpd. `<leader>pu` · `<leader>pD`
+- **Call graphs** — callers and callees of the function under the cursor as
+  Mermaid, from its language server. `<leader>cG` · `:DyCallGraph`
+- **Hotspots** — files ranked by git churn times lizard complexity; hints on
+  the complex functions of a buffer. `<leader>pH` · `:DyHotspots buffer`
+- **Mutation testing** — the lines whose mutants survive the tests, by
+  mutmut, Stryker, gremlins or cargo-mutants. `<leader>tM` · `:DyMutate %`
 
 ### 🏛 Architecture — `<leader>pA`
 
