@@ -5,7 +5,9 @@
 --- JVM or Linux perf -- in a terminal, so it can be read, typed to and
 --- stopped with `<C-c>`. Once it exits, the profile is read into stack
 --- traces, root first, and handed to perfanno, which marks the hot lines and
---- lists the hottest lines and functions. `:DyProfile load` reads a profile
+--- lists the hottest lines and functions. `:DyProfile memory` records
+--- allocations instead -- memray, `go test -memprofile`, async-profiler's
+--- `alloc` event -- weighed in bytes. `:DyProfile load` reads a profile
 --- recorded elsewhere, `:DyProfile flame` draws the loaded one as a flame
 --- graph.
 local M = {}
@@ -21,7 +23,8 @@ M.TIMEOUT = 120000
 --- Bytes of a profile, or of the text it is turned into, kept in memory
 M.MAX_BYTES = 64 * 1024 * 1024
 
---- Microseconds in a unit of `go tool pprof`; a memory profile counts bytes
+--- Microseconds in a unit of `go tool pprof`; a memory profile counts bytes,
+--- in powers of 1024
 local UNITS = {
   ns = 0.001,
   us = 1,
@@ -29,10 +32,14 @@ local UNITS = {
   ms = 1000,
   s = 1000000,
   B = 1,
-  kB = 1000,
-  MB = 1000000,
-  GB = 1000000000,
+  kB = 1024,
+  MB = 1024 ^ 2,
+  GB = 1024 ^ 3,
+  TB = 1024 ^ 4,
 }
+
+--- The perfanno event of a memory profile; its counts are bytes
+M.MEMORY = 'memory (bytes)'
 
 ---@class DyProfiler
 ---@field bin string The binary that records
@@ -43,7 +50,25 @@ local UNITS = {
 ---@field env? fun(out: string, lib: string): table<string, string> The
 --- environment of the program, for an agent it loads
 ---@field roots? string[] What marks the project the program runs from
+---@field memory? DyProfiler What records allocations instead
+---@field posix? boolean Only runs on Linux and macOS
+---@field ext? string The extension of the profile it writes
+---@field dir? boolean It writes a directory of profiles
+---@field mason? string The Mason package that installs `bin`
 
+-- memray runs the script under the Python it is installed with: a project's
+-- dependencies need it installed in the project's virtual environment
+---@type DyProfiler
+local memray = {
+  bin = 'memray',
+  posix = true,
+  ext = '.bin',
+  mason = 'memray',
+  record = function(out, args)
+    return vim.list_extend({ 'memray', 'run', '-o', out }, args)
+  end,
+  default = function(file) return { file } end,
+}
 ---@type DyProfiler
 local py_spy = {
   bin = 'py-spy',
@@ -60,16 +85,31 @@ local py_spy = {
     }, args)
   end,
   default = function(file) return { 'python3', file } end,
+  memory = memray,
 }
 local go = {
   bin = 'go',
+  ext = '.pprof',
   record = function(out, args)
     return vim.list_extend({ 'go', 'test', '-cpuprofile', out }, args)
   end,
   default = function() return {} end,
+  -- Every allocation, not one per 512 KiB, so small hot ones show too
+  memory = {
+    bin = 'go',
+    ext = '.pprof',
+    record = function(out, args)
+      return vim.list_extend(
+        { 'go', 'test', '-memprofile', out, '-memprofilerate=1' },
+        args
+      )
+    end,
+    default = function() return {} end,
+  },
 }
 local node = {
   bin = 'node',
+  dir = true,
   -- `out` is a directory: node names the file after the time and process
   record = function(out, args)
     return vim.list_extend(
@@ -83,6 +123,7 @@ local node = {
 -- names each address with the file and line of every inlined frame
 local samply = {
   bin = 'samply',
+  ext = '.json.gz',
   record = function(out, args)
     return vim.list_extend({
       'samply',
@@ -99,6 +140,7 @@ local perf = {
   bin = 'perf',
   linux = true,
   darwin = samply,
+  ext = '.perf.data',
   record = function(out, args)
     return vim.list_extend(
       { 'perf', 'record', '--call-graph', 'dwarf', '-o', out, '--' },
@@ -110,28 +152,39 @@ local perf = {
 -- Any JVM the command starts loads the agent, so the program may be `java`,
 -- `./mvnw` or `./gradlew` alike; each writes its own file, by pid, as
 -- collapsed stacks with line numbers
-local jvm = {
-  bin = 'java',
-  record = function(_, args) return args end,
-  env = function(out, lib)
-    local agent = ('-agentpath:%s=start,event=cpu,interval=10ms,collapsed,lines,file=%s/%%p.collapsed'):format(
-      lib,
-      out
-    )
-    local current = vim.env.JAVA_TOOL_OPTIONS
-    return {
-      JAVA_TOOL_OPTIONS = current and (current .. ' ' .. agent) or agent,
-    }
-  end,
-  roots = {
-    'pom.xml',
-    'build.gradle',
-    'build.gradle.kts',
-    'settings.gradle',
-    'settings.gradle.kts',
-    'build.sbt',
-  },
-}
+---@param event string The options of async-profiler choosing what it counts
+---@param suffix string The end of each file's name
+---@return DyProfiler
+local function jvm_profiler(event, suffix)
+  return {
+    bin = 'java',
+    dir = true,
+    record = function(_, args) return args end,
+    env = function(out, lib)
+      local agent = ('-agentpath:%s=start,%s,collapsed,lines,file=%s/%%p%s'):format(
+        lib,
+        event,
+        out,
+        suffix
+      )
+      local current = vim.env.JAVA_TOOL_OPTIONS
+      return {
+        JAVA_TOOL_OPTIONS = current and (current .. ' ' .. agent) or agent,
+      }
+    end,
+    roots = {
+      'pom.xml',
+      'build.gradle',
+      'build.gradle.kts',
+      'settings.gradle',
+      'settings.gradle.kts',
+      'build.sbt',
+    },
+  }
+end
+local jvm = jvm_profiler('event=cpu,interval=10ms', '.collapsed')
+-- `total` weighs each stack by the bytes it allocated, not by samples
+jvm.memory = jvm_profiler('event=alloc,total', '.alloc.collapsed')
 
 --- The agent library of async-profiler, when Mason has it
 ---@return string?
@@ -235,8 +288,9 @@ end
 --- each frame of the project's own code given its source file under `root`
 ---@param lines string[]
 ---@param root string
+---@param event? string What the counts are, `time` unless given
 ---@return table<string, table[]>
-function M.parse_jvm(lines, root)
+function M.parse_jvm(lines, root, event)
   local sources = jvm_sources(root)
   local found = {}
   ---@param class string `com/acme/Bar$Inner`
@@ -273,7 +327,73 @@ function M.parse_jvm(lines, root)
       table.insert(traces, { count = tonumber(count), frames = frames })
     end
   end
-  return { time = traces }
+  return { [event or 'time'] = traces }
+end
+
+--- The fields of a CSV line; a quoted field may hold commas and `""`
+---@param line string
+---@return string[]
+local function csv_fields(line)
+  local fields, i = {}, 1
+  while i <= #line + 1 do
+    if line:sub(i, i) == '"' then
+      local value, j = '', i + 1
+      while true do
+        local quote = line:find('"', j, true)
+        -- shortcut: a quoted field spanning lines is dropped; memray only
+        -- quotes names, which hold no newline
+        if not quote then return fields end
+        value = value .. line:sub(j, quote - 1)
+        if line:sub(quote + 1, quote + 1) ~= '"' then
+          i = quote + 2
+          break
+        end
+        value, j = value .. '"', quote + 2
+      end
+      table.insert(fields, value)
+    else
+      local comma = line:find(',', i, true) or #line + 1
+      table.insert(fields, line:sub(i, comma - 1))
+      i = comma + 1
+    end
+  end
+  return fields
+end
+
+--- `memray transform csv` output: the allocations live at the peak, each
+--- with its size and its stack, `func;file;line` frames, leaf first, joined
+--- by `|`; a relative file is taken from `root`
+---@param lines string[]
+---@param root string
+---@return table<string, table[]>
+function M.parse_memray(lines, root)
+  local traces = {}
+  for _, line in ipairs(lines) do
+    local fields = csv_fields(line)
+    local size = tonumber(fields[3])
+    if #fields >= 6 and size and size > 0 then
+      local frames = {}
+      for text in fields[6]:gmatch('[^|]+') do
+        local symbol, file, lnum = text:match('^(.*);(.-);(%d+)$')
+        if not file or file:match('^<') then
+          table.insert(frames, 1, { symbol = symbol or text })
+        else
+          if not vim.startswith(file, '/') then
+            file = vim.fs.normalize(vim.fs.joinpath(root, file))
+          end
+          table.insert(
+            frames,
+            1,
+            { symbol = symbol, file = file, linenr = tonumber(lnum) }
+          )
+        end
+      end
+      if #frames > 0 then
+        table.insert(traces, { count = size, frames = frames })
+      end
+    end
+  end
+  return { [M.MEMORY] = traces }
 end
 
 --- A profile samply saved -- the Firefox Profiler's processed format, with
@@ -392,23 +512,33 @@ function M.parse_perf_report(lines)
 end
 
 --- `go tool pprof -traces -lines` output: blocks ruled by `---+---`, the
---- leaf first, its value on the first line
+--- leaf first, its value on the first line after any `key: value` labels;
+--- a heap or allocation profile counts bytes
 ---@param lines string[]
 ---@return table<string, table[]>
 function M.parse_pprof(lines)
-  local traces, current = {}, nil
+  local traces, current, event = {}, nil, 'time'
   local function close()
-    if current and #current.frames > 0 then
+    if current and current.count > 0 and #current.frames > 0 then
       current.frames = vim.fn.reverse(current.frames)
       table.insert(traces, current)
     end
     current = nil
   end
   for _, line in ipairs(lines) do
-    if line:match('^%-+%+%-+$') then
+    local kind = not current and line:match('^Type: (%S+)')
+    if kind then
+      event = kind == 'cpu' and 'time'
+        or kind:match('_space$') and M.MEMORY
+        or kind
+    elseif line:match('^%-+%+%-+$') then
       close()
       current = { count = 0, frames = {} }
-    elseif current then
+    elseif
+      current
+      -- not a label of the samples below, `bytes:  1MB`
+      and not (#current.frames == 0 and line:match('^%s*[%w_]+:%s'))
+    then
       local value, unit, rest = line:match('^%s*([%d.]+)(%a*)%s+(%S.*)$')
       if value and #current.frames == 0 then
         current.count = math.floor(tonumber(value) * (UNITS[unit] or 1) + 0.5)
@@ -421,7 +551,7 @@ function M.parse_pprof(lines)
     end
   end
   close()
-  return { time = traces }
+  return { [event] = traces }
 end
 
 --- A V8 `.cpuprofile`: a tree of functions, each with the samples that hit
@@ -476,24 +606,30 @@ function M.parse_cpuprofile(profile)
   return { time = traces }
 end
 
---- The command recording `file`'s program into `out`, and where it runs
+--- The profiler of `filetype` on this system, of its time or its memory
 ---@param filetype string
----@param file string The buffer's file
----@param args string[] The program and its arguments, or none for the default
----@param out string Where the profile goes
----@return string[]? cmd
----@return string cwd_or_err
----@return table<string, string>? env
-function M.command(filetype, file, args, out)
+---@param memory? boolean
+---@return DyProfiler?
+---@return string? err
+function M.profiler(filetype, memory)
+  local function known(of_memory)
+    local names = vim.tbl_filter(
+      function(name) return not of_memory or M.PROFILERS[name].memory end,
+      vim.tbl_keys(M.PROFILERS)
+    )
+    table.sort(names)
+    return table.concat(names, ', ')
+  end
   local profiler = M.PROFILERS[filetype]
   if not profiler then
-    local known = vim.tbl_keys(M.PROFILERS)
-    table.sort(known)
-    return nil,
-      ('No profiler for %s; one of %s'):format(
-        filetype,
-        table.concat(known, ', ')
-      )
+    return nil, ('No profiler for %s; one of %s'):format(filetype, known())
+  end
+  if memory then
+    profiler = profiler.memory
+    if not profiler then
+      return nil,
+        ('No memory profiler for %s; one of %s'):format(filetype, known(true))
+    end
   end
   local system_name = vim.uv.os_uname().sysname
   if profiler.linux and system_name ~= 'Linux' then
@@ -501,6 +637,26 @@ function M.command(filetype, file, args, out)
       return nil, ('%s only runs on Linux'):format(profiler.bin)
     end
     profiler = profiler.darwin
+  end
+  if profiler.posix and system_name ~= 'Linux' and system_name ~= 'Darwin' then
+    return nil, ('%s only runs on Linux and macOS'):format(profiler.bin)
+  end
+  return profiler
+end
+
+--- The command recording `file`'s program into `out`, and where it runs
+---@param filetype string
+---@param file string The buffer's file
+---@param args string[] The program and its arguments, or none for the default
+---@param out string Where the profile goes
+---@param memory? boolean Record allocations rather than time
+---@return string[]? cmd
+---@return string cwd_or_err
+---@return table<string, string>? env
+function M.command(filetype, file, args, out, memory)
+  local profiler, err = M.profiler(filetype, memory)
+  if not profiler then
+    return nil, err --[[@as string]]
   end
   if #args == 0 then
     if not profiler.default then
@@ -560,16 +716,22 @@ local function show(traces, source)
   )
 end
 
---- Read the profile at `path` -- pprof, `.cpuprofile`, `perf.data`, a
---- directory of `.cpuprofile` or of async-profiler `.collapsed` files, or
---- collapsed stacks -- and show it
+--- Read the profile at `path` -- pprof, `.cpuprofile`, `perf.data`, memray
+--- `.bin` or its `.csv`, a directory of `.cpuprofile` or of async-profiler
+--- `.collapsed` files (`.alloc.collapsed` for allocations), or collapsed
+--- stacks -- and show it
 ---@param path string
----@param root? string The project of a JVM profile, the working directory
---- unless given
+---@param root? string The project of a JVM or memray profile, the working
+--- directory unless given
 function M.load(path, root)
   path = vim.fs.normalize(vim.fn.fnamemodify(path, ':p'))
   if vim.fn.isdirectory(path) == 1 then
-    local traces = { time = {} }
+    local traces = {}
+    local function add(parsed)
+      for event, list in pairs(parsed) do
+        traces[event] = vim.list_extend(traces[event] or {}, list)
+      end
+    end
     local names = {}
     for name in vim.fs.dir(path) do
       table.insert(names, name)
@@ -584,11 +746,14 @@ function M.load(path, root)
       if name:match('%.cpuprofile$') then
         local ok, profile = pcall(vim.json.decode, text)
         if not ok then return fail(('%s: %s'):format(name, profile)) end
-        vim.list_extend(traces.time, M.parse_cpuprofile(profile).time)
+        add(M.parse_cpuprofile(profile))
       elseif name:match('%.collapsed$') then
-        vim.list_extend(
-          traces.time,
-          M.parse_jvm(vim.split(text, '\n'), root or vim.fn.getcwd()).time
+        add(
+          M.parse_jvm(
+            vim.split(text, '\n'),
+            root or vim.fn.getcwd(),
+            name:match('%.alloc%.collapsed$') and M.MEMORY or nil
+          )
         )
       end
     end
@@ -606,11 +771,38 @@ function M.load(path, root)
       end
     )
   end
-  if path:match('%.pprof$') or path:match('%.prof$') then
+  if path:match('%.p?prof$') or path:match('%.out$') then
     return from(
       { 'go', 'tool', 'pprof', '-traces', '-lines', path },
       'go tool pprof',
       M.parse_pprof
+    )
+  end
+  if path:match('%.bin$') then
+    local csv = vim.fn.tempname() .. '.csv'
+    return system.run(
+      { 'memray', 'transform', 'csv', '-o', csv, path },
+      { timeout = M.TIMEOUT },
+      function(result)
+        if result.missing then
+          require('util.lazy_install').install_once('memray')
+          return fail(
+            'Installing memray with Mason; load again once it is done'
+          )
+        end
+        local text, err = read(csv)
+        os.remove(csv)
+        if result.code ~= 0 or not text then
+          return fail(
+            result.code ~= 0 and system.failure(result, 'memray transform')
+              or err --[[@as string]]
+          )
+        end
+        show(
+          M.parse_memray(vim.split(text, '\n'), root or vim.fn.getcwd()),
+          path
+        )
+      end
     )
   end
   if path:match('%.json%.gz$') then
@@ -650,27 +842,40 @@ function M.load(path, root)
     if not ok then return fail(profile) end
     return show(M.parse_cpuprofile(profile), path)
   end
+  if path:match('%.csv$') then
+    return show(
+      M.parse_memray(vim.split(text, '\n'), root or vim.fn.getcwd()),
+      path
+    )
+  end
   show(M.parse_collapsed(vim.split(text, '\n')), path)
 end
 
 --- Profile the program of the current buffer, or `args`, in a terminal,
 --- and show the profile once it exits
 ---@param args string[]
-function M.run(args)
+---@param memory? boolean Record allocations rather than time
+function M.run(args, memory)
   local file = vim.api.nvim_buf_get_name(0)
   local filetype = vim.bo.filetype
-  local profiler = M.PROFILERS[filetype]
-  local out = vim.fn.tempname()
-  if profiler == node or profiler == jvm then vim.fn.mkdir(out, 'p') end
-  if profiler == go then out = out .. '.pprof' end
-  if profiler == perf then
-    out = out
-      .. (vim.uv.os_uname().sysname == 'Darwin' and '.json.gz' or '.perf.data')
+  local profiler, err = M.profiler(filetype, memory)
+  if not profiler then
+    return fail(err --[[@as string]])
   end
-  local cmd, cwd, env = M.command(filetype, file, args, out)
+  local out = vim.fn.tempname() .. (profiler.ext or '')
+  if profiler.dir then vim.fn.mkdir(out, 'p') end
+  local cmd, cwd, env = M.command(filetype, file, args, out, memory)
   if not cmd then return fail(cwd) end
   -- `./mvnw` is found from the project, not from here
   if not cmd[1]:find('/') and vim.fn.executable(cmd[1]) == 0 then
+    if profiler.mason and cmd[1] == profiler.bin then
+      require('util.lazy_install').install_once(profiler.mason)
+      return fail(
+        ('%s is not installed; installing it with Mason, profile again once it is done'):format(
+          cmd[1]
+        )
+      )
+    end
     return fail(('%s is not installed'):format(cmd[1]))
   end
   if file == '' then cwd = vim.fn.getcwd() end
@@ -723,8 +928,13 @@ function M.flame()
     return fail('No profile is loaded: `:DyProfile` or `:DyProfile load` first')
   end
   local event = traces.time and 'time' or next(traces)
+  local cmd =
+    { 'inferno-flamegraph', '--title', ('DyNeo profile (%s)'):format(event) }
+  if event == M.MEMORY then
+    vim.list_extend(cmd, { '--countname', 'bytes', '--colors', 'mem' })
+  end
   system.run(
-    { 'inferno-flamegraph', '--title', ('DyNeo profile (%s)'):format(event) },
+    cmd,
     { stdin = M.collapsed(traces[event]), timeout = M.TIMEOUT },
     function(result)
       if result.missing then

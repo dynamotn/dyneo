@@ -148,8 +148,8 @@ below follow the sections of `:help dyneo`.
 - **Tasks** — run, build and test the current file or project in ~50
   languages. `<leader>oo`
 - **Profiling** — the program of the buffer run under py-spy, Go's pprof,
-  Node's `--cpu-prof` or perf, its hot lines marked on the code.
-  `:DyProfile`
+  Node's `--cpu-prof` or perf, its hot lines marked on the code; or its
+  allocations, under memray, `-memprofile` or async-profiler. `:DyProfile`
 - **Benchmarks** — go test, criterion, pytest-benchmark or hyperfine runs
   kept and compared with the last, regressions first. `<leader>dpb` ·
   `:DyBench`

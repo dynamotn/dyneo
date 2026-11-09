@@ -233,6 +233,7 @@ one of the same keys in those buffers.
 `<leader>dpg`          n      Profile as Flame Graph
 `<leader>dph`          n      Toggle Profiler Highlights
 `<leader>dpl`          n      Hottest Lines
+`<leader>dpm`          n      Profile Memory
 `<leader>dpo`          n      Open Profile
 `<leader>dpp`          n      Toggle Profiler
 `<leader>dpr`          n      Profile Program

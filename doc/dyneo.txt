@@ -1294,11 +1294,33 @@ by perfanno.nvim.  The profiler follows the filetype:
 Arguments replace the program run: `:DyProfile uv run app.py` for Python,
 `:DyProfile -bench . -run ^$` for the flags of `go test`.
 
+`<leader>dpm` (`:DyProfile memory`) records allocations instead, and marks
+the lines that allocate most, in bytes (perfanno's event `memory (bytes)`):
+
+  Python            `memray run {file}` (Linux and macOS only; Mason
+                    installs it the first time); the marks are what is
+                    still allocated at the peak of the program's memory.
+                    memray runs the script under the Python it is installed
+                    with: for a project's dependencies, install it in the
+                    project's virtual environment.  Arguments replace the
+                    script: `:DyProfile memory -m app`
+  Go                `go test -memprofile -memprofilerate=1`, every
+                    allocation of the tests.  A `main` package writes its
+                    own with `runtime/pprof.WriteHeapProfile`; load it with
+                    `:DyProfile load`
+  Java, Kotlin,     async-profiler with `event=alloc,total`, each stack
+  Scala             weighed by the bytes it allocated
+
+There is no memory profiler for Node or the native languages.
+
 `<leader>dpo` (`:DyProfile load {file}`) reads a profile recorded elsewhere:
-a pprof file (`.pprof`, `.prof`, through `go tool pprof`), a `.cpuprofile`
-or a directory of them, a `perf.data` (through `perf report`), a samply
-`.json.gz` with its `.syms.json` beside it, or collapsed
-stacks as py-spy `--format raw` and flamegraph.pl write them.  Node keeps
+a pprof file (`.pprof`, `.prof`, `.out`, through `go tool pprof`; a heap or
+allocation profile counts bytes), a `.cpuprofile` or a directory of them, a
+`perf.data` (through `perf report`), a samply `.json.gz` with its
+`.syms.json` beside it, a memray `.bin` or the `.csv` of `memray transform
+csv`, a directory of async-profiler `.collapsed` files (`.alloc.collapsed`
+for allocations), or collapsed stacks as py-spy `--format raw` and
+flamegraph.pl write them.  Node keeps
 the line of few samples; the others fall on the line their function starts.
 
 Then:
@@ -1307,7 +1329,8 @@ Then:
   `<leader>dpl`   the hottest lines
   `<leader>dpc`   the hottest callers of the function under the cursor
   `<leader>dpg`   the whole profile as a flame graph (`:DyProfile flame`),
-                drawn by inferno as an SVG the system viewer opens
+                drawn by inferno as an SVG the system viewer opens; a
+                memory profile counts bytes
 
 `<leader>dpp` and its neighbours profile Neovim itself (snacks.nvim).
 
@@ -2639,6 +2662,9 @@ Operations ~
                                                                   *:DyProfile*
 :DyProfile [{cmd}]      Run the program of the buffer, or {cmd}, under a
                         sampling profiler and mark its hot lines.
+:DyProfile memory [{cmd}]
+                        The same with a memory profiler, marking the lines
+                        that allocate most.
 :DyProfile load [{file}]
                         Read a profile recorded elsewhere.
 :DyProfile flame        Draw the loaded profile as a flame graph.  See

@@ -18,6 +18,7 @@ return {
     -- stylua: ignore
     keys = {
       { '<leader>dpr', '<cmd>DyProfile<cr>', desc = 'Profile Program' },
+      { '<leader>dpm', '<cmd>DyProfile memory<cr>', desc = 'Profile Memory' },
       { '<leader>dpo', '<cmd>DyProfile load<cr>', desc = 'Open Profile' },
       { '<leader>dpg', '<cmd>DyProfile flame<cr>', desc = 'Profile as Flame Graph' },
       { '<leader>dpa', '<cmd>PerfToggleAnnotations<cr>', desc = 'Toggle Profile Annotations' },

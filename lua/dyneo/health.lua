@@ -581,6 +581,7 @@ local function requirements()
     duckdb = '`:DyData` and opening a Parquet file (`:MasonInstall duckdb`)',
     ['ast-grep'] = '`<leader>sA` structural search (installed on first use)',
     ['py-spy'] = '`:DyProfile` on Python (`uv tool install py-spy`)',
+    memray = '`:DyProfile memory` on Python, Linux and macOS (installed by Mason on first use)',
     perf = '`:DyProfile` on C, C++, Rust and Zig (Linux only)',
     tofu = '`:DyTfPlan` and `:DyTfState` (or `terraform`)',
     claude = '`:DyAi commit` (`DyNeo.ai.commit_command`) and claudecode.nvim',

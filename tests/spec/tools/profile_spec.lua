@@ -99,6 +99,70 @@ describe('tools.profile', function()
     }, traces)
   end)
 
+  it('reads a Go allocation profile in bytes', function()
+    local traces = profile.parse_pprof({
+      'File: gomem.test',
+      'Type: alloc_space',
+      '-----------+-------------------------------------------------------',
+      '     bytes:  1MB',
+      '      20MB   gomem.big /p/hot_test.go:8 (inline)',
+      '             gomem.TestHot /p/hot_test.go:19',
+      '-----------+-------------------------------------------------------',
+      '     bytes:  8kB',
+      '         0   runtime/pprof.writeHeapInternal /r/pprof.go:650',
+      '-----------+-------------------------------------------------------',
+      '     bytes:  896B',
+      '      896B   gomem.big /p/hot_test.go:8 (inline)',
+    })
+    assert.same({ profile.MEMORY }, vim.tbl_keys(traces))
+    local list = traces[profile.MEMORY]
+    -- Nothing allocated is no stack; a unit is a power of 1024
+    assert.equals(2, #list)
+    assert.equals(20 * 1024 * 1024, list[1].count)
+    assert.same({
+      { symbol = 'gomem.TestHot', file = '/p/hot_test.go', linenr = 19 },
+      { symbol = 'gomem.big', file = '/p/hot_test.go', linenr = 8 },
+    }, list[1].frames)
+    assert.equals(896, list[2].count)
+  end)
+
+  it('reads a memray report, its files from the project', function()
+    local traces = profile.parse_memray({
+      'allocator,num_allocations,size,tid,thread_name,stack_trace',
+      'MALLOC,50,52428850,1,0x1,big;hot.py;8|main;hot.py;13|run_path;<frozen runpy>;291',
+      'MALLOC,1,710,1,"main, worker",f;/abs/x.py;3',
+      'FREE,1,0,1,0x1,f;/abs/x.py;4',
+      '',
+    }, '/p')
+    local list = traces[profile.MEMORY]
+    assert.equals(2, #list)
+    assert.equals(52428850, list[1].count)
+    assert.same({
+      { symbol = 'run_path' },
+      { symbol = 'main', file = '/p/hot.py', linenr = 13 },
+      { symbol = 'big', file = '/p/hot.py', linenr = 8 },
+    }, list[1].frames)
+    -- A quoted field keeps its comma
+    assert.same(
+      { { symbol = 'f', file = '/abs/x.py', linenr = 3 } },
+      list[2].frames
+    )
+  end)
+
+  it('loads a memray capture through memray transform', function()
+    h.write(dir .. '/bin/memray', {
+      '#!/bin/sh',
+      -- memray transform csv -o OUT IN
+      'printf "allocator,num_allocations,size,tid,thread_name,stack_trace\\n'
+        .. 'MALLOC,1,64,1,0x1,f;a.py;2\\n" > "$4"',
+    })
+    vim.fn.setfperm(dir .. '/bin/memray', 'rwxr-xr-x')
+    h.write(dir .. '/out.bin', { 'binary' })
+    profile.load(dir .. '/out.bin', '/p')
+    assert.is_true(vim.wait(2000, function() return loaded ~= nil end))
+    assert.equals('/p/a.py', loaded[profile.MEMORY][1].frames[1].file)
+  end)
+
   it('reads a .cpuprofile, its ticks on their own lines', function()
     local traces = profile.parse_cpuprofile({
       nodes = {
@@ -186,6 +250,30 @@ describe('tools.profile', function()
       { 'node', '--cpu-prof', '--cpu-prof-dir', '/o', '/p/a.ts' },
       cmd
     )
+  end)
+
+  it('builds the memory profiler of each filetype', function()
+    local cmd, cwd = profile.command('python', '/p/x.py', {}, '/o.bin', true)
+    assert.same({ 'memray', 'run', '-o', '/o.bin', '/p/x.py' }, cmd)
+    assert.equals('/p', cwd)
+    cmd = profile.command('python', '/p/x.py', { '-m', 'app' }, '/o', true)
+    assert.same({ 'memray', 'run', '-o', '/o', '-m', 'app' }, cmd)
+    cmd = profile.command('go', '/p/pkg/a.go', {}, '/o', true)
+    assert.same({ 'go', 'test', '-memprofile', '/o', '-memprofilerate=1' }, cmd)
+    local err
+    cmd, err = profile.command('typescript', '/p/a.ts', {}, '/o', true)
+    assert.is_nil(cmd)
+    assert.matches('No memory profiler for typescript', err)
+    assert.matches('go, java', err)
+    local restore = h.stub(
+      vim.uv,
+      'os_uname',
+      function() return { sysname = 'Windows_NT' } end
+    )
+    cmd, err = profile.command('python', '/p/x.py', {}, '/o', true)
+    restore()
+    assert.is_nil(cmd)
+    assert.matches('memray only runs on Linux and macOS', err)
   end)
 
   it('asks for the program of a native one, and only on Linux', function()
@@ -279,6 +367,34 @@ describe('tools.profile', function()
       assert.matches('the program to profile', err)
     end)
 
+    it('records allocations in bytes with the alloc event', function()
+      h.write(lib, {})
+      local _, _, env =
+        profile.command('java', dir .. '/A.java', { 'java', 'A' }, '/o', true)
+      assert.equals(
+        '-agentpath:'
+          .. lib
+          .. '=start,event=alloc,total,collapsed,lines,file=/o/%p.alloc.collapsed',
+        env.JAVA_TOOL_OPTIONS
+      )
+    end)
+
+    it('reads the allocations of a JVM as bytes', function()
+      h.write(dir .. '/app/src/A.java', {})
+      h.write(
+        dir .. '/out/1.alloc.collapsed',
+        { 'A.main:1;A.fill:7;byte[] 4096' }
+      )
+      profile.load(dir .. '/out', dir .. '/app')
+      local list = loaded[profile.MEMORY]
+      assert.equals(4096, list[1].count)
+      assert.same(
+        { symbol = 'A.fill', file = dir .. '/app/src/A.java', linenr = 7 },
+        list[1].frames[2]
+      )
+      assert.is_nil(loaded.time)
+    end)
+
     it('has Mason install async-profiler when it is missing', function()
       local cmd, err =
         profile.command('java', '/p/A.java', { 'java', 'A' }, '/o')
@@ -343,6 +459,26 @@ describe('tools.profile', function()
       vim.fn.readfile(dir .. '/collapsed')
     )
   end)
+  it('draws a memory profile counting bytes', function()
+    local opened
+    local restore_open = h.stub(vim.ui, 'open', function(p) opened = p end)
+    h.write(dir .. '/m.csv', {
+      'allocator,num_allocations,size,tid,thread_name,stack_trace',
+      'MALLOC,1,64,1,0x1,f;/p/a.py;2',
+    })
+    profile.load(dir .. '/m.csv')
+    h.write(dir .. '/bin/inferno-flamegraph', {
+      '#!/bin/sh',
+      'echo "$@" > "' .. dir .. '/args"',
+      'echo "<svg/>"',
+    })
+    vim.fn.setfperm(dir .. '/bin/inferno-flamegraph', 'rwxr-xr-x')
+    profile.flame()
+    assert.is_true(vim.wait(3000, function() return opened ~= nil end))
+    restore_open()
+    assert.matches('%-%-countname bytes', vim.fn.readfile(dir .. '/args')[1])
+  end)
+
   describe('with samply', function()
     -- The shape samply 0.13 saves: a processed profile with addresses only,
     -- and its `.syms.json` sidecar that names them, inline frames and all
