@@ -97,6 +97,12 @@ local function default_opts()
     ---@type table<string, vim.lsp.Config|{ enabled?: boolean, keys?: LspKeysSpec[] }|boolean>
     servers = {
       ['*'] = {
+        -- Wait for the servers to close as Neovim quits. Without a timeout it
+        -- sends `shutdown` and quits at once; the `exit` that follows can be
+        -- written to a server already gone after Neovim stopped handling
+        -- SIGPIPE, which kills it with status 141 and fails a `git commit`
+        -- it was the editor of.
+        exit_timeout = 1000,
         capabilities = {
           workspace = {
             fileOperations = {
