@@ -542,6 +542,25 @@ it says, else from Mason's registry -- and lists first the ones
 carries the licenses too.  A plugin with no license file is unknown, not
 assumed free.
 
+                                                              *dyneo-licenses*
+The project's own dependencies have licenses too.  `<leader>kd`
+(|:DyLicenses|) has `trivy fs` list every package its lockfiles name, each
+with the license its registry gave, as a CycloneDX SBOM (Mason installs trivy
+on first use), or reads a CycloneDX or SPDX JSON file given.  Each license
+expression is weighed: `A OR B` passes if either does, `A AND B` needs both,
+and `X WITH exception` is one id.  By default MIT, Apache-2.0, the BSDs, ISC
+and the like are allowed; MPL-2.0 and the LGPL are to review; the GPL, AGPL,
+SSPL, BUSL and Commons Clause are denied; anything else, and a package with
+no license known, is to review.  A project changes that with
+`.nvim/licenses.json`, `{ "allow": [...], "warn": [...], "deny": [...] }`
+(a trailing `*` matches any version), checked before the defaults.  The file
+is only decoded as JSON; one that does not read is reported and the defaults
+apply.  The report lists the denied and reviewed packages with their purls
+and counts the allowed ones; the quickfix list points at the manifest line
+declaring each (`package.json`, `go.mod`, `Cargo.toml`, `pyproject.toml`,
+`requirements.txt`), else its lockfile entry.  An SBOM listing no package is
+said to check nothing, never to allow everything.
+
 The container images a file names are checked the same way, see
 |dyneo-images|: `<leader>ki` scans them, `<leader>kp` pins them,
 `<leader>kv` checks who signed them.
@@ -2701,6 +2720,12 @@ Supply chain and secrets ~
 :DySbom license         The license of each plugin and package, the ones
                         `DyNeo.license_policy` names first.  See
                         |dyneo-sbom|.
+
+                                                                 *:DyLicenses*
+:DyLicenses [{sbom}]    The licenses of the project's dependencies, from
+                        trivy or the CycloneDX or SPDX JSON file {sbom},
+                        checked against the policy; offenders in the
+                        quickfix list.  See |dyneo-licenses|.
 
                                                                  *:DyOutdated*
 :DyOutdated             Show, on the line of each dependency of this

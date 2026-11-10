@@ -345,6 +345,7 @@ one of the same keys in those buffers.
 `<leader>kU`           n      Bump Dependency on Line
 `<leader>ka`           n      Why Kept From AI
 `<leader>kc`           n      Licenses of the Editor
+`<leader>kd`           n      Licenses of Dependencies
 `<leader>kf`           n      Findings of a SARIF Report
 `<leader>kh`           n      Hex Dump of the File
 `<leader>ki`           n      Scan Images

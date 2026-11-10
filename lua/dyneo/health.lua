@@ -560,7 +560,7 @@ local function requirements()
     ['go-arch-lint'] = '`:DyDeps` in a Go project',
     ['lint-imports'] = '`:DyDeps` in a Python project (`pip install import-linter`)',
     crane = '`:DyImagePin` (or `skopeo`)',
-    trivy = '`:DyImageScan` (or `grype`; `:MasonInstall trivy`)',
+    trivy = '`:DyImageScan` (or `grype`) and `:DyLicenses` (installed by Mason on first use)',
     cosign = '`:DyImageVerify`',
     opa = '`:DyRego` (`:MasonInstall opa`)',
     dyff = '`:DyEnvDiff` on YAML, JSON and TOML (a line diff without it)',

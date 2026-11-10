@@ -81,6 +81,9 @@ below follow the sections of `:help dyneo`.
 - **SBOM** — the editor as CycloneDX, checked against OSV, and the project's
   lockfiles too; licenses against a policy. `:DySbom osv` · `:DySbom lock` ·
   `:DySbom license`
+- **Dependency licenses** — the project's packages (trivy SBOM, CycloneDX or
+  SPDX) against an allow/deny policy, `.nvim/licenses.json` per project.
+  `:DyLicenses`
 - **Outdated dependencies** — npm, Go, PyPI, Terraform and Actions releases
   out of quarantine shown on each manifest line, and bumped. `:DyOutdated`
 - **Scanner findings** — a SARIF report (semgrep, CodeQL, trivy…) in the
