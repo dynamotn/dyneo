@@ -6,6 +6,10 @@ describe('tools.debt', function()
   -- 2026-01-15 12:00 UTC
   local NOW = 1768478400
 
+  -- Built in two halves, so `:DyDebt` on this tree does not list its fixtures
+  local TODO, FIXME = 'TO' .. 'DO:', 'FIX' .. 'ME:'
+  local HACK, XXX = 'HA' .. 'CK:', 'XX' .. 'X:'
+
   before_each(function()
     h.unload('tools.debt')
     debt = require('tools.debt')
@@ -85,14 +89,14 @@ describe('tools.debt', function()
   local function history()
     git({ 'init', '-q' })
     git({ 'config', 'user.email', 'Me@Example.com' })
-    append('a.lua', { '-- TODO: oldest one', 'local x = 1' })
+    append('a.lua', { '-- ' .. TODO .. ' oldest one', 'local x = 1' })
     commit('Alice', 'alice@example.com', '2020-01-15')
-    append('b.sh', { '# FIXME: middle' })
-    append('a.lua', { '-- HACK: patched' })
+    append('b.sh', { '# ' .. FIXME .. ' middle' })
+    append('a.lua', { '-- ' .. HACK .. ' patched' })
     commit('Bob', 'bob@example.com', '2023-01-15')
-    append('c.c', { '/* XXX: mine */', 'int TODOS = 1;' })
+    append('c.c', { '/* ' .. XXX .. ' mine */', 'int TODOS = 1;' })
     commit('Me', 'me@example.com', '2025-01-15')
-    append('b.sh', { '# TODO: work in progress' })
+    append('b.sh', { '# ' .. TODO .. ' work in progress' })
   end
 
   local function texts()
@@ -122,8 +126,14 @@ describe('tools.debt', function()
   it(
     'finds the marker after a word boundary and trims a comment end',
     function()
-      assert.same({ 'XXX', 'mine' }, { debt.marker('/* XXX: mine */') })
-      assert.same({ 'FIXME', 'a' }, { debt.marker('x TODOS: y FIXME: a') })
+      assert.same(
+        { 'XXX', 'mine' },
+        { debt.marker('/* ' .. XXX .. ' mine */') }
+      )
+      assert.same(
+        { 'FIXME', 'a' },
+        { debt.marker('x TODOS: y ' .. FIXME .. ' a') }
+      )
       assert.is_nil(debt.marker('int TODOS = 1;'))
     end
   )
@@ -153,7 +163,7 @@ describe('tools.debt', function()
 
   it('ages a file git does not track as not committed', function()
     history()
-    append('new.lua', { '-- TODO: fresh' })
+    append('new.lua', { '-- ' .. TODO .. ' fresh' })
     local listed = run({ 'todo' })
     assert.same({
       '[TODO] 6y 0m · Alice · oldest one',
@@ -184,7 +194,7 @@ describe('tools.debt', function()
     -- A marker the cache cannot know: the scan is not read again
     debt.cache[root].scan.entries[1].text = 'cached'
     assert.equals('[TODO] 6y 0m · Alice · cached', run({})[1])
-    append('d.lua', { '-- TODO: later' })
+    append('d.lua', { '-- ' .. TODO .. ' later' })
     commit('Bob', 'bob@example.com', '2025-06-15')
     local listed = run({})
     assert.are_not.equal(key, debt.cache[root].key)
@@ -197,7 +207,7 @@ describe('tools.debt', function()
   end)
 
   it('lists the markers without ages outside a git repository', function()
-    append('a.lua', { '-- TODO: loose', '-- HACK: also' })
+    append('a.lua', { '-- ' .. TODO .. ' loose', '-- ' .. HACK .. ' also' })
     local listed = run({})
     table.sort(listed)
     assert.same({ '[HACK] · also', '[TODO] · loose' }, listed)
