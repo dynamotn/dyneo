@@ -333,6 +333,18 @@ describe('tools.testaffected', function()
 
     it('says a missing tool is missing', function()
       h.write(root .. '/go.mod', { 'module ex' })
+      -- `go` may sit in `/usr/bin`, which this spec keeps for git
+      local executable = vim.fn.executable
+      table.insert(
+        restores,
+        h.stub(
+          vim.fn,
+          'executable',
+          function(name)
+            return vim.fs.basename(name) == 'go' and 0 or executable(name)
+          end
+        )
+      )
       ta.run_files(root, { 'core/x.go' }, 'abcdef0123')
       assert.is_true(noted('go is not installed', vim.log.levels.ERROR))
     end)
