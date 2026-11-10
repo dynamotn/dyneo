@@ -97,6 +97,13 @@ CONTENTS                                                      *dyneo-contents*
        9.22 Call graphs .................................... |dyneo-callgraph|
        9.23 Hotspots ........................................ |dyneo-hotspots|
        9.24 Mutation testing .................................. |dyneo-mutate|
+       9.25 Affected tests ............................. |dyneo-test-affected|
+       9.26 Patch coverage ............................ |dyneo-patch-coverage|
+       9.27 Flaky tests ........................................ |dyneo-flaky|
+       9.28 Snapshot review ................................ |dyneo-snapshots|
+       9.29 Bisect ............................................ |dyneo-bisect|
+       9.30 Technical debt .................................. |dyneo-debt|
+       9.31 Translation keys ............................... |dyneo-i18n|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -535,6 +542,25 @@ it says, else from Mason's registry -- and lists first the ones
 `DyNeo.license_policy` denies or flags and the ones not known; the SBOM
 carries the licenses too.  A plugin with no license file is unknown, not
 assumed free.
+
+                                                              *dyneo-licenses*
+The project's own dependencies have licenses too.  `<leader>kd`
+(|:DyLicenses|) has `trivy fs` list every package its lockfiles name, each
+with the license its registry gave, as a CycloneDX SBOM (Mason installs trivy
+on first use), or reads a CycloneDX or SPDX JSON file given.  Each license
+expression is weighed: `A OR B` passes if either does, `A AND B` needs both,
+and `X WITH exception` is one id.  By default MIT, Apache-2.0, the BSDs, ISC
+and the like are allowed; MPL-2.0 and the LGPL are to review; the GPL, AGPL,
+SSPL, BUSL and Commons Clause are denied; anything else, and a package with
+no license known, is to review.  A project changes that with
+`.nvim/licenses.json`, `{ "allow": [...], "warn": [...], "deny": [...] }`
+(a trailing `*` matches any version), checked before the defaults.  The file
+is only decoded as JSON; one that does not read is reported and the defaults
+apply.  The report lists the denied and reviewed packages with their purls
+and counts the allowed ones; the quickfix list points at the manifest line
+declaring each (`package.json`, `go.mod`, `Cargo.toml`, `pyproject.toml`,
+`requirements.txt`), else its lockfile entry.  An SBOM listing no package is
+said to check nothing, never to allow everything.
 
 The container images a file names are checked the same way, see
 |dyneo-images|: `<leader>ki` scans them, `<leader>kp` pins them,
@@ -1466,6 +1492,43 @@ sqlfluff reads the project's `.sqlfluff` in a dbt project too: one saying
 `templater = dbt` lints a model as dbt compiles it, and without one the
 `{{ ref() }}` and `{{ source() }}` of a model still parse.
 
+                                                           *dyneo-explain*
+`<localleader>e` (|:DyExplain|) in a `sql` or `mysql` buffer shows the plan
+of the statement under the cursor, or of the selection, in a split at the
+bottom: one node per line, as a tree, with its costs and estimated rows,
+under a header giving the total cost.  The statement is the treesitter
+`statement` node when the sql parser is installed, otherwise the lines
+between blank lines and `;`; one statement at a time.  It runs on the
+connection dadbod would use: `w:db`, `t:db`, `b:db` (set by the database UI
+in its query buffers) or `g:db`, a URL, a `$VARIABLE` holding one, or the
+name of a connection in `g:dbs`.
+
+    PostgreSQL       `EXPLAIN (FORMAT JSON)` through `psql`
+    MySQL, MariaDB   `EXPLAIN FORMAT=JSON` through `mysql`
+    SQLite           `EXPLAIN QUERY PLAN` through `sqlite3 -readonly`
+
+Nodes that may cost the most are marked like warnings, with the reason at
+the end of the line: a full scan of 10000 rows or more, a nested loop whose
+inner side runs 1000 times or more, and, once analyzed, rows that miss the
+estimate by ten times or more.  `<CR>` on a node opens what the database
+said of it, as JSON, beside the tree; `q` closes either.
+
+`<localleader>E` (`:DyExplain analyze`) runs `EXPLAIN ANALYZE`, which
+EXECUTES the statement, to add the time, rows, loops and buffers it really
+took.  It shows the statement and asks first; anything but a plain `SELECT`
+(or `WITH` ... `SELECT`) asks a second time, `Cancel` being the default.
+On PostgreSQL it runs between `BEGIN` and `ROLLBACK`, so its writes are
+undone; on MySQL between `START TRANSACTION` and `ROLLBACK`, which does not
+undo DDL or tables without transactions, and the plan is MySQL's own text
+tree (8.0.18 or later).  SQLite has no `EXPLAIN ANALYZE`.
+
+A plan stops after 30 seconds, on the server too for PostgreSQL
+(`statement_timeout`), and its output is cut at 4 MiB.  The URL may hold a
+password: it is never shown, it is cut out of the errors the client
+prints, and messages name only the scheme and the host.  On MySQL the
+password goes through `$MYSQL_PWD`, not the command line.  The plan window
+is kept from AI (|dyneo-ai-guard|).
+
 A database answers through a connection; a data file answers through
 DuckDB, with no server at all (|dyneo-data-files|).
 
@@ -2274,6 +2337,257 @@ project.  A run that exits with an error loads nothing and says so, as does
 a report that is missing or unreadable: "No mutant survived" is said only
 when the report holds mutants and every one was killed.
 
+9.25 Affected tests                                      *dyneo-test-affected*
+
+`<leader>tA` (|:DyTestAffected|) runs only the tests the current change
+affects.  The change is every file that differs from the merge base of `HEAD`
+with the default branch (`origin/HEAD`, else `main`, else `master`), committed
+or not, plus the untracked files; `:DyTestAffected {ref}` takes the merge base
+with {ref} instead.  Each language of the project maps it to tests:
+
+  `package.json`                       jest's own `--listTests
+                                     --findRelatedTests` when the project
+                                     has jest; else (Vitest's `list` has no
+                                     related mode) the test files whose
+                                     relative imports reach a changed file.
+  `go.mod`                             the packages of the changed files,
+                                     those importing them, directly or not,
+                                     and those whose tests import one, from
+                                     `go list`.
+  `pyproject.toml`, `setup.py`,        the test files whose `import` and
+  `setup.cfg`, `pytest.ini`            `from` lines reach a changed module,
+                                     read by `git grep`; a changed
+                                     `conftest.py` takes its directory.  With
+                                     `.testmondata`, `pytest --testmon` picks
+                                     them itself.
+  `Cargo.toml`                         the crates of the workspace holding a
+                                     changed file and those depending on
+                                     them, from `cargo metadata --no-deps`.
+
+A changed test file is always affected.  neotest runs the files, packages or
+crates when the language has an adapter; else the tool's own command (jest,
+`vitest run`, `go test`, `pytest`, `cargo test -p`) runs in a terminal split.
+A notification says which ran and why: changed, or which change it imports.
+
+Listing and running the tests runs code of the project, so it asks whether
+the project is trusted first, once a session.  "Nothing changed" and "No test
+is affected" are said only when the change was read and mapped: when git or
+a tool fails or is missing, it says which and why instead.  Path aliases of
+JavaScript and a `go.work` of several modules are not followed.
+
+9.26 Patch coverage                                     *dyneo-patch-coverage*
+
+`<leader>tp` (|:DyPatchCoverage|) shows how much of the current change the
+tests run, the way diff-cover and Codecov's patch coverage count it.  The
+change is every line added or modified since the merge base of `HEAD` with
+the default branch (as |dyneo-test-affected| finds it), committed or not,
+and every line of an untracked file; `:DyPatchCoverage {ref}` takes the
+merge base with {ref}.
+
+The coverage is the newest report of the project: `lcov.info` or `*.lcov`,
+Cobertura `coverage.xml`, a Go `coverage.out` or `cover.out`, or a
+coverage.py `coverage.json`, in the project root or a directory
+crazy-coverage searches (`coverage/`, `build/`, `target/coverage/`, ...).
+Only the changed lines the report calls executable count; a changed file the
+report does not know is listed apart and not counted.
+
+A summary split gives the percentage of the whole and of each file.  The
+changed lines no test runs go in the quickfix list and show as hints in their
+buffers; `<leader>tp` again, or `:DyPatchCoverage clear`, removes them.  A
+report older than a changed file it covers is marked STALE, file by file,
+and the notification warns.  With no report, it says how to make one;
+`<leader>tc` then shows the whole report in the editor.  A Python `.coverage`
+database is not read: `coverage xml` turns it into one.
+
+9.27 Flaky tests                                                 *dyneo-flaky*
+
+`<leader>tF` (|:DyFlaky|) runs the test under the cursor many times, 10
+unless a count is given (`:20DyFlaky`, `20<leader>tF`), and says how often
+it passes: a test that fails now and then is flaky, one that always fails
+is broken.  `:DyFlaky file` runs every test of the buffer's file instead, and
+`:DyFlaky stop` ends a run going on; the runs that finished are reported.
+
+The test is neotest's nearest position when an adapter has parsed the
+buffer, else the enclosing test function: `func TestX` in Go, `def test_x`
+(in its `class Test...`) in Python, `it(...)` or `test(...)` in JavaScript
+and TypeScript, a `#[test]` function (in its `mod`s) in Rust.  It runs by
+the tool's own command, not through neotest, so each run is independent:
+
+  Go                  `go test -json -count=N -run ^(TestX)$`, one process;
+                      each iteration is read from its events, subtests
+                      counted with their test.
+  Python              `pytest -p no:cacheprovider -p no:randomly
+                      file::Class::test` per run (the project's virtual
+                      environment first); pytest-randomly is kept when the
+                      project names it.
+  JavaScript          the project's jest `-t` or `vitest run -t` per run,
+                      matching the test's own name.
+  Rust                `cargo test -- --exact module::test` per run; cargo
+                      builds once.
+
+Runs go one after the other in the background, each with its own deadline
+(5 minutes); a progress notification replaces itself.  The report opens in
+a scratch buffer: passes of N and the failure rate, the distinct failure
+messages (first lines) with how often each came and the start of one
+output of each, the durations (min, median, max), and the verdict: stable
+pass, flaky, or always fails.  A run past its deadline counts as a failure.
+
+Running the tests runs code of the project, so it asks whether the project
+is trusted first, once a session.  A tool that is missing, a build that
+fails, or a name no test matches stops the whole run and says so: nothing
+of it is counted as a pass.
+
+9.28 Snapshot review                                         *dyneo-snapshots*
+
+`<leader>tu` (|:DySnapshots|) lists the pending snapshot-test changes of the
+project in a picker, the diff in its preview.  Choosing one opens a tab of
+two read-only buffers in diff mode, the snapshot as stored on the left and
+the new one on the right, with keys of their own:
+
+  `a`                 accept it, and show the next one
+  `x`                 reject it, and show the next one
+  `n`                 skip to the next one
+  `q`                 stop the review
+
+Three kinds are found, by what the project holds:
+
+  insta (Rust)        a `x.snap.new` next to `x.snap`; the diff is of the
+                      bodies, without the `---` headers.  Accepting moves
+                      the new file over the old, its header with it;
+                      rejecting deletes it, once confirmed.  Inline
+                      snapshots (`.pending-snap` files) are counted, not
+                      shown: `cargo insta review` takes them.
+  jest, vitest        no pending file: the project's own runner in
+                      `node_modules/.bin` runs the suite once with `--json`
+                      (and `CI=true`, so nothing is written), and each
+                      failing snapshot is listed.  vitest's report has no
+                      new value, so its right side says so.
+  syrupy (Python)     `__snapshots__/*.ambr`: the project's pytest (its
+                      `.venv` first) runs once with a JUnit report.
+
+For jest, vitest and syrupy, accepting runs the test file again with
+`-u` (`--runTestsByPath`, `vitest run -u`, `pytest --snapshot-update`),
+once confirmed: it rewrites every snapshot of that file, so the others of
+the file leave the list too.  Rejecting has no file to delete there: the
+snapshot stays and the test keeps failing.
+
+`:DySnapshots accept-all` and `:DySnapshots reject-all` act on every one at
+once after a confirmation giving the count; reject-all deletes only insta's
+`.snap.new` files.  Running a suite runs code of the project, so it asks
+whether the project is trusted first, once a session.  A runner that fails
+or gives no report says so; its snapshots are not read as none pending.
+
+9.29 Bisect                                                     *dyneo-bisect*
+
+`<leader>gi` (|:DyBisect|) finds the commit that broke a check with `git
+bisect run`, then opens it as `git show` in a tab and says its subject,
+author and date.  It asks for the good ref (the merge base with the default
+branch, else the last tag before the bad one) and the check command (the
+test under the cursor, through the command of |:DyFlaky|, else the last one
+used in the repository this session); the bad ref is `HEAD`.
+`:DyBisect {good} [{bad}] [-- {cmd}]` takes them directly.
+
+The check is a shell command run at each commit; its exit code decides:
+
+  `0`                 good
+  `125`               skip: the commit cannot be tested (it does not build)
+  `1`-`127`           bad
+  `128` and above     abort the bisect
+
+Your working tree, index and branch are never touched: the run happens in a
+throwaway detached worktree under `stdpath("cache")/dyneo/bisect/`, so the
+check runs against committed code only, and what is not committed is
+ignored.  Submodules are as git leaves them in a new worktree.  The
+worktree and its bisect state are removed when the run ends, fails, times
+out (after 30 minutes), is stopped with `:DyBisect stop`, or Neovim quits.
+
+The run shows in a terminal split, the last 200 lines of each step's output
+kept.  Before bisecting, the check runs once at the bad commit, which must
+fail, and once at the good one, which must pass.  When either does not, the
+good ref is not an ancestor of the bad one, or only skipped commits are
+left, it says so, never naming a first bad commit it did not find.  It runs
+code of the project at old commits, so it asks whether the project is
+trusted first, once a session.  One bisect runs at a time.
+
+9.30 Technical debt                                             *dyneo-debt*
+
+`<leader>pt` (|:DyDebt|) lists the TODO, FIXME, HACK and XXX comments of the
+project in the quickfix list, the oldest first, so debt that has been left
+to age stands out:
+
+  [TODO] 3y 2m · Alice · cache the parsed config
+
+A marker is a keyword followed by a colon, as todo-comments.nvim highlights
+it.  One `git grep` finds them in the files git tracks or would track; each
+file with markers is then blamed once, for its marked lines only, four files
+at a time and at most 500 files.  The age is the time since the author wrote
+the line, in calendar months; a line not yet committed, or in a file git
+does not track, is `0d` and "not committed".  Markers of the same age keep
+the order of their path and line.  A notification sums it up: the count per
+keyword, the median age, and where the oldest is.  It names paths and line
+numbers only; what the comments say goes to the quickfix list alone.
+
+`:DyDebt {keyword}` keeps one keyword; `:DyDebt mine` keeps the lines whose
+author email is your `git config user.email`.  The two combine.
+
+What a run found is kept for the session, per project, keyed by `HEAD` and
+the output of `git status`: asking again is instant until a commit, a
+checkout or a change to the set of dirty files.  Outside a git repository,
+or in one with no commit yet, the markers are still listed, without ages,
+and it says why; `mine` then fails.  `M.KEYWORDS`, `M.MAX_FILES` and
+`M.JOBS` of `tools.debt` change the keywords, the cap and the parallelism.
+
+9.31 Translation keys                                           *dyneo-i18n*
+
+What i18n-ally does in VS Code, for the keys of a JavaScript, TypeScript,
+Vue, Svelte, Ruby, ERB or PHP project: `<leader>pi` (|:DyI18n|) reports in
+the quickfix list
+
+  - keys the code uses that a locale lacks, at the line using them;
+  - keys some locales have and others lack, at their entry;
+  - keys the code never uses, at their entry, and those only "maybe
+    unused" when a dynamic key could name them.
+
+A notification sums it up per kind.  `:DyI18n hints` toggles, in the
+buffers of those filetypes, the default-locale value of each key after it
+(cut to `M.MAX_HINT` characters), or "missing in en".  Hints are off by
+default, to stay quiet; they cover the lines in view, placed again
+250 ms after the buffer is entered, changed or scrolled, from what was read
+once.  `<localleader>i` in those buffers goes to the entry of the key under
+the cursor in the default locale file.
+
+Locale files are found in the nearest directory above the buffer (up to
+the repository root) holding one of these, `{lang}` naming the locale:
+
+  locales/{lang}/*.json           locales/{lang}.json
+  public/locales/{lang}/*.json    src/i18n/{lang}.json (i18next, vue-i18n)
+  messages/{lang}.json (next-intl)
+  config/locales/**/*.yml (Rails, the locale is the top-level key)
+  translations/*.{lang}.yaml (Symfony)
+
+A `.nvim/i18n.json` at the root replaces them: >json
+
+  { "paths": ["app/lang/{lang}.json"], "default": "fr" }
+<
+It is read as JSON only; a malformed one, or a path outside the project,
+is an error and nothing is read.  The default locale is `default`, else
+`en`, else the first by name.  Nested keys are flattened with `.`; i18next
+plural forms (`_one`, `_other`, ...) count as their base key, and an
+`ns:key` is looked up without its namespace.  JSON is read by Neovim, at
+most 2 MiB a file; YAML needs `yq` (|:checkhealth| dyneo), and without it
+the YAML files are skipped and the report says so.  Laravel's
+`lang/{lang}/*.php` is PHP code, not data, and is not read.  What was read
+is kept per project until a locale file, a new one of a known layout, or
+the override is written.
+
+Keys are the first argument of `t()`, `i18n.t()`, `$t()`, `I18n.t()` (a
+string or a `:symbol`), `trans()`, `__()` and `$_()`, on one line, as
+`M.CALLS` lists them.  A template string, a concatenation, a variable or a
+Rails lazy lookup `t('.key')` is a dynamic key: it is never checked, and
+the keys it could name are only "maybe unused".  The report finds the calls
+with one `git grep` over the files git does not ignore, tracked or not;
+past 8 MiB of hits it stops, says so, and calls nothing surely unused.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -2458,6 +2772,12 @@ Supply chain and secrets ~
 :DySbom license         The license of each plugin and package, the ones
                         `DyNeo.license_policy` names first.  See
                         |dyneo-sbom|.
+
+                                                                 *:DyLicenses*
+:DyLicenses [{sbom}]    The licenses of the project's dependencies, from
+                        trivy or the CycloneDX or SPDX JSON file {sbom},
+                        checked against the policy; offenders in the
+                        quickfix list.  See |dyneo-licenses|.
 
                                                                  *:DyOutdated*
 :DyOutdated             Show, on the line of each dependency of this
@@ -2690,6 +3010,13 @@ Data and machine learning ~
                         Run {query}, or the lines of [range], or the whole
                         buffer, through DuckDB.  See |dyneo-data-files|.
 
+                                                                  *:DyExplain*
+:[range]DyExplain       The plan of the SQL statement under the cursor, or of
+                        [range], on the buffer's database connection.
+:[range]DyExplain analyze
+                        Run it with EXPLAIN ANALYZE, after asking: this
+                        executes the statement.  See |dyneo-explain|.
+
 Project ~
                                                                   *:DyProject*
 :DyProject              The state of the project on one page.  See
@@ -2760,6 +3087,13 @@ Project ~
 :DyOwners unowned       Every file git tracks that nobody owns, in the
                         quickfix list.  See |dyneo-owners|.
 
+                                                                   *:DyBisect*
+:DyBisect [{good} [{bad}]] [-- {cmd}]
+                        Find the commit that broke {cmd} with `git bisect
+                        run` in a throwaway worktree, and show it; what is
+                        not given is asked.  See |dyneo-bisect|.
+:DyBisect stop          End the bisect going on and remove its worktree.
+
                                                                        *:DyC4*
 :DyC4 [{view}]          Draw {view} of the LikeC4 workspace of the buffer,
                         or one picked, through D2.  See |dyneo-diagram|.
@@ -2798,6 +3132,20 @@ Project ~
                         applies to it or by {tool} alone, in the quickfix
                         list.  See |dyneo-deadcode|.
 
+                                                                    *:DyDebt*
+:DyDebt [{keyword}] [mine]
+                        The TODO/FIXME/HACK/XXX comments of the project,
+                        oldest first, with their age and author from git
+                        blame, in the quickfix list; {keyword} keeps one
+                        keyword, `mine` your own.  See |dyneo-debt|.
+
+                                                                    *:DyI18n*
+:DyI18n [report|hints|on|off]
+                        Report i18n keys missing in a locale or never used,
+                        in the quickfix list (`report`, the default);
+                        `hints` toggles the translation shown after each
+                        key, `on` and `off` set it.  See |dyneo-i18n|.
+
                                                                  *:DyHotspots*
 :DyHotspots [buffer]    The files of the project most worth refactoring, by
                         git churn times complexity, in the quickfix list;
@@ -2811,6 +3159,32 @@ Project ~
                         `file` limits it to the buffer's file, `load` reads
                         the last report, `clear` removes the marks.  See
                         |dyneo-mutate|.
+
+                                                             *:DyTestAffected*
+:DyTestAffected [{ref}] Run the tests affected by the change since the merge
+                        base with the default branch, or with {ref}.  See
+                        |dyneo-test-affected|.
+
+                                                            *:DyPatchCoverage*
+:DyPatchCoverage [{ref}|toggle|clear]
+                        Show the coverage of the lines changed since the
+                        merge base with the default branch, or with {ref},
+                        and mark those no test runs; `toggle` removes the
+                        marks when shown, `clear` removes them.  See
+                        |dyneo-patch-coverage|.
+
+                                                                    *:DyFlaky*
+:[count]DyFlaky [file|stop]
+                        Run the test under the cursor, or with `file` the
+                        tests of the file, [count] times (10 unless given)
+                        and report how often it passes; `stop` ends a run.
+                        See |dyneo-flaky|.
+
+                                                                *:DySnapshots*
+:DySnapshots [accept-all|reject-all]
+                        Review the pending snapshot-test changes (insta,
+                        jest, vitest, syrupy) and accept or reject each, or
+                        all at once.  See |dyneo-snapshots|.
 
                                                                      *:DyJira*
 :DyJira                 Pick among the issues assigned to you, then choose

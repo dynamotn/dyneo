@@ -7,6 +7,7 @@
 :DyArchitecture	dyneo.txt	/*:DyArchitecture*
 :DyAsyncApiDiff	dyneo.txt	/*:DyAsyncApiDiff*
 :DyBench	dyneo.txt	/*:DyBench*
+:DyBisect	dyneo.txt	/*:DyBisect*
 :DyBreaking	dyneo.txt	/*:DyBreaking*
 :DyC4	dyneo.txt	/*:DyC4*
 :DyCallGraph	dyneo.txt	/*:DyCallGraph*
@@ -18,6 +19,7 @@
 :DyCron	dyneo.txt	/*:DyCron*
 :DyData	dyneo.txt	/*:DyData*
 :DyDeadCode	dyneo.txt	/*:DyDeadCode*
+:DyDebt	dyneo.txt	/*:DyDebt*
 :DyDeps	dyneo.txt	/*:DyDeps*
 :DyDiagram	dyneo.txt	/*:DyDiagram*
 :DyDuplicates	dyneo.txt	/*:DyDuplicates*
@@ -25,6 +27,8 @@
 :DyEncryptedKeys	dyneo.txt	/*:DyEncryptedKeys*
 :DyEncryptedRotate	dyneo.txt	/*:DyEncryptedRotate*
 :DyEnvDiff	dyneo.txt	/*:DyEnvDiff*
+:DyExplain	dyneo.txt	/*:DyExplain*
+:DyFlaky	dyneo.txt	/*:DyFlaky*
 :DyFormat	dyneo.txt	/*:DyFormat*
 :DyFormatInfo	dyneo.txt	/*:DyFormatInfo*
 :DyHelmUnused	dyneo.txt	/*:DyHelmUnused*
@@ -33,12 +37,14 @@
 :DyHex	dyneo.txt	/*:DyHex*
 :DyHistory	dyneo.txt	/*:DyHistory*
 :DyHotspots	dyneo.txt	/*:DyHotspots*
+:DyI18n	dyneo.txt	/*:DyI18n*
 :DyImagePin	dyneo.txt	/*:DyImagePin*
 :DyImageScan	dyneo.txt	/*:DyImageScan*
 :DyImageVerify	dyneo.txt	/*:DyImageVerify*
 :DyInspect	dyneo.txt	/*:DyInspect*
 :DyJira	dyneo.txt	/*:DyJira*
 :DyKube	dyneo.txt	/*:DyKube*
+:DyLicenses	dyneo.txt	/*:DyLicenses*
 :DyLocalHistory	dyneo.txt	/*:DyLocalHistory*
 :DyLog	dyneo.txt	/*:DyLog*
 :DyMatrix	dyneo.txt	/*:DyMatrix*
@@ -48,6 +54,7 @@
 :DyOpenApiRequest	dyneo.txt	/*:DyOpenApiRequest*
 :DyOutdated	dyneo.txt	/*:DyOutdated*
 :DyOwners	dyneo.txt	/*:DyOwners*
+:DyPatchCoverage	dyneo.txt	/*:DyPatchCoverage*
 :DyPostmortem	dyneo.txt	/*:DyPostmortem*
 :DyProfile	dyneo.txt	/*:DyProfile*
 :DyProject	dyneo.txt	/*:DyProject*
@@ -61,11 +68,13 @@
 :DyRunbook	dyneo.txt	/*:DyRunbook*
 :DySarif	dyneo.txt	/*:DySarif*
 :DySbom	dyneo.txt	/*:DySbom*
+:DySnapshots	dyneo.txt	/*:DySnapshots*
 :DySonarlintDeactivateRule	dyneo.txt	/*:DySonarlintDeactivateRule*
 :DySonarlintToken	dyneo.txt	/*:DySonarlintToken*
 :DySpell	dyneo.txt	/*:DySpell*
 :DyStackTrace	dyneo.txt	/*:DyStackTrace*
 :DySudoWrite	dyneo.txt	/*:DySudoWrite*
+:DyTestAffected	dyneo.txt	/*:DyTestAffected*
 :DyTfPlan	dyneo.txt	/*:DyTfPlan*
 :DyTfState	dyneo.txt	/*:DyTfState*
 :DyThreat	dyneo.txt	/*:DyThreat*
@@ -103,6 +112,7 @@ dyneo-ai-review	dyneo.txt	/*dyneo-ai-review*
 dyneo-architecture	dyneo.txt	/*dyneo-architecture*
 dyneo-asyncapi	dyneo.txt	/*dyneo-asyncapi*
 dyneo-bench	dyneo.txt	/*dyneo-bench*
+dyneo-bisect	dyneo.txt	/*dyneo-bisect*
 dyneo-breaking	dyneo.txt	/*dyneo-breaking*
 dyneo-callgraph	dyneo.txt	/*dyneo-callgraph*
 dyneo-cert-file	dyneo.txt	/*dyneo-cert-file*
@@ -124,6 +134,7 @@ dyneo-cron	dyneo.txt	/*dyneo-cron*
 dyneo-data	dyneo.txt	/*dyneo-data*
 dyneo-data-files	dyneo.txt	/*dyneo-data-files*
 dyneo-deadcode	dyneo.txt	/*dyneo-deadcode*
+dyneo-debt	dyneo.txt	/*dyneo-debt*
 dyneo-deps	dyneo.txt	/*dyneo-deps*
 dyneo-detection	dyneo.txt	/*dyneo-detection*
 dyneo-development	dyneo.txt	/*dyneo-development*
@@ -131,13 +142,16 @@ dyneo-diagram	dyneo.txt	/*dyneo-diagram*
 dyneo-duplicates	dyneo.txt	/*dyneo-duplicates*
 dyneo-encrypted	dyneo.txt	/*dyneo-encrypted*
 dyneo-envdiff	dyneo.txt	/*dyneo-envdiff*
+dyneo-explain	dyneo.txt	/*dyneo-explain*
 dyneo-features	dyneo.txt	/*dyneo-features*
 dyneo-findings	dyneo.txt	/*dyneo-findings*
+dyneo-flaky	dyneo.txt	/*dyneo-flaky*
 dyneo-globals	dyneo.txt	/*dyneo-globals*
 dyneo-helm	dyneo.txt	/*dyneo-helm*
 dyneo-hex	dyneo.txt	/*dyneo-hex*
 dyneo-history	dyneo.txt	/*dyneo-history*
 dyneo-hotspots	dyneo.txt	/*dyneo-hotspots*
+dyneo-i18n	dyneo.txt	/*dyneo-i18n*
 dyneo-images	dyneo.txt	/*dyneo-images*
 dyneo-infra	dyneo.txt	/*dyneo-infra*
 dyneo-inspect	dyneo.txt	/*dyneo-inspect*
@@ -151,6 +165,7 @@ dyneo-languages	dyneo.txt	/*dyneo-languages*
 dyneo-launch-json	dyneo.txt	/*dyneo-launch-json*
 dyneo-layout	dyneo.txt	/*dyneo-layout*
 dyneo-lazy-install	dyneo.txt	/*dyneo-lazy-install*
+dyneo-licenses	dyneo.txt	/*dyneo-licenses*
 dyneo-local-history	dyneo.txt	/*dyneo-local-history*
 dyneo-logs	dyneo.txt	/*dyneo-logs*
 dyneo-mappings	dyneo.txt	/*dyneo-mappings*
@@ -162,6 +177,7 @@ dyneo-openapi	dyneo.txt	/*dyneo-openapi*
 dyneo-ops	dyneo.txt	/*dyneo-ops*
 dyneo-outdated	dyneo.txt	/*dyneo-outdated*
 dyneo-owners	dyneo.txt	/*dyneo-owners*
+dyneo-patch-coverage	dyneo.txt	/*dyneo-patch-coverage*
 dyneo-per-machine	dyneo.txt	/*dyneo-per-machine*
 dyneo-policy	dyneo.txt	/*dyneo-policy*
 dyneo-postmortem	dyneo.txt	/*dyneo-postmortem*
@@ -181,10 +197,12 @@ dyneo-sbom	dyneo.txt	/*dyneo-sbom*
 dyneo-schema	dyneo.txt	/*dyneo-schema*
 dyneo-security	dyneo.txt	/*dyneo-security*
 dyneo-slo	dyneo.txt	/*dyneo-slo*
+dyneo-snapshots	dyneo.txt	/*dyneo-snapshots*
 dyneo-spell	dyneo.txt	/*dyneo-spell*
 dyneo-sql	dyneo.txt	/*dyneo-sql*
 dyneo-stacktrace	dyneo.txt	/*dyneo-stacktrace*
 dyneo-statusline	dyneo.txt	/*dyneo-statusline*
+dyneo-test-affected	dyneo.txt	/*dyneo-test-affected*
 dyneo-tfplan	dyneo.txt	/*dyneo-tfplan*
 dyneo-tfstate	dyneo.txt	/*dyneo-tfstate*
 dyneo-threat	dyneo.txt	/*dyneo-threat*

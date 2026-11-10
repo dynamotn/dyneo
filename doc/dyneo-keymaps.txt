@@ -291,6 +291,7 @@ one of the same keys in those buffers.
 `<leader>gd`           n      Git Diff (hunks)
 `<leader>gf`           n      Git Current File History
 `<leader>gg`           n      Lazygit (Root Dir)
+`<leader>gi`           n      Bisect (find the breaking commit)
 `<leader>gl`           n      Git Log
 `<leader>gp`           n      Git Grep
 `<leader>gr`           n      Git Branches
@@ -344,6 +345,7 @@ one of the same keys in those buffers.
 `<leader>kU`           n      Bump Dependency on Line
 `<leader>ka`           n      Why Kept From AI
 `<leader>kc`           n      Licenses of the Editor
+`<leader>kd`           n      Licenses of Dependencies
 `<leader>kf`           n      Findings of a SARIF Report
 `<leader>kh`           n      Hex Dump of the File
 `<leader>ki`           n      Scan Images
@@ -372,7 +374,9 @@ one of the same keys in those buffers.
 `<leader>pR`           n      Project Roots
 `<leader>pa`           n      Open alternative file
 `<leader>pc`           n      CI Checks
+`<leader>pi`           n      I18n Keys Report
 `<leader>pp`           n      Project Overview
+`<leader>pt`           n      Technical Debt (TODO age)
 `<leader>pu`           n      Unused Code
 
 ==============================================================================
@@ -559,7 +563,9 @@ one of the same keys in those buffers.
 ==============================================================================
 <leader>t  test
 
+`<leader>tA`           n      Run Affected Tests
 `<leader>tC`           n      Coverage Summary
+`<leader>tF`           n      Flaky Test (run N times)
 `<leader>tM`           n      Mutation Testing
 `<leader>tO`           n      Toggle Output Panel (Neotest)
 `<leader>tS`           n      Stop (Neotest)
@@ -570,9 +576,11 @@ one of the same keys in those buffers.
 `<leader>tf`           n      Run File (Vimtest)
 `<leader>tl`           n      Run Last (Neotest)
 `<leader>to`           n      Show Output (Neotest)
+`<leader>tp`           n      Toggle Patch Coverage
 `<leader>tr`           n      Run Nearest (Neotest)
 `<leader>ts`           n      Toggle Summary (Neotest)
 `<leader>tt`           n      Run File (Neotest)
+`<leader>tu`           n      Review Snapshots
 `<leader>tw`           n      Toggle Watch (Neotest)
 
 ==============================================================================
@@ -859,6 +867,8 @@ Other keys
 `<c-w><space>`         n      Window Hydra Mode (which-key)
 `<esc>`                ins    Escape and Clear hlsearch
 `<localleader>A`       n      Run All Chunks  (ft: quarto)
+`<localleader>E`       nx     Explain Analyze (runs it)  (ft: mysql)
+`<localleader>E`       nx     Explain Analyze (runs it)  (ft: sql)
 `<localleader>F`       n      Run From Here (Runbook)  (ft: markdown)
 `<localleader>H`       n      Request For Hurl (OpenAPI)  (ft: yaml.openapi, json.openapi)
 `<localleader>I`       n      Forget Inputs (Runbook)  (ft: markdown)
@@ -883,12 +893,15 @@ Other keys
 `<localleader>d`       n      Breaking Changes Since HEAD (AsyncAPI)  (ft: yaml, json)
 `<localleader>d`       n      Breaking Changes Since HEAD (OpenAPI)  (ft: yaml.openapi, json.openapi)
 `<localleader>e`       n      Evaluate All  (ft: haskell)
+`<localleader>e`       nx     Explain Query Plan  (ft: mysql)
+`<localleader>e`       nx     Explain Query Plan  (ft: sql)
 `<localleader>e`       n      Explain Failed Job (AI)  (ft: yaml.gitlab, yaml.gh-action, yaml.az-pl, groovy, yaml)
 `<localleader>f`       n      Send File to REPL  (ft: python)
 `<localleader>g`       n      CMake Generate  (ft: cmake, c, cpp)
 `<localleader>g`       n      Write Commit Message (AI)  (ft: gitcommit)
 `<localleader>h`       n      Hoogle Signature  (ft: haskell)
 `<localleader>h`       n      Request For kulala (OpenAPI)  (ft: yaml.openapi, json.openapi)
+`<localleader>i`       n      Go To Translation (i18n)  (ft: javascript, javascriptreact, typescript, typescriptreact, vue, svelte, ruby, eruby, php)
 `<localleader>i`       n      Interrupt REPL  (ft: python)
 `<localleader>i`       n      Impact Of Replacements (Terraform)  (ft: terraform, tf)
 `<localleader>ka`      n      Apply  (ft: yaml, yaml.*, helm)

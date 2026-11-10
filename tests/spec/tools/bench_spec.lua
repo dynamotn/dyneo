@@ -356,6 +356,43 @@ describe('tools.bench', function()
     assert.same(results[1].id, results[2].prev)
   end)
 
+  it('keeps two runs of one second in their order', function()
+    fake('go')
+    go_buffer()
+    on_job = function(cmd) h.write(cmd[6], GO_OUT) end
+    local date, hrtime = os.date, vim.uv.hrtime
+    -- The monotonic clock crosses a millisecond 1000 inside this second
+    local mono, wall = { 999e6, 1000e6 }, { 998000, 999000 }
+    local function from_bench()
+      return debug.getinfo(3, 'S').source:match('tools/bench%.lua$')
+    end
+    vim.list_extend(restores, {
+      h.stub(os, 'date', function(fmt, t)
+        if fmt == '%Y%m%d-%H%M%S' then return '20260101-000000' end
+        return date(fmt, t)
+      end),
+      -- `vim.wait` reads this clock too
+      h.stub(
+        vim.uv,
+        'hrtime',
+        function() return from_bench() and table.remove(mono, 1) or hrtime() end
+      ),
+      h.stub(
+        vim.uv,
+        'gettimeofday',
+        function() return 1767225600, table.remove(wall, 1) end
+      ),
+    })
+    bench.run()
+    assert.is_true(noted('nothing earlier to compare with'))
+    bench.run()
+    assert.is_true(
+      vim.wait(2000, function() return #bench.results(root) == 2 end)
+    )
+    local results = bench.results(root)
+    assert.same(results[1].id, results[2].prev)
+  end)
+
   it('keeps nothing of a failed or empty run', function()
     fake('go')
     go_buffer()

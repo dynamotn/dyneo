@@ -81,6 +81,9 @@ below follow the sections of `:help dyneo`.
 - **SBOM** — the editor as CycloneDX, checked against OSV, and the project's
   lockfiles too; licenses against a policy. `:DySbom osv` · `:DySbom lock` ·
   `:DySbom license`
+- **Dependency licenses** — the project's packages (trivy SBOM, CycloneDX or
+  SPDX) against an allow/deny policy, `.nvim/licenses.json` per project.
+  `:DyLicenses`
 - **Outdated dependencies** — npm, Go, PyPI, Terraform and Actions releases
   out of quarantine shown on each manifest line, and bumped. `:DyOutdated`
 - **Scanner findings** — a SARIF report (semgrep, CodeQL, trivy…) in the
@@ -158,6 +161,8 @@ below follow the sections of `:help dyneo`.
 
 - **Data files** — Parquet, CSV and JSON summed up and queried with SQL
   through DuckDB; a Parquet file opens as its summary. `:DyData`
+- **Query plans** — the plan of the SQL statement under the cursor as a
+  tree, slow nodes marked; `analyze` in a rolled-back transaction. `:DyExplain`
 - **Databases** — connections browsed and queried with dadbod, tables and
   columns completed, SQL linted and formatted by sqlfluff; Postgres
   migrations checked by squawk. `<leader>Db`
@@ -182,6 +187,8 @@ below follow the sections of `:help dyneo`.
 - **Code history & owners** — the commits that changed the function under
   the cursor; who CODEOWNERS says owns the file, on the statusline, and the
   files nobody owns. `:DyHistory` · `:DyOwners`
+- **Bisect** — the commit that broke a check, found by `git bisect run` in a
+  throwaway worktree and shown. `<leader>gi` · `:DyBisect`
 - **Forges & trackers** — GitHub (Octo), GitLab merge requests, CI checks,
   Jira issues to branches and worklogs. `<leader>ph` `pl` `pc` `pj`
 - **Pull request review** — GitHub, GitLab and Azure DevOps in one UI:
@@ -202,8 +209,22 @@ below follow the sections of `:help dyneo`.
   Mermaid, from its language server. `<leader>cG` · `:DyCallGraph`
 - **Hotspots** — files ranked by git churn times lizard complexity; hints on
   the complex functions of a buffer. `<leader>pH` · `:DyHotspots buffer`
+- **Technical debt** — TODO/FIXME/HACK/XXX comments, oldest first, aged
+  and attributed by git blame. `<leader>pt` · `:DyDebt mine`
+- **Translation keys** — i18n keys missing in a locale or never used, and
+  their translation beside them. `<leader>pi` · `:DyI18n hints`
 - **Mutation testing** — the lines whose mutants survive the tests, by
   mutmut, Stryker, gremlins or cargo-mutants. `<leader>tM` · `:DyMutate %`
+- **Affected tests** — only the tests the change since the default branch
+  reaches, by jest, imports, `go list` or `cargo metadata`, through neotest.
+  `<leader>tA` · `:DyTestAffected`
+- **Patch coverage** — the coverage of only the lines the change adds or
+  modifies, from LCOV, Cobertura, Go or coverage.py reports.
+  `<leader>tp` · `:DyPatchCoverage`
+- **Flaky tests** — the test under the cursor run N times by its own tool:
+  passes, distinct failures, durations, and a verdict. `<leader>tF` · `:DyFlaky`
+- **Snapshot review** — pending insta, jest, vitest and syrupy snapshots in
+  a diff tab, accepted or rejected one by one. `<leader>tu` · `:DySnapshots`
 
 ### 🏛 Architecture — `<leader>pA`
 
