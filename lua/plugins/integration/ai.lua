@@ -555,7 +555,8 @@ return {
       },
       {
         '<leader>avh',
-        '<cmd>AvanteHistory<cr>',
+        -- `:AvanteHistory` warns on every use that it is `:Avante resume` now
+        function() require('avante.api').select_history() end,
         desc = 'Avante History',
       },
       {
