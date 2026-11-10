@@ -798,9 +798,12 @@ local function start(tool, root, arg)
     { cwd = root, timeout = 5000 },
     function(git)
       local head = git.code == 0 and vim.trim(git.stdout) or nil
+      -- The milliseconds come from the same wall clock as the second, so
+      -- ids sort in run order
+      local sec, usec = vim.uv.gettimeofday()
       local id = ('%s-%03d-%s'):format(
-        os.date('%Y%m%d-%H%M%S'),
-        math.floor(vim.uv.hrtime() / 1e6) % 1000,
+        os.date('%Y%m%d-%H%M%S', sec),
+        math.floor(usec / 1000),
         tool.key
       )
       local dir = M.dir(root)
