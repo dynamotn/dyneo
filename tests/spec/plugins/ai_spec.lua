@@ -103,6 +103,18 @@ describe('plugins.integration.ai: specs driven', function()
     vim.cmd('silent! %bwipeout!')
   end)
 
+  it('opens the Avante history without its deprecated command', function()
+    local opened = 0
+    table.insert(
+      restores,
+      h.stub(package.loaded, 'avante.api', {
+        select_history = function() opened = opened + 1 end,
+      })
+    )
+    press(spec_of('yetone/avante.nvim'), '<leader>avh')
+    assert.equals(1, opened)
+  end)
+
   it('declines Copilot a sensitive or local-only buffer', function()
     local root_dir =
       spec_of('neovim/nvim-lspconfig').opts.servers.copilot.root_dir
