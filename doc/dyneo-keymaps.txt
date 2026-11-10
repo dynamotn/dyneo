@@ -865,6 +865,8 @@ Other keys
 `<c-w><space>`         n      Window Hydra Mode (which-key)
 `<esc>`                ins    Escape and Clear hlsearch
 `<localleader>A`       n      Run All Chunks  (ft: quarto)
+`<localleader>E`       nx     Explain Analyze (runs it)  (ft: mysql)
+`<localleader>E`       nx     Explain Analyze (runs it)  (ft: sql)
 `<localleader>F`       n      Run From Here (Runbook)  (ft: markdown)
 `<localleader>H`       n      Request For Hurl (OpenAPI)  (ft: yaml.openapi, json.openapi)
 `<localleader>I`       n      Forget Inputs (Runbook)  (ft: markdown)
@@ -889,6 +891,8 @@ Other keys
 `<localleader>d`       n      Breaking Changes Since HEAD (AsyncAPI)  (ft: yaml, json)
 `<localleader>d`       n      Breaking Changes Since HEAD (OpenAPI)  (ft: yaml.openapi, json.openapi)
 `<localleader>e`       n      Evaluate All  (ft: haskell)
+`<localleader>e`       nx     Explain Query Plan  (ft: mysql)
+`<localleader>e`       nx     Explain Query Plan  (ft: sql)
 `<localleader>e`       n      Explain Failed Job (AI)  (ft: yaml.gitlab, yaml.gh-action, yaml.az-pl, groovy, yaml)
 `<localleader>f`       n      Send File to REPL  (ft: python)
 `<localleader>g`       n      CMake Generate  (ft: cmake, c, cpp)

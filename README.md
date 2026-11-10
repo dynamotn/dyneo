@@ -158,6 +158,8 @@ below follow the sections of `:help dyneo`.
 
 - **Data files** — Parquet, CSV and JSON summed up and queried with SQL
   through DuckDB; a Parquet file opens as its summary. `:DyData`
+- **Query plans** — the plan of the SQL statement under the cursor as a
+  tree, slow nodes marked; `analyze` in a rolled-back transaction. `:DyExplain`
 - **Databases** — connections browsed and queried with dadbod, tables and
   columns completed, SQL linted and formatted by sqlfluff; Postgres
   migrations checked by squawk. `<leader>Db`

@@ -1472,6 +1472,43 @@ sqlfluff reads the project's `.sqlfluff` in a dbt project too: one saying
 `templater = dbt` lints a model as dbt compiles it, and without one the
 `{{ ref() }}` and `{{ source() }}` of a model still parse.
 
+                                                           *dyneo-explain*
+`<localleader>e` (|:DyExplain|) in a `sql` or `mysql` buffer shows the plan
+of the statement under the cursor, or of the selection, in a split at the
+bottom: one node per line, as a tree, with its costs and estimated rows,
+under a header giving the total cost.  The statement is the treesitter
+`statement` node when the sql parser is installed, otherwise the lines
+between blank lines and `;`; one statement at a time.  It runs on the
+connection dadbod would use: `w:db`, `t:db`, `b:db` (set by the database UI
+in its query buffers) or `g:db`, a URL, a `$VARIABLE` holding one, or the
+name of a connection in `g:dbs`.
+
+    PostgreSQL       `EXPLAIN (FORMAT JSON)` through `psql`
+    MySQL, MariaDB   `EXPLAIN FORMAT=JSON` through `mysql`
+    SQLite           `EXPLAIN QUERY PLAN` through `sqlite3 -readonly`
+
+Nodes that may cost the most are marked like warnings, with the reason at
+the end of the line: a full scan of 10000 rows or more, a nested loop whose
+inner side runs 1000 times or more, and, once analyzed, rows that miss the
+estimate by ten times or more.  `<CR>` on a node opens what the database
+said of it, as JSON, beside the tree; `q` closes either.
+
+`<localleader>E` (`:DyExplain analyze`) runs `EXPLAIN ANALYZE`, which
+EXECUTES the statement, to add the time, rows, loops and buffers it really
+took.  It shows the statement and asks first; anything but a plain `SELECT`
+(or `WITH` ... `SELECT`) asks a second time, `Cancel` being the default.
+On PostgreSQL it runs between `BEGIN` and `ROLLBACK`, so its writes are
+undone; on MySQL between `START TRANSACTION` and `ROLLBACK`, which does not
+undo DDL or tables without transactions, and the plan is MySQL's own text
+tree (8.0.18 or later).  SQLite has no `EXPLAIN ANALYZE`.
+
+A plan stops after 30 seconds, on the server too for PostgreSQL
+(`statement_timeout`), and its output is cut at 4 MiB.  The URL may hold a
+password: it is never shown, it is cut out of the errors the client
+prints, and messages name only the scheme and the host.  On MySQL the
+password goes through `$MYSQL_PWD`, not the command line.  The plan window
+is kept from AI (|dyneo-ai-guard|).
+
 A database answers through a connection; a data file answers through
 DuckDB, with no server at all (|dyneo-data-files|).
 
@@ -2895,6 +2932,13 @@ Data and machine learning ~
 :[range]DyData sql [{query}]
                         Run {query}, or the lines of [range], or the whole
                         buffer, through DuckDB.  See |dyneo-data-files|.
+
+                                                                  *:DyExplain*
+:[range]DyExplain       The plan of the SQL statement under the cursor, or of
+                        [range], on the buffer's database connection.
+:[range]DyExplain analyze
+                        Run it with EXPLAIN ANALYZE, after asking: this
+                        executes the statement.  See |dyneo-explain|.
 
 Project ~
                                                                   *:DyProject*
