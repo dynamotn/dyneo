@@ -186,7 +186,7 @@ describe('config.lazy setup', function()
 
   it('falls back to a built-in colorscheme and says so', function()
     load()
-    assert.are.equal('habamax', vim.g.colors_name)
+    assert.are.equal('catppuccin', vim.g.colors_name)
     assert.is_truthy(warned[1]:find('`catppuccin` not found', 1, true))
   end)
 

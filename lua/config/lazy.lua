@@ -190,12 +190,16 @@ try(
 )
 
 -- A colorscheme that fails to load (not cloned yet, held back by the
--- quarantine) leaves a built-in one rather than stopping startup here
+-- quarantine) leaves a built-in one rather than stopping startup here.
+-- Neovim's own catppuccin is sourced by path: `colors/catppuccin.vim` here
+-- comes first in the runtimepath and loads the plugin, which is what failed.
 if not pcall(vim.cmd.colorscheme, defaults.colorscheme) then
   Plugin.warn(
-    ('Colorscheme `%s` not found, using `habamax`'):format(defaults.colorscheme)
+    ('Colorscheme `%s` not found, using the built-in `catppuccin`'):format(
+      defaults.colorscheme
+    )
   )
-  vim.cmd.colorscheme('habamax')
+  vim.cmd.source(vim.fs.joinpath(vim.env.VIMRUNTIME, 'colors/catppuccin.vim'))
 end
 
 -- Opening files from the command line needs the autocmds from the start;
