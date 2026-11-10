@@ -543,7 +543,7 @@ local function requirements()
     prefect = '`:DyCiStatus` on a Prefect flow (`uv tool install prefect`, or in the project `.venv`)',
     az = '`:DyCiStatus`, `:DyProject` and `:DyReview` on Azure DevOps (with its `azure-devops` extension)',
     jq = '`:DyQuery` on JSON, and the jq filter of `:DyLog`',
-    yq = '`:DyQuery` on YAML, `:DyOpenApiRequest` and `:DyArchitecture`',
+    yq = '`:DyQuery` on YAML, `:DyOpenApiRequest`, `:DyArchitecture` and YAML locales of `:DyI18n`',
     openssl = '`:DyInspect` and `:DyCert` on a certificate, and `:DyCert host`',
     quarto = '`:QuartoPreview` of a Quarto document',
     sops = 'opening a SOPS file decrypted, and `:DyEncryptedRotate`',

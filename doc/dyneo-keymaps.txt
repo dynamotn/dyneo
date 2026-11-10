@@ -374,6 +374,7 @@ one of the same keys in those buffers.
 `<leader>pR`           n      Project Roots
 `<leader>pa`           n      Open alternative file
 `<leader>pc`           n      CI Checks
+`<leader>pi`           n      I18n Keys Report
 `<leader>pp`           n      Project Overview
 `<leader>pt`           n      Technical Debt (TODO age)
 `<leader>pu`           n      Unused Code
@@ -900,6 +901,7 @@ Other keys
 `<localleader>g`       n      Write Commit Message (AI)  (ft: gitcommit)
 `<localleader>h`       n      Hoogle Signature  (ft: haskell)
 `<localleader>h`       n      Request For kulala (OpenAPI)  (ft: yaml.openapi, json.openapi)
+`<localleader>i`       n      Go To Translation (i18n)  (ft: javascript, javascriptreact, typescript, typescriptreact, vue, svelte, ruby, eruby, php)
 `<localleader>i`       n      Interrupt REPL  (ft: python)
 `<localleader>i`       n      Impact Of Replacements (Terraform)  (ft: terraform, tf)
 `<localleader>ka`      n      Apply  (ft: yaml, yaml.*, helm)

@@ -211,6 +211,8 @@ below follow the sections of `:help dyneo`.
   the complex functions of a buffer. `<leader>pH` · `:DyHotspots buffer`
 - **Technical debt** — TODO/FIXME/HACK/XXX comments, oldest first, aged
   and attributed by git blame. `<leader>pt` · `:DyDebt mine`
+- **Translation keys** — i18n keys missing in a locale or never used, and
+  their translation beside them. `<leader>pi` · `:DyI18n hints`
 - **Mutation testing** — the lines whose mutants survive the tests, by
   mutmut, Stryker, gremlins or cargo-mutants. `<leader>tM` · `:DyMutate %`
 - **Affected tests** — only the tests the change since the default branch

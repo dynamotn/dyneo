@@ -103,6 +103,7 @@ CONTENTS                                                      *dyneo-contents*
        9.28 Snapshot review ................................ |dyneo-snapshots|
        9.29 Bisect ............................................ |dyneo-bisect|
        9.30 Technical debt .................................. |dyneo-debt|
+       9.31 Translation keys ............................... |dyneo-i18n|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -2536,6 +2537,57 @@ or in one with no commit yet, the markers are still listed, without ages,
 and it says why; `mine` then fails.  `M.KEYWORDS`, `M.MAX_FILES` and
 `M.JOBS` of `tools.debt` change the keywords, the cap and the parallelism.
 
+9.31 Translation keys                                           *dyneo-i18n*
+
+What i18n-ally does in VS Code, for the keys of a JavaScript, TypeScript,
+Vue, Svelte, Ruby, ERB or PHP project: `<leader>pi` (|:DyI18n|) reports in
+the quickfix list
+
+  - keys the code uses that a locale lacks, at the line using them;
+  - keys some locales have and others lack, at their entry;
+  - keys the code never uses, at their entry, and those only "maybe
+    unused" when a dynamic key could name them.
+
+A notification sums it up per kind.  `:DyI18n hints` toggles, in the
+buffers of those filetypes, the default-locale value of each key after it
+(cut to `M.MAX_HINT` characters), or "missing in en".  Hints are off by
+default, to stay quiet; they cover the lines in view, placed again
+250 ms after the buffer is entered, changed or scrolled, from what was read
+once.  `<localleader>i` in those buffers goes to the entry of the key under
+the cursor in the default locale file.
+
+Locale files are found in the nearest directory above the buffer (up to
+the repository root) holding one of these, `{lang}` naming the locale:
+
+  locales/{lang}/*.json           locales/{lang}.json
+  public/locales/{lang}/*.json    src/i18n/{lang}.json (i18next, vue-i18n)
+  messages/{lang}.json (next-intl)
+  config/locales/**/*.yml (Rails, the locale is the top-level key)
+  translations/*.{lang}.yaml (Symfony)
+
+A `.nvim/i18n.json` at the root replaces them: >json
+
+  { "paths": ["app/lang/{lang}.json"], "default": "fr" }
+<
+It is read as JSON only; a malformed one, or a path outside the project,
+is an error and nothing is read.  The default locale is `default`, else
+`en`, else the first by name.  Nested keys are flattened with `.`; i18next
+plural forms (`_one`, `_other`, ...) count as their base key, and an
+`ns:key` is looked up without its namespace.  JSON is read by Neovim, at
+most 2 MiB a file; YAML needs `yq` (|:checkhealth| dyneo), and without it
+the YAML files are skipped and the report says so.  Laravel's
+`lang/{lang}/*.php` is PHP code, not data, and is not read.  What was read
+is kept per project until a locale file, a new one of a known layout, or
+the override is written.
+
+Keys are the first argument of `t()`, `i18n.t()`, `$t()`, `I18n.t()` (a
+string or a `:symbol`), `trans()`, `__()` and `$_()`, on one line, as
+`M.CALLS` lists them.  A template string, a concatenation, a variable or a
+Rails lazy lookup `t('.key')` is a dynamic key: it is never checked, and
+the keys it could name are only "maybe unused".  The report finds the calls
+with one `git grep` over the files git does not ignore, tracked or not;
+past 8 MiB of hits it stops, says so, and calls nothing surely unused.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -3086,6 +3138,13 @@ Project ~
                         oldest first, with their age and author from git
                         blame, in the quickfix list; {keyword} keeps one
                         keyword, `mine` your own.  See |dyneo-debt|.
+
+                                                                    *:DyI18n*
+:DyI18n [report|hints|on|off]
+                        Report i18n keys missing in a locale or never used,
+                        in the quickfix list (`report`, the default);
+                        `hints` toggles the translation shown after each
+                        key, `on` and `off` set it.  See |dyneo-i18n|.
 
                                                                  *:DyHotspots*
 :DyHotspots [buffer]    The files of the project most worth refactoring, by
