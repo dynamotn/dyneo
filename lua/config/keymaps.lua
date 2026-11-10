@@ -360,6 +360,8 @@ map("n", "<leader>tF", function() require("tools.flaky").run("", vim.v.count) en
 map("n", "<leader>tu", "<cmd>DySnapshots<cr>", { desc = "Review Snapshots" })
 -- files ranked by git churn times complexity (`tools.hotspots`)
 map("n", "<leader>pH", "<cmd>DyHotspots<cr>", { desc = "Hotspots" })
+-- TODO/FIXME comments, oldest first, aged by git blame (`tools.debt`)
+map("n", "<leader>pt", "<cmd>DyDebt<cr>", { desc = "Technical Debt (TODO age)" })
 -- the classes of the buffer as a Mermaid diagram (`tools.class_diagram`)
 map("n", "<leader>cU", "<cmd>DyClassDiagram<cr>", { desc = "Class Diagram" })
 -- callers and callees of the function under the cursor (`tools.callgraph`)

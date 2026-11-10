@@ -204,6 +204,8 @@ below follow the sections of `:help dyneo`.
   Mermaid, from its language server. `<leader>cG` · `:DyCallGraph`
 - **Hotspots** — files ranked by git churn times lizard complexity; hints on
   the complex functions of a buffer. `<leader>pH` · `:DyHotspots buffer`
+- **Technical debt** — TODO/FIXME/HACK/XXX comments, oldest first, aged
+  and attributed by git blame. `<leader>pt` · `:DyDebt mine`
 - **Mutation testing** — the lines whose mutants survive the tests, by
   mutmut, Stryker, gremlins or cargo-mutants. `<leader>tM` · `:DyMutate %`
 - **Affected tests** — only the tests the change since the default branch

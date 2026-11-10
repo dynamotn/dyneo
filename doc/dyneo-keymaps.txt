@@ -374,6 +374,7 @@ one of the same keys in those buffers.
 `<leader>pa`           n      Open alternative file
 `<leader>pc`           n      CI Checks
 `<leader>pp`           n      Project Overview
+`<leader>pt`           n      Technical Debt (TODO age)
 `<leader>pu`           n      Unused Code
 
 ==============================================================================

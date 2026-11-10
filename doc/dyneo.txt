@@ -102,6 +102,7 @@ CONTENTS                                                      *dyneo-contents*
        9.27 Flaky tests ........................................ |dyneo-flaky|
        9.28 Snapshot review ................................ |dyneo-snapshots|
        9.29 Bisect ............................................ |dyneo-bisect|
+       9.30 Technical debt .................................. |dyneo-debt|
    10. Mappings ............................................. |dyneo-mappings|
    11. Commands ............................................. |dyneo-commands|
    12. Layout ................................................. |dyneo-layout|
@@ -2451,6 +2452,34 @@ left, it says so, never naming a first bad commit it did not find.  It runs
 code of the project at old commits, so it asks whether the project is
 trusted first, once a session.  One bisect runs at a time.
 
+9.30 Technical debt                                             *dyneo-debt*
+
+`<leader>pt` (|:DyDebt|) lists the TODO, FIXME, HACK and XXX comments of the
+project in the quickfix list, the oldest first, so debt that has been left
+to age stands out:
+
+  [TODO] 3y 2m · Alice · cache the parsed config
+
+A marker is a keyword followed by a colon, as todo-comments.nvim highlights
+it.  One `git grep` finds them in the files git tracks or would track; each
+file with markers is then blamed once, for its marked lines only, four files
+at a time and at most 500 files.  The age is the time since the author wrote
+the line, in calendar months; a line not yet committed, or in a file git
+does not track, is `0d` and "not committed".  Markers of the same age keep
+the order of their path and line.  A notification sums it up: the count per
+keyword, the median age, and where the oldest is.  It names paths and line
+numbers only; what the comments say goes to the quickfix list alone.
+
+`:DyDebt {keyword}` keeps one keyword; `:DyDebt mine` keeps the lines whose
+author email is your `git config user.email`.  The two combine.
+
+What a run found is kept for the session, per project, keyed by `HEAD` and
+the output of `git status`: asking again is instant until a commit, a
+checkout or a change to the set of dirty files.  Outside a git repository,
+or in one with no commit yet, the markers are still listed, without ages,
+and it says why; `mine` then fails.  `M.KEYWORDS`, `M.MAX_FILES` and
+`M.JOBS` of `tools.debt` change the keywords, the cap and the parallelism.
+
 ------------------------------------------------------------------------------
 10. MAPPINGS                                                  *dyneo-mappings*
 
@@ -2981,6 +3010,13 @@ Project ~
 :DyDeadCode [{tool}]    What nothing uses in the project, by every tool that
                         applies to it or by {tool} alone, in the quickfix
                         list.  See |dyneo-deadcode|.
+
+                                                                    *:DyDebt*
+:DyDebt [{keyword}] [mine]
+                        The TODO/FIXME/HACK/XXX comments of the project,
+                        oldest first, with their age and author from git
+                        blame, in the quickfix list; {keyword} keeps one
+                        keyword, `mine` your own.  See |dyneo-debt|.
 
                                                                  *:DyHotspots*
 :DyHotspots [buffer]    The files of the project most worth refactoring, by
