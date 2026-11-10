@@ -506,6 +506,7 @@ end
 ---@param key string
 ---@param before? integer
 ---@return DyBenchResult?
+---@return integer? index Its index in `results`
 local function latest(results, key, before)
   for i = (before or #results + 1) - 1, 1, -1 do
     if results[i].key == key then return results[i], i end
