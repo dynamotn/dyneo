@@ -783,6 +783,39 @@ describe('tools.lazy-quarantine', function()
     assert.are.equal(commits[2], behind.commit)
   end)
 
+  it('stays on the checkout when upstream rewrote the tip it held', function()
+    local dir, commits, cleanup = repository({ 30 * DAY, 20 * DAY })
+    h.unload('tools.lazy-quarantine')
+    local quarantine = require('tools.lazy-quarantine')
+    local plugin = { dir = dir, name = 'spec.nvim' }
+    quarantine.target(
+      plugin,
+      { branch = 'main', commit = commits[2] },
+      nil,
+      now - 10 * DAY
+    )
+    -- A force-push replaces the second commit, and git drops it
+    local when = os.date('!%Y-%m-%dT%H:%M:%S+00:00', now - 2 * DAY)
+    h.write(vim.fs.joinpath(dir, 'init.lua'), { '-- rewritten' })
+    git(dir, { 'commit', '--quiet', '-am', 'rewritten' }, {
+      GIT_AUTHOR_DATE = when,
+      GIT_COMMITTER_DATE = when,
+    })
+    local rewritten = git(dir, { 'rev-parse', 'HEAD' })
+    git(dir, { 'update-ref', 'refs/remotes/origin/main', rewritten })
+    git(dir, { 'reset', '--quiet', '--hard', commits[1] })
+    git(dir, { 'reflog', 'expire', '--expire=now', '--all' })
+    git(dir, { 'gc', '--quiet', '--prune=now' })
+    local picked = quarantine.target(
+      plugin,
+      { branch = 'main', commit = rewritten },
+      nil,
+      now
+    )
+    cleanup()
+    assert.are.equal(commits[1], picked.commit)
+  end)
+
   it('asks git once whether a checkout is newer than what is held', function()
     local dir, commits, cleanup = repository({ 30 * DAY, 20 * DAY, 2 * DAY })
     h.unload('tools.lazy-quarantine')

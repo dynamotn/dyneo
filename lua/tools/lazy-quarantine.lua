@@ -376,6 +376,30 @@ local function stay(plugin, target, quiet)
   return ok and Git.info(plugin.dir) or target
 end
 
+--- Whether commit `old` is an ancestor of commit `new` in `dir`, nil when git
+--- cannot say (a commit not fetched, or gone from the repository)
+---
+--- Asked of every plugin with an update waiting, on the main loop, each time
+--- lazy.nvim checks: two hashes always give the same answer, so it is kept.
+---@param dir string
+---@param old string
+---@param new string
+---@return boolean?
+local function ancestor(dir, old, new)
+  local known = load_cache()
+  local pair = old .. '..' .. new
+  if known.ancestry[pair] == nil then
+    local result = require('util.system').sync(
+      { 'git', '-C', dir, 'merge-base', '--is-ancestor', old, new },
+      { text = true, timeout = 10000 }
+    )
+    if result.code ~= 0 and result.code ~= 1 then return nil end
+    known.ancestry[pair] = result.code == 0
+    save_cache()
+  end
+  return known.ancestry[pair]
+end
+
 --- `held` unless it is older than what is checked out, then the checkout
 ---
 --- The window decides what may come in, and what is checked out already came
@@ -393,26 +417,7 @@ local function no_older(plugin, target, held)
   if not current or not current.commit or current.commit == held.commit then
     return held
   end
-  -- Asked of every plugin with an update waiting, on the main loop, each
-  -- time lazy.nvim checks: two hashes always give the same answer
-  local known = load_cache()
-  local pair = held.commit .. '..' .. current.commit
-  if known.ancestry[pair] == nil then
-    local result = require('util.system').sync({
-      'git',
-      '-C',
-      plugin.dir,
-      'merge-base',
-      '--is-ancestor',
-      held.commit,
-      current.commit,
-    }, { text = true, timeout = 10000 })
-    -- 1 is no; anything else but 0 (a commit not fetched yet) is no answer
-    if result.code ~= 0 and result.code ~= 1 then return held end
-    known.ancestry[pair] = result.code == 0
-    save_cache()
-  end
-  return known.ancestry[pair] and current or held
+  return ancestor(plugin.dir, held.commit, current.commit) and current or held
 end
 
 --- The target the window allows, wherever the checkout is
@@ -433,7 +438,13 @@ local function hold(plugin, target, releases, now)
   local seen = watched(plugin.dir, target.commit, now)
   if seen and seen.commit ~= target.commit then
     if not target.tag then
-      target = vim.tbl_extend('force', target, { commit = seen.commit })
+      -- A tip upstream has since rewritten out of its history cannot be
+      -- fetched: what is checked out stays until the new tip clears
+      if ancestor(plugin.dir, seen.commit, target.commit) then
+        target = vim.tbl_extend('force', target, { commit = seen.commit })
+      elseif not fresh(plugin) then
+        return stay(plugin, target, true)
+      end
     else
       local release = vim.iter(releases and releases() or {}):find(
         function(release) return release.commit == seen.commit end
