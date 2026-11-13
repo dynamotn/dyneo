@@ -258,7 +258,7 @@ function M.command(conn, stmt, analyze)
       'ON_ERROR_STOP=1',
       '-d',
       -- Without its password, which `ps` would show: that goes in the env
-      (conn.url:gsub('^([%w+.-]+:/*[^:@/]*):.*@([^@]*)$', '%1@%2')),
+      (conn.url:gsub('^([%w+.-]+:/*[^:@/]*):[^?]*@', '%1@')),
     }
     if analyze then
       vim.list_extend(argv, {

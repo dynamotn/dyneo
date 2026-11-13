@@ -249,6 +249,16 @@ describe('tools.explain', function()
       local _, bare =
         explain.command(assert(explain.parse('postgres://h/shop')), 'SELECT 1')
       assert.is_nil(assert(bare).PGPASSWORD)
+      -- An `@` in the query is no part of the user
+      local query = explain.command(
+        assert(explain.parse('postgresql://u:p@h/db?application_name=me@box')),
+        'SELECT 1'
+      )
+      assert.is_truthy(
+        table
+          .concat(query, ' ')
+          :find('postgresql://u@h/db?application_name=me@box', 1, true)
+      )
     end)
 
     it('keeps the MySQL password off the command line', function()
