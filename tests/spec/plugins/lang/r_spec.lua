@@ -73,9 +73,48 @@ describe('plugins.lang.r', function()
       })
     )
     table.insert(restores, h.stub(package.loaded, 'r.pdf.generic', generic))
+    table.insert(restores, h.stub(package.loaded, 'r.config', {}))
     spec.config(nil, spec.opts)
     assert.is_true(vim.g.rout_follow_colorscheme)
     assert.are.equal(spec.opts, setup_opts)
     assert.are.equal(vim.ui.open, generic.open)
+  end)
+
+  describe('a buffer of a project', function()
+    local ran, asked, trusted, r_config
+
+    before_each(function()
+      ran, asked, trusted = 0, {}, {}
+      r_config = { real_setup = function() ran = ran + 1 end }
+      vim.list_extend(restores, {
+        h.stub(package.loaded, 'r', { setup = function() end }),
+        h.stub(package.loaded, 'r.pdf.generic', {}),
+        h.stub(package.loaded, 'r.config', r_config),
+        h.stub(package.loaded, 'util.trust', {
+          ask = function(purpose, dir, _, sticky)
+            table.insert(asked, { purpose, dir, sticky })
+            return trusted[dir] == true
+          end,
+        }),
+      })
+      spec.config(nil, spec.opts)
+      vim.api.nvim_set_current_buf(h.buffer({ name = '/x/proj/a.R' }))
+    end)
+
+    it('runs none of its code until it is trusted', function()
+      local ok, err = pcall(r_config.real_setup)
+      assert.is_false(ok)
+      assert.matches('not trusted', err)
+      assert.are.equal(0, ran)
+      assert.same({ 'r', vim.fn.getcwd(), true }, asked[1])
+    end)
+
+    it('sets the buffer up once the project and cwd are trusted', function()
+      trusted[vim.fn.getcwd()] = true
+      trusted['/x/proj'] = true
+      r_config.real_setup()
+      assert.are.equal(1, ran)
+      assert.same({ 'r', '/x/proj', true }, asked[2])
+    end)
   end)
 end)
