@@ -272,7 +272,9 @@ end
 function M.python_module(rel) return require('tools.mutate').python_module(rel) end
 
 --- The modules a line of `rel` imports, dotted and absolute: `from a import
---- b` gives `a` and `a.b`, since `b` may be a module
+--- b` gives `a` and `a.b`, since `b` may be a module. A list wrapped onto
+--- the next lines, which `git grep` does not print, gives `a.*`: any module
+--- of `a`.
 ---@param rel string
 ---@param line string
 ---@return string[]
@@ -302,6 +304,10 @@ function M.python_imports(rel, line)
       base = table.concat(parts, '.')
     end
     if base ~= '' then table.insert(names, base) end
+    local open = list:find('(', 1, true) and not list:find(')', 1, true)
+    if base ~= '' and (open or list:match('\\%s*$')) then
+      table.insert(names, base .. '.*')
+    end
     each(
       list,
       function(name)
@@ -336,13 +342,11 @@ function M.python_targets(root, grep, changed)
       add_dotted(importers, name, file)
     end
   end
-  local targets = M.reach(
-    root,
-    importers,
-    changed,
-    function(rel) return { M.python_module(rel) } end,
-    python_test
-  )
+  local targets = M.reach(root, importers, changed, function(rel)
+    local module = M.python_module(rel)
+    local parent = module:match('^(.*)%.[^.]+$')
+    return { module, parent and parent .. '.*' or nil }
+  end, python_test)
   -- A fixture file changes the tests beside and below it
   for _, rel in ipairs(changed) do
     if vim.fs.basename(rel) == 'conftest.py' then
