@@ -278,19 +278,26 @@ function M.write(title, since, till, on_done)
   end
   notify('Gathering the timeline…')
   local entries, skipped = {}, {}
+  -- With what each keeps when it has more: git the newest commits, the
+  -- cluster its warnings first
   local sources = {
-    { 'git', function(cb) M.git(root, since, till, cb) end },
-    { 'kubernetes', function(cb) M.kube(since, till, cb) end },
+    {
+      'git',
+      function(cb) M.git(root, since, till, cb) end,
+      'git past its newest %d commits',
+    },
+    {
+      'kubernetes',
+      function(cb) M.kube(since, till, cb) end,
+      'kubernetes past %d events, warnings first',
+    },
   }
   system.each(sources, #sources, function(source, done)
     source[2](function(found, why)
       if found then
         vim.list_extend(entries, found)
         if #found >= M.MAX_ENTRIES then
-          table.insert(
-            skipped,
-            ('%s past the first %d entries'):format(source[1], M.MAX_ENTRIES)
-          )
+          table.insert(skipped, source[3]:format(M.MAX_ENTRIES))
         end
       else
         table.insert(
