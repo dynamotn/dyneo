@@ -136,6 +136,7 @@ require('lazy').setup({
   lockfile = vim.fn.stdpath('config')
     .. (stable and '/lazy-lock.stable.json' or '/lazy-lock.json'),
   install = { colorscheme = { defaults.colorscheme } },
+  concurrency = DyNeo.lazy_concurrency,
   checker = {
     enabled = true, -- check for plugin updates periodically
     -- `latest` sees new commits every hour, so a notification would be

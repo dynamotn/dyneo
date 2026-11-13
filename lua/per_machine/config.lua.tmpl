@@ -4,6 +4,9 @@ DyNeo.enabled_plugins.leetcode = {{ eq .kind "pc" "laptop" }}
 DyNeo.enabled_plugins.firenvim = {{ eq .kind "pc" "laptop" }}
 DyNeo.enabled_plugins.otter = {{ eq .kind "pc" "laptop" }}
 DyNeo.enabled_plugins.chezmoi = true
+{{- if eq .place "office" }}
+DyNeo.lazy_concurrency = 1
+{{- end }}
 {{- if eq .kind "container" }}
 DyNeo.enabled_languages = { 'gitcommit', 'gitrebase', 'bash', 'sql' }
 DyNeo.bundle_languages = { 'gitcommit', 'bash', 'sql' }

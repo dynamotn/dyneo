@@ -65,6 +65,11 @@ end
 --- from nothing may need.
 DyNeo.quarantine_window = 7 * 24 * 60 * 60
 
+---@type integer|false Most git jobs lazy.nvim runs at once, for installs,
+--- updates and the update checker alike. `false` sets no limit; a network that
+--- drops parallel connections (the office one) needs `1`.
+DyNeo.lazy_concurrency = false
+
 ---@class DyImageSigner
 ---@field image string Lua pattern the repository of an image matches, its
 --- tag and digest left out and a Docker Hub name in full (`nginx` is
