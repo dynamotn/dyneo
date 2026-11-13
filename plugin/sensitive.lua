@@ -43,6 +43,11 @@ vim.api.nvim_create_autocmd(
     group = augroup('sensitive_no_backup'),
     callback = function(event)
       if not leaves_no_copy(event.match) then return end
+      -- A buffer named only now (`:w .env` from `:enew`) missed `BufNewFile`
+      if event.event == 'BufWritePre' then
+        vim.bo[event.buf].undofile = false
+        vim.bo[event.buf].swapfile = false
+      end
       -- Two writes before a restore, as when the first failed: keep what the
       -- first saved, not the values it forced off
       backup_saved = backup_saved or { vim.o.backup, vim.o.writebackup }
