@@ -28,7 +28,6 @@ function M.run(root)
     '--silent',
     root,
   }, { cwd = root, timeout = M.TIMEOUT }, function(result)
-    local report_file = vim.fs.joinpath(out, 'jscpd-report.sarif')
     --- Remove the report, then say `msg` when there is one
     ---@param msg? string
     ---@param level? integer
@@ -48,9 +47,13 @@ function M.run(root)
       finish(system.failure(result, 'jscpd'), vim.log.levels.ERROR)
       return
     end
-    local stat = vim.uv.fs_stat(report_file)
+    -- `jscpd-sarif.json` from the 4.x reporter; any SARIF file it names
+    local report_file =
+      vim.fn.glob(vim.fs.joinpath(out, '*sarif*'), true, true)[1]
+    local stat = report_file and vim.uv.fs_stat(report_file)
     if not stat then
-      finish('No duplicated code')
+      -- The reporter always writes one, clones or not: none is a failure
+      finish('jscpd wrote no SARIF report', vim.log.levels.ERROR)
       return
     end
     local sarif = require('tools.sarif')
