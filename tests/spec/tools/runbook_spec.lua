@@ -143,6 +143,10 @@ describe('tools.runbook', function()
       'TRUNCATE users;',
       'find /var/data -delete',
       'kubectl scale deploy/web --replicas=0',
+      'kubectl -n prod apply -f deploy/',
+      'helm upgrade web ./chart',
+      'helm -n app rollback web 3',
+      'terraform apply -auto-approve',
       'echo ok\nsudo reboot',
       -- One command over several lines
       'kubectl -n prod \\\n  delete deploy api',
@@ -152,6 +156,8 @@ describe('tools.runbook', function()
     end
     assert.is_nil(runbook.danger('kubectl scale deploy/web --replicas=10'))
     assert.is_nil(runbook.danger('git push origin main'))
+    assert.is_nil(runbook.danger('terraform plan -out plan.tfplan'))
+    assert.is_nil(runbook.danger('helm template web ./chart'))
   end)
 
   describe('output', function()
