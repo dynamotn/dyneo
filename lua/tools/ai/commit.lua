@@ -89,6 +89,8 @@ function M.comment(root, bufnr, on_done)
     '--get-regexp',
     [[^core\.comment(char|string)$]],
   }, { cwd = root, timeout = 5000 }, function(result)
+    -- The message may be written and its buffer gone by now
+    if not vim.api.nvim_buf_is_valid(bufnr) then return end
     local value
     for line in (result.stdout or ''):gmatch('[^\n]+') do
       value = line:match('^%S+ (.*)$') or value

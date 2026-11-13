@@ -596,6 +596,22 @@ describe('plugins.lsp.server', function()
         assert.same({ { 'golangci_lint_ls', config } }, calls.local_settings)
       end)
 
+      it('runs the one roslyn_ls ships too', function()
+        h.write(dir .. '/lsp/roslyn_ls.lua', {
+          'return { before_init = function(params, config)',
+          '  _G.__own_before_init(params, config)',
+          'end }',
+        })
+        package.loaded['config.languages'].cs =
+          { filetypes = { 'cs' }, lsp_servers = { 'roslyn_ls' } }
+        h.unload('util.languages')
+        configure(opts)
+        local config = { name = 'roslyn_ls' }
+        calls.config.roslyn_ls.before_init('params', config)
+        assert.same({ { 'params', config } }, own_calls)
+        assert.same({ { 'roslyn_ls', config } }, calls.local_settings)
+      end)
+
       it('still reads the project settings without one on the path', function()
         vim.fn.delete(dir .. '/lsp/golangci_lint_ls.lua')
         h.write(dir .. '/lsp/golangci_lint_ls.lua', { 'error("broken")' })

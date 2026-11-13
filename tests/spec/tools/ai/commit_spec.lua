@@ -239,6 +239,26 @@ describe('tools.ai.commit', function()
       assert.equals('//', prefix)
     end)
 
+    it('answers nothing for a buffer gone before git does', function()
+      local bufnr = message_buffer({ '', '# Please enter the commit message' })
+      local restore = h.stub(package.loaded, 'util.system', {
+        run = function(_, _, on_exit)
+          vim.api.nvim_buf_delete(bufnr, { force = true })
+          on_exit({ code = 1, stdout = '' })
+        end,
+      })
+      local called = false
+      local ok, err = pcall(
+        commit.comment,
+        repo,
+        bufnr,
+        function() called = true end
+      )
+      restore()
+      assert.is_true(ok, err)
+      assert.is_false(called)
+    end)
+
     it('finds the one git picked for auto in the lines it wrote', function()
       local bufnr = message_buffer({
         '',

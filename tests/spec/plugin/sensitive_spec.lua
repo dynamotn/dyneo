@@ -69,6 +69,18 @@ describe('plugin/sensitive', function()
     assert.is_true(kept)
   end)
 
+  it('drops undo and swap for a buffer first named as it is written', function()
+    vim.cmd('enew')
+    local undofile = vim.o.undofile
+    vim.bo.undofile, vim.bo.swapfile = true, true
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'TOKEN=x' })
+    vim.cmd.write(dir .. '/.env')
+    local kept = { vim.bo.undofile, vim.bo.swapfile }
+    vim.cmd('bwipeout!')
+    vim.o.undofile = undofile
+    assert.same({ false, false }, kept)
+  end)
+
   it('restores backup options after a write that failed', function()
     -- The temporary directory counts as leaving a copy behind
     local file = dir .. '/missing/secret.txt'

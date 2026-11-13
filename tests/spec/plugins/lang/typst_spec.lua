@@ -39,6 +39,8 @@ describe('plugins.lang.typst', function()
   it('previews through tinymist and completes typst', function()
     assert.are.equal('tinymist', specs[2].opts.dependencies_bin.tinymist)
     assert.are.equal('<cmd>TypstPreviewToggle<cr>', specs[2].keys[1][2])
+    -- Not loaded by every Typst buffer, as setting it up downloads binaries
+    assert.is_nil(specs[2].ft)
     assert.same({ '// %s', '/* %s */' }, specs[3].opts.lang.typst)
     assert.is_true(
       vim.list_contains(specs[4].opts.sources.per_filetype.typst, 'lsp')

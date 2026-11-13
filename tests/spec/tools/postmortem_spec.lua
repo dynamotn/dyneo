@@ -294,7 +294,37 @@ describe('tools.postmortem', function()
     assert.is_truthy(text:find('-/?/? A: ', 1, true))
     assert.is_falsy(text:find('-/?/? B: ', 1, true))
     assert.is_truthy(
-      text:find('- Not read: kubernetes past the first 1 entries', 1, true)
+      text:find('- Not read: kubernetes past 1 events, warnings first', 1, true)
+    )
+  end)
+
+  it('says git was cut to its newest commits', function()
+    local restores = {
+      h.stub(postmortem, 'MAX_ENTRIES', 1),
+      h.stub(
+        postmortem,
+        'git',
+        function(_, _, _, cb) cb({ { time = T, text = 'abc fix' } }) end
+      ),
+      h.stub(postmortem, 'kube', function(_, _, cb) cb({}) end),
+    }
+    vim.fn.mkdir(dir .. '/.git', 'p')
+    h.write(dir .. '/notes.md', {})
+    vim.cmd.edit(vim.fn.fnameescape(dir .. '/notes.md'))
+    local file
+    postmortem.write(
+      'Outage',
+      T - 600,
+      T + 600,
+      function(f) file = f or false end
+    )
+    assert.is_true(vim.wait(10000, function() return file ~= nil end, 10))
+    for i = #restores, 1, -1 do
+      restores[i]()
+    end
+    local text = table.concat(vim.fn.readfile(file), '\n')
+    assert.is_truthy(
+      text:find('- Not read: git past its newest 1 commits', 1, true)
     )
   end)
 

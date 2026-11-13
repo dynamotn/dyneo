@@ -3,6 +3,13 @@ local h = require('helpers')
 describe('plugins.lang.r', function()
   local restores, spec
 
+  --- The nvim-lspconfig spec of the file
+  local function spec_lsp()
+    for _, s in ipairs(dofile(h.root .. '/lua/plugins/lang/r.lua')) do
+      if s[1] == 'neovim/nvim-lspconfig' then return s end
+    end
+  end
+
   before_each(function()
     h.globals()
     restores = { h.stub(vim.g, 'R_filetypes', nil) }
@@ -73,9 +80,80 @@ describe('plugins.lang.r', function()
       })
     )
     table.insert(restores, h.stub(package.loaded, 'r.pdf.generic', generic))
+    table.insert(restores, h.stub(package.loaded, 'r.config', {}))
+    table.insert(restores, h.stub(package.loaded, 'r.rmd', {}))
     spec.config(nil, spec.opts)
     assert.is_true(vim.g.rout_follow_colorscheme)
     assert.are.equal(spec.opts, setup_opts)
     assert.are.equal(vim.ui.open, generic.open)
+  end)
+
+  describe('a buffer of a project', function()
+    local ran, params, asked, trusted, r_config, rmd
+
+    before_each(function()
+      ran, params, asked, trusted = 0, 0, {}, {}
+      r_config = { real_setup = function() ran = ran + 1 end }
+      rmd = { update_params = function() params = params + 1 end }
+      vim.list_extend(restores, {
+        h.stub(package.loaded, 'r', { setup = function() end }),
+        h.stub(package.loaded, 'r.pdf.generic', {}),
+        h.stub(package.loaded, 'r.config', r_config),
+        h.stub(package.loaded, 'r.rmd', rmd),
+        h.stub(package.loaded, 'util.trust', {
+          ask = function(purpose, dir, _, sticky)
+            table.insert(asked, { purpose, dir, sticky })
+            return trusted[dir] == true
+          end,
+        }),
+      })
+      spec.config(nil, spec.opts)
+      vim.api.nvim_set_current_buf(h.buffer({ name = '/x/proj/a.R' }))
+    end)
+
+    it('runs none of its code until it is trusted', function()
+      local ok, err = pcall(r_config.real_setup)
+      assert.is_false(ok)
+      assert.matches('not trusted', err)
+      assert.are.equal(0, ran)
+      assert.same({ 'r', vim.fn.getcwd(), true }, asked[1])
+    end)
+
+    it('sets the buffer up once the project and cwd are trusted', function()
+      trusted[vim.fn.getcwd()] = true
+      trusted['/x/proj'] = true
+      r_config.real_setup()
+      assert.are.equal(1, ran)
+      assert.same({ 'r', '/x/proj', true }, asked[2])
+    end)
+
+    it('stops at an untrusted project under a trusted cwd', function()
+      trusted[vim.fn.getcwd()] = true
+      local ok, err = pcall(r_config.real_setup)
+      assert.is_false(ok)
+      assert.matches('/x/proj', err)
+      assert.are.equal(0, ran)
+    end)
+
+    it('reads knitr params only of a buffer it set up', function()
+      rmd.update_params()
+      assert.are.equal(0, params)
+      trusted[vim.fn.getcwd()] = true
+      trusted['/x/proj'] = true
+      r_config.real_setup()
+      rmd.update_params()
+      assert.are.equal(1, params)
+    end)
+
+    it('starts the R language server only in a trusted project', function()
+      local root_dir = spec_lsp().opts.servers.r_language_server.root_dir
+      local roots = {}
+      root_dir(0, function(dir) table.insert(roots, dir or false) end)
+      assert.same({}, roots)
+      trusted[vim.fn.getcwd()] = true
+      trusted['/x/proj'] = true
+      root_dir(0, function(dir) table.insert(roots, dir or false) end)
+      assert.same({ false }, roots)
+    end)
   end)
 end)

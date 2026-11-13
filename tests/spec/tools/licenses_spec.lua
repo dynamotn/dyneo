@@ -1,7 +1,7 @@
 local h = require('helpers')
 
 describe('tools.licenses', function()
-  local licenses, dir, cleanup, path, notes, restores, installed
+  local licenses, dir, cleanup, path, notes, restores, installed, trusted
 
   before_each(function()
     h.unload('tools.licenses')
@@ -12,8 +12,16 @@ describe('tools.licenses', function()
     path = vim.env.PATH
     -- Only the fakes of this spec, whatever the machine has
     vim.env.PATH = dir .. '/bin:/usr/bin:/bin'
-    notes, installed = {}, nil
+    notes, installed, trusted = {}, nil, true
     restores = {
+      -- A project file counts once trusted; `trusted` stands for `:trust`
+      h.stub(
+        vim.secure,
+        'read',
+        function(file)
+          return trusted and table.concat(vim.fn.readfile(file), '\n') or nil
+        end
+      ),
       h.stub(
         vim,
         'notify',
@@ -180,6 +188,14 @@ describe('tools.licenses', function()
   end)
 
   describe('project_rules', function()
+    it('ignores the file until it is trusted', function()
+      h.write(dir .. '/proj/.nvim/licenses.json', { '{ "allow": ["*"] }' })
+      trusted = false
+      local rules, err = licenses.project_rules(dir .. '/proj')
+      assert.is_nil(rules)
+      assert.matches('not trusted', err)
+    end)
+
     it('reads the lists of .nvim/licenses.json', function()
       h.write(
         dir .. '/proj/.nvim/licenses.json',

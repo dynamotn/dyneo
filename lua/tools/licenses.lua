@@ -223,9 +223,12 @@ end
 function M.project_rules(root)
   local file = vim.fs.joinpath(root, M.FILE)
   if not vim.uv.fs_stat(file) then return nil end
-  local ok, lines = pcall(vim.fn.readfile, file)
-  local decoded, data =
-    pcall(vim.json.decode, ok and table.concat(lines, '\n') or '')
+  -- A cloned repository could allow every license: its rules count only
+  -- once `:trust`ed, and a held review worktree is not even asked
+  local text = not require('util.untrusted').held(root)
+    and vim.secure.read(file)
+  if not text then return nil, M.FILE .. ' is not trusted' end
+  local decoded, data = pcall(vim.json.decode, text)
   if not decoded or type(data) ~= 'table' or vim.islist(data) then
     return nil, M.FILE .. ' is not a JSON object'
   end

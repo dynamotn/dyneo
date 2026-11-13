@@ -173,6 +173,27 @@ describe('tools.sarif', function()
       assert.are.equal(dir .. '/src/a b.py', named)
     end)
 
+    it(
+      'reads a report from outside a repository against the project',
+      function()
+        local project, clean_project = h.tmpdir()
+        local restore = h.stub(
+          require('util.root'),
+          'get',
+          function() return project end
+        )
+        h.write(dir .. '/r.sarif', { vim.json.encode(REPORT) })
+        sarif.load(dir .. '/r.sarif')
+        restore()
+        local items = vim.fn.getqflist()
+        clean_project()
+        assert.are.equal(
+          project .. '/src/a b.py',
+          vim.fn.bufname(items[3].bufnr)
+        )
+      end
+    )
+
     it('says so of a file that is not SARIF, and keeps the list', function()
       vim.fn.setqflist({}, ' ', { title = 'before' })
       h.write(dir .. '/x.json', { '{"a": 1}' })

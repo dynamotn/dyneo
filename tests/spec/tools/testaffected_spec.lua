@@ -152,6 +152,28 @@ describe('tools.testaffected', function()
         ta.python_imports('src/pkg/sub/__init__.py', 'from .. import util')
       )
       assert.same({}, ta.python_imports('t.py', 'x = 1'))
+      -- The names are on lines `git grep` leaves out
+      assert.same(
+        { 'app.services', 'app.services.*' },
+        ta.python_imports('t.py', 'from app.services import (')
+      )
+      assert.same(
+        { 'app.services', 'app.services.*', 'app.services.a' },
+        ta.python_imports('t.py', 'from app.services import a, \\')
+      )
+    end)
+
+    it('reaches a module named only on a wrapped import line', function()
+      for _, file in ipairs({ 'app/services/billing.py', 'tests/test_bill.py' }) do
+        h.write(root .. '/' .. file)
+      end
+      local grep = 'tests/test_bill.py\0from app.services import ('
+      assert.same({
+        {
+          path = 'tests/test_bill.py',
+          why = 'imports app/services/billing.py',
+        },
+      }, ta.python_targets(root, grep, { 'app/services/billing.py' }))
     end)
 
     it('follows imports transitively to the tests', function()

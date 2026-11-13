@@ -257,7 +257,8 @@ function M.command(conn, stmt, analyze)
       '-v',
       'ON_ERROR_STOP=1',
       '-d',
-      conn.url,
+      -- Without its password, which `ps` would show: that goes in the env
+      (conn.url:gsub('^([%w+.-]+:/*[^:@/]*):[^?]*@', '%1@')),
     }
     if analyze then
       vim.list_extend(argv, {
@@ -272,7 +273,11 @@ function M.command(conn, stmt, analyze)
       vim.list_extend(argv, { '-c', 'EXPLAIN (FORMAT JSON) ' .. stmt })
     end
     -- The server stops the statement too, not only the client
-    return argv, { PGOPTIONS = ('-c statement_timeout=%d'):format(M.TIMEOUT) }
+    return argv,
+      {
+        PGOPTIONS = ('-c statement_timeout=%d'):format(M.TIMEOUT),
+        PGPASSWORD = conn.password,
+      }
   elseif conn.engine == 'mysql' then
     local argv = { 'mysql', '--batch', '--raw', '--skip-column-names' }
     if conn.host then vim.list_extend(argv, { '-h', conn.host }) end

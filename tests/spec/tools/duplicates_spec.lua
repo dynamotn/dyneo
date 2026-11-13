@@ -30,18 +30,18 @@ describe('tools.duplicates', function()
     cleanup()
   end)
 
-  --- A `jscpd` that keeps its arguments and writes `report` as the SARIF
-  --- report into the directory after `--output`
+  --- A `jscpd` that keeps its arguments and writes `report`, if any, as the
+  --- SARIF report into the directory after `--output`
   local function jscpd(report)
     local file = dir .. '/report.sarif'
-    h.write(file, { vim.json.encode(report) })
+    if report then h.write(file, { vim.json.encode(report) }) end
     h.write(dir .. '/bin/jscpd', {
       '#!/bin/sh',
       'echo "$@" > "' .. dir .. '/args"',
       'pwd > "' .. dir .. '/cwd"',
       'while [ "$1" != "--output" ]; do shift; done',
       'mkdir -p "$2"',
-      'cp "' .. file .. '" "$2/jscpd-report.sarif"',
+      report and ('cp "' .. file .. '" "$2/jscpd-sarif.json"') or 'true',
     })
     vim.fn.setfperm(dir .. '/bin/jscpd', 'rwxr-xr-x')
   end
@@ -108,6 +108,18 @@ describe('tools.duplicates', function()
         function() return vim.tbl_contains(notes, 'No duplicated code') end
       )
     )
+  end)
+
+  it('fails when jscpd writes no report', function()
+    jscpd(nil)
+    duplicates.run(dir .. '/proj')
+    assert.is_true(
+      vim.wait(
+        3000,
+        function() return vim.tbl_contains(notes, 'jscpd wrote no SARIF report') end
+      )
+    )
+    assert.is_false(vim.tbl_contains(notes, 'No duplicated code'))
   end)
 
   it('has Mason install jscpd when it is missing', function()

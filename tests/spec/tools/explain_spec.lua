@@ -240,6 +240,27 @@ describe('tools.explain', function()
       assert.matches('redis', err)
     end)
 
+    it('keeps the PostgreSQL password off the command line', function()
+      local argv, env = explain.command(assert(explain.parse(URL)), 'SELECT 1')
+      local line = table.concat(argv, ' ')
+      assert.is_nil(line:find('s3cr', 1, true))
+      assert.is_truthy(line:find('alice@db.example:5433/shop', 1, true))
+      assert.equals(PASSWORD, assert(env).PGPASSWORD)
+      local _, bare =
+        explain.command(assert(explain.parse('postgres://h/shop')), 'SELECT 1')
+      assert.is_nil(assert(bare).PGPASSWORD)
+      -- An `@` in the query is no part of the user
+      local query = explain.command(
+        assert(explain.parse('postgresql://u:p@h/db?application_name=me@box')),
+        'SELECT 1'
+      )
+      assert.is_truthy(
+        table
+          .concat(query, ' ')
+          :find('postgresql://u@h/db?application_name=me@box', 1, true)
+      )
+    end)
+
     it('keeps the MySQL password off the command line', function()
       local argv, env = explain.command(
         assert(explain.parse('mysql://bob:pw@h:3307/shop')),

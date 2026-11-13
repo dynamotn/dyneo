@@ -35,6 +35,19 @@ describe('config.lazy bootstrap', function()
     cleanup()
   end)
 
+  it('gives up when git leaves a child holding its output', function()
+    restores[2]()
+    restores[2] = h.stub(vim, 'system', function(cmd)
+      vim.fn.mkdir(cmd[#cmd], 'p')
+      return { wait = function() return nil end }
+    end)
+    local ok, err = pcall(dofile, h.root .. '/lua/config/lazy.lua')
+    assert.are.equal('exit 1', err)
+    assert.is_false(ok)
+    assert.truthy(table.concat(echoed):find('took longer than', 1, true))
+    assert.is_nil(vim.uv.fs_stat(dir .. '/lazy/lazy.nvim'))
+  end)
+
   it('gives up on a clone past its deadline and says why', function()
     local ok, err = pcall(dofile, h.root .. '/lua/config/lazy.lua')
     assert.is_false(ok)
@@ -182,6 +195,24 @@ describe('config.lazy setup', function()
       assert.is_true(spec.optional, spec[1])
       assert.is_false(spec.version, spec[1])
     end
+  end)
+
+  it('holds review worktrees before asking about the project .nvim', function()
+    h.unload('util.untrusted')
+    local held
+    package.loaded['util.project_rtp'].startup_path = function()
+      held = {
+        review = require('util.untrusted').held(
+          '/x/repo/.worktrees/dyreview-github-7/src/a.lua'
+        ),
+        feature = require('util.untrusted').held(
+          '/x/repo/.worktrees/feature/a.lua'
+        ),
+      }
+    end
+    load()
+    h.unload('util.untrusted')
+    assert.same({ review = true, feature = false }, held)
   end)
 
   it('falls back to a built-in colorscheme and says so', function()

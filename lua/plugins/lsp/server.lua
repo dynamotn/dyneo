@@ -15,6 +15,7 @@ local OWN_BEFORE_INIT = {
   golangci_lint_ls = true,
   mdx_analyzer = true,
   oxlint = true,
+  roslyn_ls = true,
   tailwindcss = true,
 }
 
