@@ -141,7 +141,9 @@ function M.load(path)
   if not ok or type(report) ~= 'table' or type(report.runs) ~= 'table' then
     return notify(path .. ' is not a SARIF report', vim.log.levels.ERROR)
   end
-  local root = vim.fs.root(path, '.git') or vim.fs.dirname(path)
+  -- A report saved inside a repository names files of that repository; one
+  -- downloaded from CI, outside any, names files of the project open here
+  local root = vim.fs.root(path, '.git') or require('util.root').get()
   local items, skipped = M.items(report, root)
   if skipped > 0 then
     notify(
