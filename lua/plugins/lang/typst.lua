@@ -31,9 +31,9 @@ return vim.list_contains(DyNeo.enabled_languages, 'typst')
         },
       },
       {
-        -- Typst preview
+        -- Typst preview. Loaded when asked, not by a Typst buffer: its setup
+        -- downloads the binaries it lacks (`websocat`) from GitHub.
         'chomosuke/typst-preview.nvim',
-        ft = language.filetypes,
         cmd = { 'TypstPreview', 'TypstPreviewToggle', 'TypstPreviewUpdate' },
         keys = {
           {
