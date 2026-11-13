@@ -147,6 +147,8 @@ describe('tools.runbook', function()
       'helm upgrade web ./chart',
       'helm -n app rollback web 3',
       'terraform apply -auto-approve',
+      'terraform apply plan.tfplan',
+      'tofu -chdir=infra apply',
       'echo ok\nsudo reboot',
       -- One command over several lines
       'kubectl -n prod \\\n  delete deploy api',

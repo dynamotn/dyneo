@@ -62,8 +62,10 @@ M.DANGEROUS = {
   'helm%f[%W].-%f[%w]delete%f[%W]',
   '%f[%w]destroy%f[%W]',
   '%f[%w]apply%f[%W].-%-destroy',
-  -- Without it terraform asks, and gets no answer from a runbook
-  '%f[%w]apply%f[%W].-%-auto%-approve',
+  -- Applying a saved plan asks nothing, so every apply is asked about
+  '%f[%w]terraform%f[%W].-%f[%w]apply%f[%W]',
+  '%f[%w]tofu%f[%W].-%f[%w]apply%f[%W]',
+  'terragrunt%f[%W].-%f[%w]apply%f[%W]',
   'git%f[%W].-%f[%w]push%f[%W].-%-%-force',
   'git%f[%W].-%f[%w]push%f[%W].-%s%-f%f[%W]',
   'git%f[%W].-%f[%w]push%f[%W].-%s%+',
