@@ -15,6 +15,8 @@ if not vim.uv.fs_stat(lazypath) then
       lazypath,
     }, { text = true, timeout = timeout })
     :wait()
+  -- `:wait()` answers nil when a child of git outlives the deadline
+  result = result or { code = 124 }
   if result.code ~= 0 then
     -- A half-done clone would pass for an install on the next start
     vim.fn.delete(lazypath, 'rf')
@@ -100,6 +102,12 @@ try(
   function() require('tools.lazy-quarantine').setup() end,
   { msg = 'Failed setting up the plugin quarantine' }
 )
+
+-- A review worktree holds a pull request's code: no server or project
+-- `.nvim` runs it from the first buffer, even one an earlier session or a
+-- crash left behind, until a review lets it go once trusted. Held ahead of
+-- the project `.nvim` below, which would otherwise be asked about first.
+require('util.untrusted').hold_pattern('^(.*/%.worktrees/dyreview%-[^/]+)')
 
 -- The project's own `.nvim` folder, when it is trusted. Worked out here: the
 -- runtimepath lazy.nvim builds has to name it.
