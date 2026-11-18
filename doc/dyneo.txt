@@ -248,7 +248,7 @@ defaulted in `lua/config/globals.lua`.
         Install every plugin, to refresh the lockfile.
 
                                                               *DyNeo.obsidian*
-`DyNeo.obsidian.paths`         (default `{ personal = '~/Documents/Notes' }`)
+`DyNeo.obsidian.paths`         (default `{ personal = '~/Documents/DyBrain' }`)
         Vault name to folder.  `DyNeo.obsidian.vaults()` and
         `DyNeo.obsidian.todo_path()` are built from it and may be replaced
         too.

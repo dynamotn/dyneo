@@ -3,6 +3,11 @@ if vim.bo.buftype ~= '' then return end
 vim.opt_local.wrap = true
 vim.opt_local.spell = true
 
+-- Prose has no keyword pairs to match, and vim-matchup's treesitter engine
+-- walks the Markdown tree with its injections (HTML comments, YAML front
+-- matter) on every cursor move: about 75 ms each in a bilingual vault note
+vim.b.matchup_matchparen_enabled = 0
+
 -- Code blocks run where they are written (`tools.runbook`), which loads on
 -- the key rather than with every Markdown buffer
 for lhs, map in pairs({

@@ -382,8 +382,21 @@ local function publish_diagnostics(err, result, ctx)
   return vim.lsp.diagnostic.on_publish_diagnostics(err, result, ctx)
 end
 
+-- What the shipped config of nvim-lspconfig marks a workspace by
+local root_markers = { '.harper-dictionary.txt', '.git' }
+
 ---@type vim.lsp.Config
 return {
+  root_markers = root_markers,
+  -- Harper reads English. A note of an Obsidian vault is mostly Vietnamese,
+  -- where every word is a spelling error: hundreds of diagnostics, each one
+  -- walked again by Neovim on every edit. A vault is told by its `.obsidian`
+  -- folder, so no path has to be listed here.
+  root_dir = function(bufnr, on_dir)
+    if vim.fs.root(bufnr, '.obsidian') then return end
+    local root = vim.fs.root(bufnr, root_markers)
+    if root then on_dir(root) end
+  end,
   get_language_id = function(_, filetype)
     return language_ids[filetype] or filetype
   end,

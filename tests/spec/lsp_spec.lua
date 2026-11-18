@@ -133,6 +133,28 @@ describe('lsp', function()
       assert.is_nil(config.settings['harper-ls'].userDictPath)
     end)
 
+    describe('root_dir', function()
+      --- The root Harper starts in for a file under `dir`, nil when it does
+      --- not start
+      local function root_for(rel)
+        local bufnr = h.buffer({ name = dir .. '/' .. rel, lines = { 'x' } })
+        local root
+        config.root_dir(bufnr, function(r) root = r end)
+        return root
+      end
+
+      it('starts in the repository of a file', function()
+        vim.fn.mkdir(dir .. '/repo/.git', 'p')
+        assert.are.equal(dir .. '/repo', root_for('repo/a.md'))
+      end)
+
+      it('stays off the notes of an Obsidian vault', function()
+        vim.fn.mkdir(dir .. '/vault/.obsidian', 'p')
+        vim.fn.mkdir(dir .. '/vault/.git', 'p')
+        assert.is_nil(root_for('vault/03_Permanent/a.md'))
+      end)
+    end)
+
     it('translates filetypes Harper spells differently', function()
       local id = config.get_language_id
       assert.are.equal('shellscript', id(nil, 'sh'))

@@ -252,7 +252,7 @@ end
 ---@type DyObsidian Obsidian vaults
 DyNeo.obsidian = {
   paths = {
-    personal = vim.fn.expand('$HOME/Documents/Notes'),
+    personal = vim.fn.expand('$HOME/Documents/DyBrain'),
   },
   vaults = function()
     local result = {}
