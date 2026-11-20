@@ -52,6 +52,90 @@ describe('util.lualine', function()
     end)
   end)
 
+  describe('tasks', function()
+    local tasks
+
+    before_each(function()
+      tasks = {}
+      restores[#restores + 1] = h.stub(package.loaded, 'overseer.task_list', {
+        list_tasks = function(opts)
+          assert.is_true(opts.include_ephemeral)
+          return vim.tbl_filter(
+            function(task) return task.status == opts.status end,
+            tasks
+          )
+        end,
+      })
+    end)
+
+    it('counts the tasks running and failed, in red once one fails', function()
+      local component = lualine.tasks()
+      -- lualine asks the colour first, as it sets the component up
+      assert.are.same({ fg = '#DiagnosticWarn' }, component.color())
+      assert.is_false(component.cond())
+      tasks = { { status = 'RUNNING' }, { status = 'RUNNING' } }
+      assert.is_true(component.cond())
+      assert.are.equal('󰑮 2', component[1]())
+      assert.are.same({ fg = '#DiagnosticWarn' }, component.color())
+      table.insert(tasks, { status = 'FAILURE' })
+      assert.is_true(component.cond())
+      assert.are.equal('󰑮 2  1', component[1]())
+      assert.are.same({ fg = '#DiagnosticError' }, component.color())
+    end)
+
+    it('loads no overseer to say there is nothing', function()
+      package.loaded['overseer.task_list'] = nil
+      assert.is_false(lualine.tasks().cond())
+      assert.is_nil(package.loaded['overseer.task_list'])
+    end)
+  end)
+
+  describe('work', function()
+    local names = {
+      'tools.bisect',
+      'tools.review.session',
+      'lint',
+      'camouflage.present',
+    }
+
+    before_each(function()
+      for _, name in ipairs(names) do
+        restores[#restores + 1] = h.stub(package.loaded, name, nil)
+      end
+    end)
+
+    --- Whether each of the components after the tasks shows
+    local function shown()
+      return vim.tbl_map(
+        function(component) return component.cond() end,
+        vim.list_slice(lualine.work(), 2)
+      )
+    end
+
+    it('shows nothing, and loads nothing, while nothing runs', function()
+      assert.are.same({ false, false, false, false }, shown())
+      for _, name in ipairs(names) do
+        assert.is_nil(package.loaded[name], name)
+      end
+    end)
+
+    it('shows a bisect, a review, a lint and a presentation', function()
+      package.loaded['tools.bisect'] = { current = { done = false } }
+      package.loaded['tools.review.session'] =
+        { current = function() return {} end }
+      package.loaded['lint'] =
+        { get_running = function() return { 'selene' } end }
+      package.loaded['camouflage.present'] =
+        { is_active = function() return true end }
+      assert.are.same({ true, true, true, true }, shown())
+      -- A bisect still running is pending, one done is not
+      local bisect = lualine.work()[2]
+      assert.are.same({ fg = '#DiagnosticWarn' }, bisect.color())
+      package.loaded['tools.bisect'].current.done = true
+      assert.are.same({ fg = '#Special' }, bisect.color())
+    end)
+  end)
+
   describe('format', function()
     it(
       'escapes % for the status line',

@@ -124,6 +124,7 @@ return {
         },
         extensions = { 'lazy' },
       }
+      vim.list_extend(opts.sections.lualine_x, Lualine.work())
 
       -- Symbols around the cursor from Trouble, unless a buffer turns them
       -- off with `vim.b.trouble_lualine = false`

@@ -222,14 +222,30 @@ return {
         function(bufnr) vim.api.nvim_buf_call(bufnr, run) end
       )
 
+      -- Debounced, as a save fires several of these events at once; every
+      -- buffer an event named is linted, not only the current one, so `:wa`
+      -- leaves no buffer with the diagnostics of its last version
       local timer = assert(vim.uv.new_timer())
+      local pending = {} ---@type table<integer, true>
+      local function flush()
+        local bufs = pending
+        pending = {}
+        for bufnr in pairs(bufs) do
+          if
+            vim.api.nvim_buf_is_valid(bufnr)
+            and vim.api.nvim_buf_is_loaded(bufnr)
+          then
+            vim.api.nvim_buf_call(bufnr, run)
+          end
+        end
+      end
       vim.api.nvim_create_autocmd(opts.events, {
         group = vim.api.nvim_create_augroup('nvim-lint', { clear = true }),
-        -- Debounced, as a save fires several of these events at once
-        callback = function()
+        callback = function(args)
+          pending[args.buf] = true
           timer:start(100, 0, function()
             timer:stop()
-            vim.schedule(run)
+            vim.schedule(flush)
           end)
         end,
       })

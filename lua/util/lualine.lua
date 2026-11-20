@@ -30,6 +30,63 @@ function M.status(icon, status)
   }
 end
 
+--- The overseer tasks running and failed -- builds, and the tests neotest
+--- runs through overseer -- hidden while there are none. A click opens the
+--- task list.
+function M.tasks()
+  -- lualine asks the colour as it sets the component up, before any `cond`
+  local text, failed = nil, 0
+  return {
+    function() return text end,
+    cond = function()
+      text = nil
+      if not package.loaded['overseer.task_list'] then return false end
+      local list = require('overseer.task_list').list_tasks
+      local running = #list({ status = 'RUNNING', include_ephemeral = true })
+      failed = #list({ status = 'FAILURE', include_ephemeral = true })
+      local parts = {}
+      if running > 0 then table.insert(parts, '󰑮 ' .. running) end
+      if failed > 0 then table.insert(parts, ' ' .. failed) end
+      if #parts == 0 then return false end
+      text = table.concat(parts, ' ')
+      return true
+    end,
+    color = function()
+      local hl = failed > 0 and 'DiagnosticError' or 'DiagnosticWarn'
+      return { fg = Snacks.util.color(hl) }
+    end,
+    on_click = function() vim.cmd('OverseerToggle!') end,
+  }
+end
+
+--- The work going on behind the editor: overseer tasks, a `:DyBisect`, a
+--- `:DyReview` session, the buffer's linters, and camouflage's presentation
+--- mode, the one to check before sharing the screen. Each reads only a
+--- module something else loaded, so the status line loads none of them.
+---@return table[]
+function M.work()
+  local loaded = package.loaded
+  return {
+    M.tasks(),
+    M.status('', function()
+      local run = loaded['tools.bisect'] and loaded['tools.bisect'].current
+      return run and (run.done and 'ok' or 'pending') or nil
+    end),
+    M.status('', function()
+      local session = loaded['tools.review.session']
+      return session and session.current() and 'ok' or nil
+    end),
+    M.status('󰁨', function()
+      local lint = loaded['lint']
+      return lint and #lint.get_running(0) > 0 and 'pending' or nil
+    end),
+    M.status('󰈉', function()
+      local present = loaded['camouflage.present']
+      return present and present.is_active() and 'ok' or nil
+    end),
+  }
+end
+
 --- `text` in the colours of `hl_group`, on the component's own background
 ---@param component any
 ---@param text string

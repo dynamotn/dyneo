@@ -430,6 +430,19 @@ Each entry says whether the tool is installed, running, or missing, so a
 formatter that quietly never fires stops being a mystery.  Linters and
 formatters only ever run when they are actually installed.
 
+Next to the debugger's state, the statusline shows the work going on behind
+the editor, each only while there is some:
+
+    `󰑮 2  1`   overseer tasks running and failed (tests neotest runs
+              included); a click opens the task list
+    ``        a |:DyBisect| run, yellow while it runs
+    ``        a |:DyReview| session
+    `󰁨`        the buffer's linters running
+    `󰈉`        camouflage's presentation mode, before sharing the screen
+
+They read only what is already loaded, so the statusline loads none of these
+plugins and runs nothing on a redraw.
+
 4.3 Workspace diagnostics                                    *dyneo-workspace*
 
 `<leader>xw` asks a language server about the whole project, not only the
@@ -2218,6 +2231,13 @@ one item per frame, like IntelliJ's Analyze Stack Trace.  It reads, in this
 order: the range or the visual selection; the whole buffer of a log
 (|:DyLog|, or a `log` file); the clipboard; the unnamed register.  A register
 without a frame is passed over for the next one.
+
+A failed task gives its trace the same way: `<leader>ox` reads the newest
+overseer task that failed, and the `Stack trace` action (`<leader>ot`, or the
+task list) reads any task.  Tests neotest runs go through overseer, so a
+failed test is such a task.  The last 10000 lines of its output are read,
+without their colours, and relative paths are found from where the task ran.
+`<leader>tD` then debugs the test run last, wherever the cursor has gone.
 
 Frames of Java, Kotlin and Scala (`at pkg.Class.method(File.java:42)`, across
 `Caused by:`), Python (`File "x.py", line 3, in fn`), Go (the file line under

@@ -67,6 +67,55 @@ describe('plugins.executor.task', function()
     end)
   end)
 
+  describe('stack trace of a task', function()
+    local listed, traced, notified
+
+    before_each(function()
+      listed, traced, notified = {}, {}, {}
+      restores[#restores + 1] = h.stub(package.loaded, 'overseer', {
+        list_tasks = function(opts)
+          assert.are.equal('FAILURE', opts.status)
+          -- neotest's runs through overseer are ephemeral
+          assert.is_true(opts.include_ephemeral)
+          return listed
+        end,
+      })
+      restores[#restores + 1] = h.stub(package.loaded, 'tools.stacktrace', {
+        task = function(task) table.insert(traced, task) end,
+      })
+      restores[#restores + 1] = h.stub(
+        vim,
+        'notify',
+        function(msg) table.insert(notified, msg) end
+      )
+    end)
+
+    local function press()
+      for _, mapping in ipairs(spec('stevearc/overseer.nvim').keys) do
+        if mapping[1] == '<leader>ox' then return mapping[2]() end
+      end
+      error('no <leader>ox')
+    end
+
+    it('reads the newest failed task', function()
+      listed = { { id = 3 }, { id = 1 } }
+      press()
+      assert.are.same({ { id = 3 } }, traced)
+    end)
+
+    it('says when no task failed', function()
+      press()
+      assert.are.same({}, traced)
+      assert.are.same({ 'No failed task' }, notified)
+    end)
+
+    it('is an action of every task', function()
+      local action = spec('stevearc/overseer.nvim').opts.actions['Stack trace']
+      action.run({ id = 7 })
+      assert.are.same({ { id = 7 } }, traced)
+    end)
+  end)
+
   it('lets overseer run the build task of a launch configuration', function()
     local overseer = spec('stevearc/overseer.nvim')
     assert.is_false(overseer.opts.dap)

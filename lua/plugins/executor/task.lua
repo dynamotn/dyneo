@@ -24,9 +24,28 @@ return {
         end,
         desc = 'Restart last task',
       },
+      {
+        '<leader>ox',
+        function()
+          -- Tests neotest ran through overseer are tasks too
+          local task = require('overseer').list_tasks({
+            status = 'FAILURE',
+            include_ephemeral = true,
+          })[1]
+          if not task then return vim.notify('No failed task', vim.log.levels.WARN) end
+          require('tools.stacktrace').task(task)
+        end,
+        desc = 'Stack trace of last failed task',
+      },
     },
     opts = {
       dap = false,
+      actions = {
+        ['Stack trace'] = {
+          desc = 'List the frames of the trace in its output',
+          run = function(task) require('tools.stacktrace').task(task) end,
+        },
+      },
       component_aliases = {
         output = {
           {

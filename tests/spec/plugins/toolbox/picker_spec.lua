@@ -1,12 +1,26 @@
 local h = require('helpers')
 
 describe('plugins.toolbox.picker', function()
-  local restores, calls, snacks, lspconfig
+  local restores, calls, snacks, lspconfig, base, notified
 
   before_each(function()
     h.globals()
-    calls = {}
+    calls, base, notified = {}, { 'abc123' }, {}
     restores = {
+      -- Answers at once, where git answers on a later turn of the loop
+      h.stub(package.loaded, 'tools.testaffected', {
+        base = function(root, ref, on_done)
+          table.insert(calls, { 'base', root, ref })
+          on_done(unpack(base))
+        end,
+      }),
+      h.stub(
+        vim,
+        'notify',
+        function(msg, level)
+          table.insert(notified, { msg = msg, level = level })
+        end
+      ),
       h.stub(_G, 'Snacks', {
         picker = setmetatable({}, {
           __index = function(_, name)
@@ -49,7 +63,11 @@ describe('plugins.toolbox.picker', function()
     for _, key in ipairs(snacks.keys) do
       if type(key[2]) == 'function' then
         functions = functions + 1
-        assert.are.equal(1, #press(snacks.keys, key[1]), key[1])
+        local made = vim.tbl_filter(
+          function(call) return call[1] ~= 'base' end,
+          press(snacks.keys, key[1])
+        )
+        assert.are.equal(1, #made, key[1])
       else
         -- `<leader>e` and `<leader>E` are the explorer keys again
         assert.is_true(key.remap, key[1])
@@ -84,6 +102,21 @@ describe('plugins.toolbox.picker', function()
       press(snacks.keys, '<leader>fe')
     )
     assert.same({ { 'explorer' } }, press(snacks.keys, '<leader>fE'))
+  end)
+
+  it('diffs the branch against where it left the default branch', function()
+    assert.same({
+      { 'base', '/root/proj', nil },
+      { 'git_diff', { base = 'abc123', group = true, cwd = '/root/proj' } },
+    }, press(snacks.keys, '<leader>gD'))
+    -- No default branch to start from: says so, and opens nothing
+    base = { nil, 'No default branch' }
+    assert.same(
+      { { 'base', '/root/proj', nil } },
+      press(snacks.keys, '<leader>gD')
+    )
+    assert.are.equal('No default branch', notified[1].msg)
+    assert.are.equal(vim.log.levels.WARN, notified[1].level)
   end)
 
   it('lists the LSP answers of every server through the picker', function()

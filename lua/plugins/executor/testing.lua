@@ -200,6 +200,8 @@ return {
     -- stylua: ignore
     keys = {
       { '<leader>td', function() require('neotest').run.run({ strategy = 'dap' }) end, desc = 'Debug Nearest' },
+      -- The test run last, wherever the cursor has gone since it failed
+      { '<leader>tD', function() require('neotest').run.run_last({ strategy = 'dap' }) end, desc = 'Debug Last' },
     },
   },
   {

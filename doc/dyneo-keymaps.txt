@@ -198,10 +198,12 @@ one of the same keys in those buffers.
 
 `<leader>dB`           n      Breakpoint Condition
 `<leader>dC`           n      Run to Cursor
+`<leader>dF`           n      Restart Frame
 `<leader>dL`           n      Log Point
 `<leader>dM`           n      Debug Class  (ft: python)
 `<leader>dO`           n      Step Over
 `<leader>dP`           n      Pause
+`<leader>dS`           n      Restart Session
 `<leader>dX`           n      Clear Breakpoints
 `<leader>da`           n      Run with Args
 `<leader>db`           n      Toggle Breakpoint
@@ -276,7 +278,7 @@ one of the same keys in those buffers.
 <leader>g  git
 
 `<leader>gB`           nx     Git Browse (open)
-`<leader>gD`           n      Git Diff (origin)
+`<leader>gD`           n      Git Diff (branch)
 `<leader>gF`           n      Function History
 `<leader>gF`           x      Selection History
 `<leader>gG`           n      Lazygit (cwd)
@@ -365,6 +367,7 @@ one of the same keys in those buffers.
 `<leader>oo`           n      Run task
 `<leader>ot`           n      Task action
 `<leader>ow`           n      Task list
+`<leader>ox`           n      Stack trace of last failed task
 
 ==============================================================================
 <leader>p  project
@@ -565,6 +568,7 @@ one of the same keys in those buffers.
 
 `<leader>tA`           n      Run Affected Tests
 `<leader>tC`           n      Coverage Summary
+`<leader>tD`           n      Debug Last
 `<leader>tF`           n      Flaky Test (run N times)
 `<leader>tM`           n      Mutation Testing
 `<leader>tO`           n      Toggle Output Panel (Neotest)
