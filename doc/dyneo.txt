@@ -1728,10 +1728,12 @@ sent is logged by path and line range.  A tool an AI calls through MCP Hub
 `.vscode/mcp.json` or `.cursor/mcp.json`, start only once Neovim has asked
 whether to trust that project and been told yes, once per session; until
 then the hub runs your own servers alone.  A sidekick prompt naming a file
-the guard holds back -- by its path, or by what its buffer holds -- through
+the guard holds back, or one of a project keeping AI local -- through
 `{buffers}`, `{file}`, `{quickfix}`, the file picker or the prompt picker
-of the CLI's own terminal is refused like the buffer itself, since the CLI
-would read it.  Avante logs no request typed in its sidebar; its chat
+of the CLI's own terminal -- is refused like the buffer itself, since the
+CLI would read it; a file with a buffer is judged by what the buffer holds
+too.  So is a prompt whose text, a quickfix entry or a diagnostic say, has
+the shape of a credential.  Avante logs no request typed in its sidebar; its chat
 history, which `<leader>avh` reopens, stays under `stdpath('state')`.
 
     `<leader>ae`       n, x   Explain the selection, or the whole buffer

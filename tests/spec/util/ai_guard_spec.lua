@@ -210,11 +210,11 @@ describe('util.ai_guard', function()
   end)
 
   describe('guard_sidekick', function()
-    local cli, status, send_calls, get_result, config, loc, listed
+    local cli, status, send_calls, get_result, config, loc, listed, extra
 
     before_each(function()
       get_result = nil
-      listed = {}
+      listed, extra = {}, {}
       -- As sidekick's own: a location is `@` and the name, relative to its
       -- `cwd`; `{buffers}` names each listed buffer through it; `send`
       -- renders its template unless handed the text
@@ -236,6 +236,8 @@ describe('util.ai_guard', function()
               for _, buf in ipairs(listed) do
                 vim.list_extend(text, loc.get({ buf = buf }))
               end
+              -- What `{quickfix}` or `{diagnostics}` add: a line of text
+              vim.list_extend(text, extra)
               return 'msg', text
             end,
           }
@@ -313,6 +315,24 @@ describe('util.ai_guard', function()
           audited()
         )
       )
+    end)
+
+    it('names no file of a project keeping AI local', function()
+      h.write(dir .. '/kept/.nvim/ai.json', { '{ "local_only": true }' })
+      _G.DyNeo.ai = { local_providers = { 'ollama' } }
+      local held = marked_as({ name = 'main.lua', cwd = dir .. '/kept' })
+      _G.DyNeo.ai = nil
+      assert.equals('DyNeoAiGuardHeld', held)
+    end)
+
+    it('sends no text shaped like a credential', function()
+      edit(plain)
+      -- Put together here, so this file holds no key header for scanners
+      local header = '-----BEGIN RSA ' .. 'PRIVATE KEY-----'
+      extra = { { { 'settings.py:2: ' .. header, 'Normal' } } }
+      assert.is_nil(cli.send({ msg = '{quickfix}' }))
+      assert.equals(0, #send_calls)
+      assert.is_true(refused())
     end)
 
     it('renders nothing from a sensitive buffer, for any caller', function()

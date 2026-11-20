@@ -384,32 +384,63 @@ end
 --- The highlight a sidekick file reference is given once it is held back
 local SIDEKICK_HELD = 'DyNeoAiGuardHeld'
 
---- Whether the file a sidekick location names is held back: by its buffer
+--- The full path of each held back name chunk, for the audit log: the chunk
+--- itself is relative to sidekick's cwd, not the editor's
+---@type table<table, string>
+local held_paths = setmetatable({}, { __mode = 'k' })
+
+--- The file a sidekick location names, when it is held back: by its buffer
 --- when it has one, which also knows its content and marks, else by its
---- path, read against the directory sidekick made it relative to
+--- path, read against the directory sidekick made it relative to. A file of
+--- a project keeping AI on this machine is held back too: the CLIs answer
+--- from a service, and read what they are named.
 ---@param ctx table sidekick.context.Loc
----@return boolean
+---@return string|integer? held The path, or the buffer when it has none
 local function sidekick_held(ctx)
   local buf = ctx.buf
   local valid = type(buf) == 'number' and vim.api.nvim_buf_is_valid(buf)
-  if valid and sensitive.is_sensitive(buf) then return true end
   local name = ctx.name or (valid and vim.api.nvim_buf_get_name(buf)) or ''
-  if name == '' then return false end
-  if vim.fn.isabsolutepath(name) == 0 and not name:find('^~') then
+  if
+    name ~= ''
+    and vim.fn.isabsolutepath(name) == 0
+    and not name:find('^~')
+  then
     name = vim.fs.joinpath(ctx.cwd or vim.fn.getcwd(0), name)
   end
-  return sensitive.is_sensitive_path(name)
+  if valid and (sensitive.is_sensitive(buf) or policy.local_only(buf)) then
+    return name ~= '' and name or buf
+  end
+  if name == '' then return nil end
+  if sensitive.is_sensitive_path(name) or policy.local_only(name) then
+    return name
+  end
 end
 
 --- The first file a sidekick text names that is held back
 ---@param text? table sidekick.Text[]: lines of `{ text, hl_group }` chunks
----@return string?
+---@return string|integer?
 local function sidekick_names_held(text)
   for _, line in ipairs(type(text) == 'table' and text or {}) do
     for _, chunk in ipairs(type(line) == 'table' and line or {}) do
       if type(chunk) == 'table' and chunk[2] == SIDEKICK_HELD then
-        return chunk[1]
+        return held_paths[chunk] or chunk[1]
       end
+    end
+  end
+end
+
+--- The credential format some text of a sidekick render has the shape of:
+--- a quickfix entry or a diagnostic carries a line of a file whose buffer
+--- may not even be loaded
+---@param text? table sidekick.Text[]
+---@return string?
+local function sidekick_secret(text)
+  for _, line in ipairs(type(text) == 'table' and text or {}) do
+    for _, chunk in ipairs(type(line) == 'table' and line or {}) do
+      local format = type(chunk) == 'table'
+        and type(chunk[1]) == 'string'
+        and sensitive.secret_format(chunk[1])
+      if format then return format end
     end
   end
 end
@@ -431,14 +462,16 @@ M.guard_sidekick = function()
     'sidekick location',
     function(get, ctx, ...)
       local text = get(ctx, ...)
-      if
-        type(ctx) == 'table'
+      local held = type(ctx) == 'table'
         and type(text) == 'table'
         and sidekick_held(ctx)
-      then
+      if held then
         for _, line in ipairs(text) do
           for _, chunk in ipairs(line) do
-            if chunk[2] == 'SidekickLocFile' then chunk[2] = SIDEKICK_HELD end
+            if chunk[2] == 'SidekickLocFile' then
+              chunk[2] = SIDEKICK_HELD
+              held_paths[chunk] = type(held) == 'string' and held or nil
+            end
           end
         end
       end
@@ -470,6 +503,16 @@ M.guard_sidekick = function()
       if held then
         refusals = refusals + 1
         return refuse('sidekick', 'sidekick', held)
+      end
+      local format = sidekick_secret(text)
+      if format then
+        refusals = refusals + 1
+        say(
+          ('sidekick refused: the prompt holds %s'):format(format),
+          vim.log.levels.WARN
+        )
+        log('sidekick', 'refused', buf, format)
+        return
       end
       return msg, text
     end
