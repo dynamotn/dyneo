@@ -11,6 +11,8 @@ describe('util.ai_guard', function()
     'avante.libs.acp_client',
     'avante.utils.file',
     'sidekick.cli',
+    'sidekick.cli.context',
+    'sidekick.cli.context.location',
     'sidekick.status',
     'sidekick.config',
     'claudecode.selection',
@@ -208,20 +210,50 @@ describe('util.ai_guard', function()
   end)
 
   describe('guard_sidekick', function()
-    local cli, status, send_calls, get_result, config, rendered
-
-    --- sidekick's text naming `path`, as `{buffers}` and its picker write it
-    ---@param path string
-    local function naming(path)
-      return { { { '@', 'SidekickLocDelim' }, { path, 'SidekickLocFile' } } }
-    end
+    local cli, status, send_calls, get_result, config, loc, listed
 
     before_each(function()
       get_result = nil
-      rendered = naming(plain)
-      cli = {}
-      cli.send, send_calls = fn('sent')
-      cli.render = function() return 'msg', rendered end
+      listed = {}
+      -- As sidekick's own: a location is `@` and the name, relative to its
+      -- `cwd`; `{buffers}` names each listed buffer through it; `send`
+      -- renders its template unless handed the text
+      loc = {
+        get = function(ctx)
+          local name = ctx.name or vim.api.nvim_buf_get_name(ctx.buf)
+          return {
+            { { '@', 'SidekickLocDelim' }, { name, 'SidekickLocFile' } },
+          }
+        end,
+      }
+      package.loaded['sidekick.cli.context.location'] = loc
+      package.loaded['sidekick.cli.context'] = {
+        get = function()
+          return {
+            ctx = { buf = vim.api.nvim_get_current_buf() },
+            render = function()
+              local text = {}
+              for _, buf in ipairs(listed) do
+                vim.list_extend(text, loc.get({ buf = buf }))
+              end
+              return 'msg', text
+            end,
+          }
+        end,
+      }
+      send_calls = {}
+      cli = {
+        send = function(opts)
+          opts = opts or {}
+          if not opts.text then
+            local context = package.loaded['sidekick.cli.context'].get()
+            local _, text = context:render(opts)
+            if not text then return end
+          end
+          table.insert(send_calls, opts)
+          return 'sent'
+        end,
+      }
       status = { get = function() return get_result end }
       config = {
         copilot = { status = { enabled = true } },
@@ -242,22 +274,61 @@ describe('util.ai_guard', function()
       assert.equals('sent', cli.send())
     end)
 
-    it('renders nothing that names a sensitive file', function()
+    --- The highlight the guarded `location.get` gives the name of `ctx`
+    local function marked_as(ctx) return loc.get(ctx)[1][2][2] end
+
+    it(
+      'marks a file held back, read from where its name is relative',
+      function()
+        assert.equals('SidekickLocFile', marked_as({ name = plain }))
+        -- Under a `secrets/` the CLI's cwd sees, not the editor's
+        assert.equals(
+          'DyNeoAiGuardHeld',
+          marked_as({ name = 'app.yaml', cwd = dir .. '/secrets' })
+        )
+        assert.equals(
+          'SidekickLocFile',
+          marked_as({ name = 'app.yaml', cwd = dir })
+        )
+        -- A buffer held back by its content, not its name
+        local buf = h.buffer({ name = plain })
+        require('util.sensitive').mark(buf, 'a key in it')
+        assert.equals('DyNeoAiGuardHeld', marked_as({ buf = buf }))
+      end
+    )
+
+    it('sends nothing whose template names a held back file', function()
       edit(plain)
-      assert.same({ 'msg', rendered }, { cli.render('{buffers}') })
-      rendered = naming(secret)
-      local msg, text = cli.render('{buffers}')
-      assert.equals('', msg)
-      assert.is_nil(text)
+      listed = { h.buffer({ name = dir .. '/other.lua' }) }
+      assert.equals('sent', cli.send({ msg = '{buffers}' }))
+      table.insert(listed, h.buffer({ name = secret }))
+      assert.is_nil(cli.send({ msg = '{buffers}' }))
+      assert.equals(1, #send_calls)
+      assert.is_true(refused())
+      -- Refused once: not logged as sent too
+      assert.same(
+        { 'sidekick sent ' .. plain .. ' (message)' },
+        vim.tbl_filter(
+          function(line) return line:find(' sent ', 1, true) ~= nil end,
+          audited()
+        )
+      )
+    end)
+
+    it('renders nothing from a sensitive buffer, for any caller', function()
+      -- The prompt picker of the CLI's terminal renders without `send`
+      edit(secret)
+      local context = package.loaded['sidekick.cli.context'].get()
+      assert.is_nil(context:render({ prompt = 'review' }))
       assert.is_true(refused())
     end)
 
-    it('sends no picked file that is sensitive', function()
+    it('sends no picked file that is held back', function()
       edit(plain)
-      assert.is_nil(cli.send({ text = naming(secret) }))
+      assert.is_nil(cli.send({ text = loc.get({ name = secret }) }))
       assert.equals(0, #send_calls)
       assert.is_true(refused())
-      assert.equals('sent', cli.send({ text = naming(plain) }))
+      assert.equals('sent', cli.send({ text = loc.get({ name = plain }) }))
     end)
 
     it('logs the prompt a buffer was sent with', function()
@@ -311,7 +382,11 @@ describe('util.ai_guard', function()
     end)
 
     it('sends nothing to a CLI of sidekick', function()
-      local cli = { render = function() return 'msg', {} end }
+      package.loaded['sidekick.cli.context.location'] =
+        { get = function() return {} end }
+      package.loaded['sidekick.cli.context'] =
+        { get = function() return {} end }
+      local cli = {}
       local calls
       cli.send, calls = fn('sent')
       package.loaded['sidekick.cli'] = cli

@@ -381,59 +381,123 @@ M.guard_avante = function()
   )
 end
 
---- The first sensitive file a sidekick text names. `{buffers}`, `{file}` and
---- the file picker each name a file as an `@path` chunk the CLI then reads
---- for itself, whichever buffer is current.
+--- The highlight a sidekick file reference is given once it is held back
+local SIDEKICK_HELD = 'DyNeoAiGuardHeld'
+
+--- Whether the file a sidekick location names is held back: by its buffer
+--- when it has one, which also knows its content and marks, else by its
+--- path, read against the directory sidekick made it relative to
+---@param ctx table sidekick.context.Loc
+---@return boolean
+local function sidekick_held(ctx)
+  local buf = ctx.buf
+  local valid = type(buf) == 'number' and vim.api.nvim_buf_is_valid(buf)
+  if valid and sensitive.is_sensitive(buf) then return true end
+  local name = ctx.name or (valid and vim.api.nvim_buf_get_name(buf)) or ''
+  if name == '' then return false end
+  if vim.fn.isabsolutepath(name) == 0 and not name:find('^~') then
+    name = vim.fs.joinpath(ctx.cwd or vim.fn.getcwd(0), name)
+  end
+  return sensitive.is_sensitive_path(name)
+end
+
+--- The first file a sidekick text names that is held back
 ---@param text? table sidekick.Text[]: lines of `{ text, hl_group }` chunks
 ---@return string?
-local function sidekick_names_sensitive(text)
+local function sidekick_names_held(text)
   for _, line in ipairs(type(text) == 'table' and text or {}) do
     for _, chunk in ipairs(type(line) == 'table' and line or {}) do
-      if
-        type(chunk) == 'table'
-        and chunk[2] == 'SidekickLocFile'
-        and sensitive.is_sensitive_path(chunk[1])
-      then
+      if type(chunk) == 'table' and chunk[2] == SIDEKICK_HELD then
         return chunk[1]
       end
     end
   end
 end
 
---- Refuse to send a prompt to a CLI tool from a sensitive buffer, since
---- `{this}`, `{selection}` and friends expand to its content, or naming a
---- sensitive file, which the CLI would read
+--- Refuses counted, so a send whose render was refused is not logged sent
+local refusals = 0
+
+--- Refuse to hand a CLI tool of sidekick what it must not have: the content
+--- of a sensitive buffer, which `{this}`, `{selection}` and friends expand
+--- to, or the `@path` of a sensitive file, which `{buffers}`, `{file}`,
+--- `{quickfix}` and the file picker name and the CLI then reads itself
 M.guard_sidekick = function()
-  local ok, cli = pcall(require, 'sidekick.cli')
-  -- Templates are rendered here, inside `send`: what they name is checked
-  -- in the text that goes, not in the template
-  wrap(ok and cli or nil, 'render', 'sidekick render', function(render, ...)
-    local msg, text = render(...)
-    local named = sidekick_names_sensitive(text)
-    if named then
-      refuse('sidekick', 'sidekick', named)
-      return '', nil
+  -- Every `@path` is made here, whichever context or picker asks: a held
+  -- back file is marked, for the render or the send to refuse
+  local ok_loc, loc = pcall(require, 'sidekick.cli.context.location')
+  wrap(
+    ok_loc and loc or nil,
+    'get',
+    'sidekick location',
+    function(get, ctx, ...)
+      local text = get(ctx, ...)
+      if
+        type(ctx) == 'table'
+        and type(text) == 'table'
+        and sidekick_held(ctx)
+      then
+        for _, line in ipairs(text) do
+          for _, chunk in ipairs(line) do
+            if chunk[2] == 'SidekickLocFile' then chunk[2] = SIDEKICK_HELD end
+          end
+        end
+      end
+      return text
     end
-    return msg, text
+  )
+
+  -- Templates are rendered by the context, for `send` and for the prompt
+  -- picker of the CLI's own terminal, which writes to it directly
+  local ok_ctx, context = pcall(require, 'sidekick.cli.context')
+  wrap(ok_ctx and context or nil, 'get', 'sidekick context', function(get, ...)
+    local instance = get(...)
+    local render = type(instance) == 'table' and instance.render
+    if type(render) ~= 'function' then return instance end
+    instance.render = function(self, ...)
+      local buf = type(self.ctx) == 'table' and self.ctx.buf or 0
+      if vim.api.nvim_buf_is_valid(buf) and sensitive.is_sensitive(buf) then
+        refusals = refusals + 1
+        return refuse('sidekick', 'sidekick', buf)
+      end
+      -- The CLIs it runs answer from a service, never from this machine
+      local reason = vim.api.nvim_buf_is_valid(buf) and policy.local_only(buf)
+      if reason then
+        refusals = refusals + 1
+        return refuse_local('sidekick', 'sidekick', buf, reason)
+      end
+      local msg, text = render(self, ...)
+      local held = sidekick_names_held(text)
+      if held then
+        refusals = refusals + 1
+        return refuse('sidekick', 'sidekick', held)
+      end
+      return msg, text
+    end
+    return instance
   end)
+
+  local ok, cli = pcall(require, 'sidekick.cli')
   wrap(ok and cli or nil, 'send', 'sidekick send', function(send, opts, ...)
     -- The picker hands its files over as text already rendered
-    local named = sidekick_names_sensitive(type(opts) == 'table' and opts.text)
-    if named then return refuse('sidekick', 'sidekick', named) end
+    local held = sidekick_names_held(type(opts) == 'table' and opts.text)
+    if held then return refuse('sidekick', 'sidekick', held) end
     if sensitive.is_sensitive(0) then
       return refuse('sidekick', 'sidekick', 0)
     end
-    -- The CLIs it runs answer from a service, never from this machine
     local reason = policy.local_only(0)
     if reason then return refuse_local('sidekick', 'sidekick', 0, reason) end
-    local prompt = type(opts) == 'table' and opts.prompt
-    log(
-      'sidekick',
-      'sent',
-      0,
-      type(prompt) == 'string' and ('prompt ' .. prompt) or 'message'
-    )
-    return send(opts, ...)
+    local before = refusals
+    local ret = send(opts, ...)
+    if refusals == before then
+      local prompt = type(opts) == 'table' and opts.prompt
+      log(
+        'sidekick',
+        'sent',
+        0,
+        type(prompt) == 'string' and ('prompt ' .. prompt) or 'message'
+      )
+    end
+    return ret
   end)
 
   -- The statusline icon asks for the Copilot client of the buffer, and a

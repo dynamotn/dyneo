@@ -385,8 +385,9 @@ return {
       require('avante').setup(opts)
     end,
     opts = {
-      -- Avante keeps every prompt it sends, code and diffs included, in clear
-      -- text under `stdpath('cache')`; logs here keep paths, never text
+      -- Avante logs each request typed in its sidebar, in clear text under
+      -- `stdpath('cache')`; logs here keep paths, never text. Its chat
+      -- history, which `<leader>avh` reopens, is kept on purpose.
       prompt_logger = { enabled = false },
       provider = vim.env.VIM_AVANTE_PROVIDER or 'claude-code',
       providers = {
