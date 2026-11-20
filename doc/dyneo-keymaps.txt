@@ -278,7 +278,7 @@ one of the same keys in those buffers.
 <leader>g  git
 
 `<leader>gB`           nx     Git Browse (open)
-`<leader>gD`           n      Git Diff (origin)
+`<leader>gD`           n      Git Diff (branch)
 `<leader>gF`           n      Function History
 `<leader>gF`           x      Selection History
 `<leader>gG`           n      Lazygit (cwd)

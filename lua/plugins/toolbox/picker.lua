@@ -1,5 +1,22 @@
 local pick = require('util.pick')
 
+--- The changes of the branch: against where it left the default branch
+--- (`origin/HEAD`, else `main`, else `master`), found off the main loop. A
+--- worktree's branch is shown alone, and a clone with no `origin/HEAD`
+--- still has a base.
+local function branch_diff()
+  local root = require('util.root').git()
+  require('tools.testaffected').base(root, nil, function(base, err)
+    if not base then
+      return require('util.notify').titled('Git')(
+        err or 'No base to compare with',
+        vim.log.levels.WARN
+      )
+    end
+    Snacks.picker.git_diff({ base = base, group = true, cwd = root })
+  end)
+end
+
 return {
   {
     -- Picker for files, grep, git, LSP and most lists of Neovim
@@ -85,7 +102,7 @@ return {
       { '<leader>E', '<leader>fE', desc = 'Explorer Snacks (cwd)', remap = true },
       -- git
       { '<leader>gd', function() Snacks.picker.git_diff() end, desc = 'Git Diff (hunks)' },
-      { '<leader>gD', function() Snacks.picker.git_diff({ base = 'origin', group = true }) end, desc = 'Git Diff (origin)' },
+      { '<leader>gD', branch_diff, desc = 'Git Diff (branch)' },
       { '<leader>gs', function() Snacks.picker.git_status() end, desc = 'Git Status' },
       { '<leader>gS', function() Snacks.picker.git_stash() end, desc = 'Git Stash' },
       { '<leader>gr', function() Snacks.picker.git_branches() end, desc = 'Git Branches' },
