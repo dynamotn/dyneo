@@ -93,6 +93,32 @@ describe('plugins.executor.linting', function()
     cleanup()
   end)
 
+  it('lints every buffer written at once, not only the current one', function()
+    local bufs = {}
+    lint.try_lint = function(names)
+      table.insert(linted, names)
+      -- vale runs from a write of its own, where this machine has it
+      if not vim.list_contains(names, 'vale') then
+        table.insert(bufs, vim.api.nvim_get_current_buf())
+      end
+    end
+    local opts = spec.opts(nil, {})
+    opts.events = { 'BufWritePost' }
+    opts.linters_by_ft = { dytext = { 'present' } }
+    spec.config(nil, opts)
+    local a =
+      h.buffer({ name = vim.fn.tempname() .. '.txt', filetype = 'dytext' })
+    local b =
+      h.buffer({ name = vim.fn.tempname() .. '.txt', filetype = 'dytext' })
+    vim.api.nvim_set_current_buf(a)
+    -- As `:wa` does: both written within the debounce, `a` still current
+    vim.api.nvim_exec_autocmds('BufWritePost', { buffer = a })
+    vim.api.nvim_exec_autocmds('BufWritePost', { buffer = b })
+    vim.wait(500, function() return #bufs >= 2 end, 10)
+    table.sort(bufs)
+    assert.same({ a, b }, bufs)
+  end)
+
   it('lints nothing while the editor quits, again once it stays', function()
     lint_on_write(function() vim.api.nvim_exec_autocmds('QuitPre', {}) end)
     assert.same({}, runs())
