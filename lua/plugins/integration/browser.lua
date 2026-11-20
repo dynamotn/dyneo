@@ -14,19 +14,38 @@ vim.g.firenvim_config = {
 
 local notify = require('util.notify').titled('Open')
 
+--- The full path of `target`, read as it is: `fnamemodify` fills in the
+--- `$VARIABLE`s of a path starting with `~`, so only `~/` is expanded, by
+--- hand, and `~user` is not a path here
+---@param target string
+---@return string?
+local function full_path(target)
+  if target:find('^~/') then return vim.env.HOME .. target:sub(2) end
+  if target:find('^~') then return nil end
+  -- Without a `~`, `:p` reads `$` and backticks as they are
+  return vim.fn.fnamemodify(target, ':p')
+end
+
 --- Open `target` with the system's opener: as it reads when it names a
 --- scheme, as a `file://` URI when it is a file that exists, else not at
---- all. `vim.ui.open` normalizes any other text as a path, which fills in
---- its `$VARIABLE`s: `gx` on `$TOKEN` would pass the token to `open`.
+--- all. `vim.ui.open` normalizes as a path any text without `<word>:` in
+--- it, which fills in its `$VARIABLE`s: `gx` on `$TOKEN` would pass the
+--- token to `open`. A scheme is letters and digits, so that text passing
+--- here always reads as a URI there.
 ---@param target string
+---@param from_opener? boolean An opener's URL may lack its scheme
 ---@return boolean opened
-local function open_target(target)
+local function open_target(target, from_opener)
   local uri = target
-  if not target:match('^%a[%w+.-]*:') then
-    -- `:p` reads `$` and backticks as they are
-    local path = vim.fn.fnamemodify(target, ':p')
-    if target == '' or not vim.uv.fs_stat(path) then return false end
-    uri = vim.uri_from_fname(path)
+  if not target:match('^%a%w*:') then
+    local path = target ~= '' and full_path(target)
+    if path and vim.uv.fs_stat(path) then
+      uri = vim.uri_from_fname(path)
+    elseif from_opener and target:match('^[%w-]+%.[%w.-]+/') then
+      uri = 'https://' .. target
+    else
+      return false
+    end
   end
   local _, err = vim.ui.open(uri)
   if err then notify(err, vim.log.levels.ERROR) end
@@ -51,10 +70,10 @@ local function open_word()
     for _, opener in ipairs(open.openers) do
       local urls = opener.open_fn(text, {})
       if urls and #urls == 1 then
-        if open_target(urls[1]) then return end
+        if open_target(urls[1], true) then return end
       elseif urls and #urls > 1 then
         return vim.ui.select(urls, { prompt = 'Open' }, function(url)
-          if url and not open_target(url) then
+          if url and not open_target(url, true) then
             notify('Not a URL or a file: ' .. url, vim.log.levels.WARN)
           end
         end)

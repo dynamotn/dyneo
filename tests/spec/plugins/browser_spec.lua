@@ -277,6 +277,29 @@ describe('plugins.integration.browser: firenvim', function()
       assert.same({ vim.uri_from_fname(file) }, opened)
     end)
 
+    it('takes no text for a URI that the system opener would not', function()
+      -- `vim.ui.open` reads `<word>:` as a scheme; before `-:` it normalizes
+      gx('x-:$HOME')
+      assert.same({}, opened)
+      assert.matches('Nothing to open', notified[1].msg)
+    end)
+
+    it('fills in no variable of a path under the home', function()
+      local dir, cleanup = h.tmpdir()
+      local home = vim.uv.fs_realpath(dir)
+      local restore_home = h.stub(vim.env, 'HOME', home)
+      h.write(home .. '/x$USER.txt', { '' })
+      gx('~/x$USER.txt')
+      restore_home()
+      cleanup()
+      assert.same({ vim.uri_from_fname(home .. '/x$USER.txt') }, opened)
+    end)
+
+    it("opens an opener's bare host on the web", function()
+      gx('www.example.com/x')
+      assert.same({ 'https://www.example.com/x' }, opened)
+    end)
+
     it('says when the system opener cannot start', function()
       failure = 'vim.ui.open: no handler found'
       gx('https://example.com/')
