@@ -177,14 +177,13 @@ describe('plugins.integration.browser: firenvim', function()
     assert.is_false(installed)
   end)
 
-  it('registers the Jira opener with open.nvim, and opens the word', function()
-    local set_up, registered, opened = nil, {}, 0
+  it('registers the Jira opener with open.nvim', function()
+    local set_up, registered = nil, {}
     table.insert(
       restores,
       h.stub(package.loaded, 'open', {
         setup = function(opts) set_up = opts end,
         register_opener = function(opener) table.insert(registered, opener) end,
-        open_cword = function() opened = opened + 1 end,
       })
     )
     local open = spec_of('ofirgall/open.nvim')
@@ -194,9 +193,65 @@ describe('plugins.integration.browser: firenvim', function()
     open.config(nil, opts)
     assert.equals(opts, set_up)
     assert.same(opts.self_defined_openers, registered)
-    for _, key in ipairs(open.keys) do
-      if key[1] == 'gx' then key[2]() end
+  end)
+
+  describe('`gx`', function()
+    local seen, opened, cell
+
+    --- Put `line` in a buffer, the cursor on its first character, and press
+    --- `gx`
+    ---@param line string
+    local function gx(line)
+      vim.api.nvim_set_current_buf(h.buffer({ lines = { line } }))
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+      for _, key in ipairs(spec_of('ofirgall/open.nvim').keys) do
+        if key[1] == 'gx' then key[2]() end
+      end
     end
-    assert.equals(1, opened)
+
+    before_each(function()
+      seen, opened, cell = {}, {}, nil
+      table.insert(
+        restores,
+        h.stub(package.loaded, 'open', {
+          extract_table_cell_text = function() return cell end,
+          openers = {
+            {
+              name = 'example',
+              open_fn = function(text)
+                table.insert(seen, text)
+                if text:find('example.com', 1, true) then return { text } end
+              end,
+            },
+          },
+        })
+      )
+      table.insert(
+        restores,
+        h.stub(vim.ui, 'open', function(path) table.insert(opened, path) end)
+      )
+    end)
+    after_each(function() vim.cmd('silent! %bwipeout!') end)
+
+    it('hands the word to the openers as it reads', function()
+      gx('https://example.com/?t=$HOME,')
+      assert.same({ 'https://example.com/?t=$HOME' }, seen)
+      assert.same({ 'https://example.com/?t=$HOME' }, opened)
+    end)
+
+    it('runs no command written in backticks', function()
+      -- Run, it would read as the working directory
+      gx('`pwd`')
+      assert.same({ '`pwd`' }, seen)
+      -- Nothing claimed it: opened as it reads, as one argument
+      assert.same({ '`pwd`' }, opened)
+    end)
+
+    it('tries the table cell before the word', function()
+      cell = 'https://example.com/a'
+      gx('word')
+      assert.same({ 'https://example.com/a' }, seen)
+      assert.same({ 'https://example.com/a' }, opened)
+    end)
   end)
 end)

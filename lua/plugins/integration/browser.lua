@@ -12,6 +12,32 @@ vim.g.firenvim_config = {
   localSettings = site_settings,
 }
 
+--- Open the word under the cursor, or the table cell it is in, through the
+--- openers open.nvim has. Its own `open_cword` passes the text through
+--- `expand()`, which runs a `` `command` `` and fills in `$VARIABLE`s: `gx`
+--- on inline code would run it, and on a URL naming `$TOKEN` would put the
+--- token in the browser. The text is handed over as it reads instead, and
+--- opened as one argument, never through a shell.
+local function open_word()
+  local open = require('open')
+  local word = vim.fn.expand('<cWORD>'):gsub('[%.,;:!%?%)%]]+$', '')
+  local texts = { word }
+  local cell = open.extract_table_cell_text()
+  if cell and cell ~= '' then table.insert(texts, 1, cell) end
+  for _, text in ipairs(texts) do
+    for _, opener in ipairs(open.openers) do
+      local urls = opener.open_fn(text, {})
+      if urls and #urls == 1 then return vim.ui.open(urls[1]) end
+      if urls and #urls > 1 then
+        return vim.ui.select(urls, { prompt = 'Open' }, function(url)
+          if url then vim.ui.open(url) end
+        end)
+      end
+    end
+  end
+  vim.ui.open(word)
+end
+
 return {
   {
     -- Edit on browser by neovim
@@ -76,11 +102,7 @@ return {
     keys = {
       -- The word under the cursor; open.nvim has nothing for a selection,
       -- which Neovim's own `gx` opens
-      {
-        'gx',
-        function() require('open').open_cword() end,
-        desc = 'Open with system app',
-      },
+      { 'gx', open_word, desc = 'Open with system app' },
     },
     config = function(_, opts)
       local open = require('open')
