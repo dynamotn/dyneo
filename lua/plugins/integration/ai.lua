@@ -385,6 +385,9 @@ return {
       require('avante').setup(opts)
     end,
     opts = {
+      -- Avante keeps every prompt it sends, code and diffs included, in clear
+      -- text under `stdpath('cache')`; logs here keep paths, never text
+      prompt_logger = { enabled = false },
       provider = vim.env.VIM_AVANTE_PROVIDER or 'claude-code',
       providers = {
         copilot = {
@@ -627,6 +630,30 @@ return {
         },
       },
     },
+    config = function(_, opts)
+      -- A project's `.mcphub/servers.json`, `.vscode/mcp.json` or
+      -- `.cursor/mcp.json` names commands mcp-hub starts, and may approve its
+      -- own tools: it joins only for a project trusted to run them, else the
+      -- hub runs the user's own servers alone
+      local workspace = require('mcphub.utils.workspace')
+      local find = workspace.find_workspace_config
+      workspace.find_workspace_config = function(...)
+        local found = find(...)
+        if
+          found
+          and not require('util.trust').ask(
+            'mcphub',
+            found.root_dir,
+            ('Start the MCP servers %s names?'):format(found.config_file),
+            true
+          )
+        then
+          return nil
+        end
+        return found
+      end
+      require('mcphub').setup(opts)
+    end,
     keys = {
       {
         '<leader>M',
