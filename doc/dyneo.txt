@@ -430,6 +430,19 @@ Each entry says whether the tool is installed, running, or missing, so a
 formatter that quietly never fires stops being a mystery.  Linters and
 formatters only ever run when they are actually installed.
 
+Next to the debugger's state, the statusline shows the work going on behind
+the editor, each only while there is some:
+
+    `󰑮 2  1`   overseer tasks running and failed (tests neotest runs
+              included); a click opens the task list
+    ``        a |:DyBisect| run, yellow while it runs
+    ``        a |:DyReview| session
+    `󰁨`        the buffer's linters running
+    `󰈉`        camouflage's presentation mode, before sharing the screen
+
+They read only what is already loaded, so the statusline loads none of these
+plugins and runs nothing on a redraw.
+
 4.3 Workspace diagnostics                                    *dyneo-workspace*
 
 `<leader>xw` asks a language server about the whole project, not only the
