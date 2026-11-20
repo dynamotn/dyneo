@@ -52,8 +52,19 @@ describe('tools.bisect', function()
     )
   end
 
+  --- Everything a run keeps under the cache: its worktree and, once its
+  --- shell has started, the `.out` file beside it
   local function leftovers()
     return vim.fn.glob(dir .. '/cache/dyneo/bisect/*', true, true)
+  end
+
+  --- The worktrees alone: the `.out` file appears when the shell starts, not
+  --- when the job does, so a count taken then must not include it
+  local function worktrees()
+    return vim.tbl_filter(
+      function(path) return not path:match('%.out$') end,
+      leftovers()
+    )
   end
 
   before_each(function()
@@ -177,7 +188,7 @@ describe('tools.bisect', function()
         function() return bisect.current ~= nil and bisect.current.job ~= nil end
       )
     )
-    assert.equals(1, #leftovers())
+    assert.equals(1, #worktrees())
     bisect.command('stop')
     settled('stopped')
     assert.same(before, state())
