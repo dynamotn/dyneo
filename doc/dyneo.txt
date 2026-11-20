@@ -1737,7 +1737,17 @@ The prompt and the code go through the same guard as everything else: a
 buffer |dyneo-ai-guard| holds back is refused with its reason, and what was
 sent is logged by path and line range.  A tool an AI calls through MCP Hub
 (`<leader>M`) asks first, unless its server lists it in `autoApprove` of
-`servers.json`.
+`servers.json`.  The servers a project names, in `.mcphub/servers.json`,
+`.vscode/mcp.json` or `.cursor/mcp.json`, start only once Neovim has asked
+whether to trust that project and been told yes, once per session; until
+then the hub runs your own servers alone.  A sidekick prompt naming a file
+the guard holds back, or one of a project keeping AI local -- through
+`{buffers}`, `{file}`, `{quickfix}`, the file picker or the prompt picker
+of the CLI's own terminal -- is refused like the buffer itself, since the
+CLI would read it; a file with a buffer is judged by what the buffer holds
+too.  So is a prompt whose text, a quickfix entry or a diagnostic say, has
+the shape of a credential.  Avante logs no request typed in its sidebar; its chat
+history, which `<leader>avh` reopens, stays under `stdpath('state')`.
 
     `<leader>ae`       n, x   Explain the selection, or the whole buffer
     `<leader>ar`       n, x   Review it for bugs and risks

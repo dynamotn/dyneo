@@ -103,6 +103,58 @@ describe('plugins.integration.ai: specs driven', function()
     vim.cmd('silent! %bwipeout!')
   end)
 
+  it(
+    'keeps no Avante prompt on disk',
+    function()
+      assert.is_false(spec_of('yetone/avante.nvim').opts.prompt_logger.enabled)
+    end
+  )
+
+  it("starts a project's MCP servers only once it is trusted", function()
+    local found =
+      { root_dir = '/x/proj', config_file = '/x/proj/.vscode/mcp.json' }
+    local workspace = { find_workspace_config = function() return found end }
+    local set_up, asked, trusted = nil, {}, false
+    table.insert(
+      restores,
+      h.stub(package.loaded, 'mcphub.utils.workspace', workspace)
+    )
+    table.insert(
+      restores,
+      h.stub(
+        package.loaded,
+        'mcphub',
+        { setup = function(opts) set_up = opts end }
+      )
+    )
+    table.insert(
+      restores,
+      h.stub(
+        require('util.trust'),
+        'ask',
+        function(purpose, dir, question, sticky)
+          table.insert(asked, { purpose, dir, sticky })
+          assert.matches('mcp.json', question)
+          return trusted
+        end
+      )
+    )
+    local mcphub = spec_of('ravitemer/mcphub.nvim')
+    mcphub.config(nil, mcphub.opts)
+    assert.equals(mcphub.opts, set_up)
+    -- Not trusted: mcphub runs the user's own servers alone
+    assert.is_nil(
+      workspace.find_workspace_config({ '.vscode/mcp.json' }, '/x/proj')
+    )
+    assert.same({ { 'mcphub', '/x/proj', true } }, asked)
+    trusted = true
+    assert.equals(found, workspace.find_workspace_config({}, '/x/proj'))
+    -- No project configuration: nothing to ask
+    found, asked = nil, {}
+    assert.is_nil(workspace.find_workspace_config({}, '/x'))
+    assert.same({}, asked)
+  end)
+
   it('opens the Avante history without its deprecated command', function()
     local opened = 0
     table.insert(
