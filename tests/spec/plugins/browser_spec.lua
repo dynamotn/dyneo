@@ -196,7 +196,7 @@ describe('plugins.integration.browser: firenvim', function()
   end)
 
   describe('`gx`', function()
-    local seen, opened, cell
+    local seen, opened, cell, notified, failure
 
     --- Put `line` in a buffer, the cursor on its first character, and press
     --- `gx`
@@ -210,7 +210,17 @@ describe('plugins.integration.browser: firenvim', function()
     end
 
     before_each(function()
-      seen, opened, cell = {}, {}, nil
+      seen, opened, cell, notified, failure = {}, {}, nil, {}, nil
+      table.insert(
+        restores,
+        h.stub(
+          vim,
+          'notify',
+          function(msg, level)
+            table.insert(notified, { msg = msg, level = level })
+          end
+        )
+      )
       table.insert(
         restores,
         h.stub(package.loaded, 'open', {
@@ -228,7 +238,10 @@ describe('plugins.integration.browser: firenvim', function()
       )
       table.insert(
         restores,
-        h.stub(vim.ui, 'open', function(path) table.insert(opened, path) end)
+        h.stub(vim.ui, 'open', function(path)
+          table.insert(opened, path)
+          return nil, failure
+        end)
       )
     end)
     after_each(function() vim.cmd('silent! %bwipeout!') end)
@@ -243,8 +256,33 @@ describe('plugins.integration.browser: firenvim', function()
       -- Run, it would read as the working directory
       gx('`pwd`')
       assert.same({ '`pwd`' }, seen)
-      -- Nothing claimed it: opened as it reads, as one argument
-      assert.same({ '`pwd`' }, opened)
+      -- Neither a URL nor a file: nothing is opened, and it says so
+      assert.same({}, opened)
+      assert.equals(vim.log.levels.WARN, notified[1].level)
+    end)
+
+    it('fills in no variable of a word that is no file', function()
+      -- `vim.ui.open` would normalize it as a path, filling `$HOME` in
+      gx('$HOME')
+      assert.same({}, opened)
+      assert.matches('Nothing to open', notified[1].msg)
+    end)
+
+    it('opens a file that exists as a file URI, `$` and all', function()
+      local dir, cleanup = h.tmpdir()
+      local file = vim.uv.fs_realpath(dir) .. '/a$HOME.txt'
+      h.write(file, { '' })
+      gx(file)
+      cleanup()
+      assert.same({ vim.uri_from_fname(file) }, opened)
+    end)
+
+    it('says when the system opener cannot start', function()
+      failure = 'vim.ui.open: no handler found'
+      gx('https://example.com/')
+      assert.same({ 'https://example.com/' }, opened)
+      assert.equals(vim.log.levels.ERROR, notified[1].level)
+      assert.matches('no handler', notified[1].msg)
     end)
 
     it('tries the table cell before the word', function()

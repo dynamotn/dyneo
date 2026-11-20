@@ -12,6 +12,27 @@ vim.g.firenvim_config = {
   localSettings = site_settings,
 }
 
+local notify = require('util.notify').titled('Open')
+
+--- Open `target` with the system's opener: as it reads when it names a
+--- scheme, as a `file://` URI when it is a file that exists, else not at
+--- all. `vim.ui.open` normalizes any other text as a path, which fills in
+--- its `$VARIABLE`s: `gx` on `$TOKEN` would pass the token to `open`.
+---@param target string
+---@return boolean opened
+local function open_target(target)
+  local uri = target
+  if not target:match('^%a[%w+.-]*:') then
+    -- `:p` reads `$` and backticks as they are
+    local path = vim.fn.fnamemodify(target, ':p')
+    if target == '' or not vim.uv.fs_stat(path) then return false end
+    uri = vim.uri_from_fname(path)
+  end
+  local _, err = vim.ui.open(uri)
+  if err then notify(err, vim.log.levels.ERROR) end
+  return true
+end
+
 --- Open the word under the cursor, or the table cell it is in, through the
 --- openers open.nvim has. Its own `open_cword` passes the text through
 --- `expand()`, which runs a `` `command` `` and fills in `$VARIABLE`s: `gx`
@@ -20,22 +41,29 @@ vim.g.firenvim_config = {
 --- opened as one argument, never through a shell.
 local function open_word()
   local open = require('open')
-  local word = vim.fn.expand('<cWORD>'):gsub('[%.,;:!%?%)%]]+$', '')
+  -- No word under the cursor is E348
+  local ok, cword = pcall(vim.fn.expand, '<cWORD>')
+  local word = ok and cword:gsub('[%.,;:!%?%)%]]+$', '') or ''
   local texts = { word }
   local cell = open.extract_table_cell_text()
   if cell and cell ~= '' then table.insert(texts, 1, cell) end
   for _, text in ipairs(texts) do
     for _, opener in ipairs(open.openers) do
       local urls = opener.open_fn(text, {})
-      if urls and #urls == 1 then return vim.ui.open(urls[1]) end
-      if urls and #urls > 1 then
+      if urls and #urls == 1 then
+        if open_target(urls[1]) then return end
+      elseif urls and #urls > 1 then
         return vim.ui.select(urls, { prompt = 'Open' }, function(url)
-          if url then vim.ui.open(url) end
+          if url and not open_target(url) then
+            notify('Not a URL or a file: ' .. url, vim.log.levels.WARN)
+          end
         end)
       end
     end
   end
-  vim.ui.open(word)
+  if not open_target(word) then
+    notify('Nothing to open under the cursor', vim.log.levels.WARN)
+  end
 end
 
 return {
