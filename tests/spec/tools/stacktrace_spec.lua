@@ -150,6 +150,45 @@ describe('tools.stacktrace', function()
     assert.equals(2, vim.fn.getqflist({ idx = 0 }).idx)
   end)
 
+  describe('task', function()
+    --- An overseer task that ran in `cwd` and printed `lines`
+    ---@param lines? string[]
+    ---@param cwd? string
+    local function task(lines, cwd)
+      local bufnr = lines and h.buffer({ lines = lines })
+      return { cwd = cwd, get_bufnr = function() return bufnr end }
+    end
+
+    it('reads the output without its colours, from where it ran', function()
+      local root = dir .. '/proj'
+      h.write(root .. '/app/main.py', { 'x = 1', 'y = 2', 'z = 3' })
+      stacktrace.task(task({
+        '\27[31mTraceback (most recent call last):\27[0m',
+        '\27[1m  File "app/main.py", line 3, in handler\27[0m',
+      }, root))
+      assert.is_true(wait_qf())
+      local list = items()
+      assert.equals(1, #list)
+      assert.equals(root .. '/app/main.py', list[1].name)
+      assert.equals(3, list[1].lnum)
+      assert.equals('handler', list[1].text)
+    end)
+
+    it('reads only the end of a long output', function()
+      stacktrace.MAX_TASK_LINES = 1
+      stacktrace.task(task({ '  File "a.py", line 1, in f', 'done' }, dir))
+      assert.equals(1, #notes)
+      assert.matches('No stack frame', notes[1].msg)
+    end)
+
+    it('says when the task kept no output', function()
+      stacktrace.task(task(nil, dir))
+      assert.equals(1, #notes)
+      assert.matches('no output', notes[1].msg)
+      assert.equals(0, #vim.fn.getqflist())
+    end)
+  end)
+
   it('warns about a trace without a frame, and opens no list', function()
     stacktrace.run({ 'nothing to see here' }, dir)
     assert.equals(1, #notes)

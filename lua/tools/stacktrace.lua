@@ -21,6 +21,10 @@ M.MAX_LIST = 8 * 1024 * 1024
 --- Frames listed; a longer trace is cut, and says so
 M.MAX_FRAMES = 1000
 
+--- Lines of a task's output read, from its end, where a failure prints its
+--- trace
+M.MAX_TASK_LINES = 10000
+
 --- Filetypes whose buffer is read whole when no range is given
 M.LOG_FILETYPES = { 'dylog', 'log' }
 
@@ -217,6 +221,30 @@ local function show(frames, root, files)
   else
     notify('No frame of the trace is in the project', vim.log.levels.WARN)
   end
+end
+
+--- List the frames of the trace an overseer task printed -- a build, or a
+--- test neotest ran through overseer -- found where the task ran. A runner
+--- that colours its output keeps the escapes in a buffer that is not a
+--- terminal, and they would break the frame patterns.
+---@param task { cwd?: string, get_bufnr: fun(self): integer? } overseer.Task
+function M.task(task)
+  local bufnr = task:get_bufnr()
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    notify('The task kept no output', vim.log.levels.WARN)
+    return
+  end
+  local count = vim.api.nvim_buf_line_count(bufnr)
+  local lines = vim.api.nvim_buf_get_lines(
+    bufnr,
+    math.max(0, count - M.MAX_TASK_LINES),
+    -1,
+    false
+  )
+  for i, line in ipairs(lines) do
+    lines[i] = line:gsub('\27%[[%d;]*[A-Za-z]', '')
+  end
+  M.run(lines, task.cwd)
 end
 
 --- List the frames of the trace in `lines`, found in `root`, the project of

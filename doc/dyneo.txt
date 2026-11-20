@@ -2219,6 +2219,13 @@ order: the range or the visual selection; the whole buffer of a log
 (|:DyLog|, or a `log` file); the clipboard; the unnamed register.  A register
 without a frame is passed over for the next one.
 
+A failed task gives its trace the same way: `<leader>ox` reads the newest
+overseer task that failed, and the `Stack trace` action (`<leader>ot`, or the
+task list) reads any task.  Tests neotest runs go through overseer, so a
+failed test is such a task.  The last 10000 lines of its output are read,
+without their colours, and relative paths are found from where the task ran.
+`<leader>tD` then debugs the test run last, wherever the cursor has gone.
+
 Frames of Java, Kotlin and Scala (`at pkg.Class.method(File.java:42)`, across
 `Caused by:`), Python (`File "x.py", line 3, in fn`), Go (the file line under
 its function), Rust (`at ./src/main.rs:5:9` of `RUST_BACKTRACE`) and Node

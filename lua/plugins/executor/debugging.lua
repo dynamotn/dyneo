@@ -62,6 +62,9 @@ return {
       { '<leader>dP', function() require('dap').pause() end, desc = 'Pause' },
       { '<leader>dr', function() require('dap').repl.toggle() end, desc = 'Toggle REPL' },
       { '<leader>ds', function() require('dap').session() end, desc = 'Session' },
+      { '<leader>dS', function() require('dap').restart() end, desc = 'Restart Session' },
+      -- Back to the start of the current function, where the adapter can
+      { '<leader>dF', function() require('dap').restart_frame() end, desc = 'Restart Frame' },
       { '<leader>dt', function() require('dap').terminate() end, desc = 'Terminate' },
       { '<leader>dw', function() require('dap.ui.widgets').hover() end, desc = 'Widgets' },
     },
