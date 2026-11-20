@@ -431,18 +431,30 @@ end
 
 --- The credential format some text of a sidekick render has the shape of:
 --- a quickfix entry or a diagnostic carries a line of a file whose buffer
---- may not even be loaded
+--- may not even be loaded. Read a line at a time, since Markdown in a
+--- message splits it into chunks wherever it is emphasised.
 ---@param text? table sidekick.Text[]
 ---@return string?
 local function sidekick_secret(text)
   for _, line in ipairs(type(text) == 'table' and text or {}) do
+    local parts = {}
     for _, chunk in ipairs(type(line) == 'table' and line or {}) do
-      local format = type(chunk) == 'table'
-        and type(chunk[1]) == 'string'
-        and sensitive.secret_format(chunk[1])
-      if format then return format end
+      if type(chunk) == 'table' and type(chunk[1]) == 'string' then
+        table.insert(parts, chunk[1])
+      end
     end
+    local format = sensitive.secret_format(table.concat(parts))
+    if format then return format end
   end
+end
+
+--- Refuse a held back file the way it was held back: sensitive, or of a
+--- project keeping AI on this machine
+---@param held string|integer
+local function refuse_held(held)
+  local reason = policy.local_only(held)
+  if reason then return refuse_local('sidekick', 'sidekick', held, reason) end
+  return refuse('sidekick', 'sidekick', held)
 end
 
 --- Refuses counted, so a send whose render was refused is not logged sent
@@ -502,16 +514,20 @@ M.guard_sidekick = function()
       local held = sidekick_names_held(text)
       if held then
         refusals = refusals + 1
-        return refuse('sidekick', 'sidekick', held)
+        return refuse_held(held)
       end
-      local format = sidekick_secret(text)
+      -- `:DyAiGuardAllow` on the buffer waives this too
+      local allowed = vim.api.nvim_buf_is_valid(buf)
+        and sensitive.is_allowed(buf)
+      local format = not allowed and sidekick_secret(text)
       if format then
         refusals = refusals + 1
         say(
           ('sidekick refused: the prompt holds %s'):format(format),
           vim.log.levels.WARN
         )
-        log('sidekick', 'refused', buf, format)
+        -- The text may come from any file a quickfix or diagnostic names
+        log('sidekick', 'refused', buf, 'prompt text: ' .. format)
         return
       end
       return msg, text
@@ -523,7 +539,7 @@ M.guard_sidekick = function()
   wrap(ok and cli or nil, 'send', 'sidekick send', function(send, opts, ...)
     -- The picker hands its files over as text already rendered
     local held = sidekick_names_held(type(opts) == 'table' and opts.text)
-    if held then return refuse('sidekick', 'sidekick', held) end
+    if held then return refuse_held(held) end
     if sensitive.is_sensitive(0) then
       return refuse('sidekick', 'sidekick', 0)
     end

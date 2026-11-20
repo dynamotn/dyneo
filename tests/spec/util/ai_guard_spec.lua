@@ -327,12 +327,21 @@ describe('util.ai_guard', function()
 
     it('sends no text shaped like a credential', function()
       edit(plain)
-      -- Put together here, so this file holds no key header for scanners
-      local header = '-----BEGIN RSA ' .. 'PRIVATE KEY-----'
-      extra = { { { 'settings.py:2: ' .. header, 'Normal' } } }
+      -- Split as Markdown emphasis splits a message, which also keeps a key
+      -- header out of this file for scanners
+      extra = {
+        {
+          { 'settings.py:2: ', 'Normal' },
+          { '-----BEGIN RSA ', 'Bold' },
+          { 'PRIVATE KEY-----', 'Normal' },
+        },
+      }
       assert.is_nil(cli.send({ msg = '{quickfix}' }))
       assert.equals(0, #send_calls)
       assert.is_true(refused())
+      -- `:DyAiGuardAllow` on the buffer waives it
+      require('util.sensitive').allow(vim.api.nvim_get_current_buf(), true)
+      assert.equals('sent', cli.send({ msg = '{quickfix}' }))
     end)
 
     it('renders nothing from a sensitive buffer, for any caller', function()
