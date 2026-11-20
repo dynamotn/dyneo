@@ -381,11 +381,45 @@ M.guard_avante = function()
   )
 end
 
+--- The first sensitive file a sidekick text names. `{buffers}`, `{file}` and
+--- the file picker each name a file as an `@path` chunk the CLI then reads
+--- for itself, whichever buffer is current.
+---@param text? table sidekick.Text[]: lines of `{ text, hl_group }` chunks
+---@return string?
+local function sidekick_names_sensitive(text)
+  for _, line in ipairs(type(text) == 'table' and text or {}) do
+    for _, chunk in ipairs(type(line) == 'table' and line or {}) do
+      if
+        type(chunk) == 'table'
+        and chunk[2] == 'SidekickLocFile'
+        and sensitive.is_sensitive_path(chunk[1])
+      then
+        return chunk[1]
+      end
+    end
+  end
+end
+
 --- Refuse to send a prompt to a CLI tool from a sensitive buffer, since
---- `{this}`, `{selection}` and friends expand to its content
+--- `{this}`, `{selection}` and friends expand to its content, or naming a
+--- sensitive file, which the CLI would read
 M.guard_sidekick = function()
   local ok, cli = pcall(require, 'sidekick.cli')
+  -- Templates are rendered here, inside `send`: what they name is checked
+  -- in the text that goes, not in the template
+  wrap(ok and cli or nil, 'render', 'sidekick render', function(render, ...)
+    local msg, text = render(...)
+    local named = sidekick_names_sensitive(text)
+    if named then
+      refuse('sidekick', 'sidekick', named)
+      return '', nil
+    end
+    return msg, text
+  end)
   wrap(ok and cli or nil, 'send', 'sidekick send', function(send, opts, ...)
+    -- The picker hands its files over as text already rendered
+    local named = sidekick_names_sensitive(type(opts) == 'table' and opts.text)
+    if named then return refuse('sidekick', 'sidekick', named) end
     if sensitive.is_sensitive(0) then
       return refuse('sidekick', 'sidekick', 0)
     end

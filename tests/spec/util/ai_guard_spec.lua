@@ -208,12 +208,20 @@ describe('util.ai_guard', function()
   end)
 
   describe('guard_sidekick', function()
-    local cli, status, send_calls, get_result, config
+    local cli, status, send_calls, get_result, config, rendered
+
+    --- sidekick's text naming `path`, as `{buffers}` and its picker write it
+    ---@param path string
+    local function naming(path)
+      return { { { '@', 'SidekickLocDelim' }, { path, 'SidekickLocFile' } } }
+    end
 
     before_each(function()
       get_result = nil
+      rendered = naming(plain)
       cli = {}
       cli.send, send_calls = fn('sent')
+      cli.render = function() return 'msg', rendered end
       status = { get = function() return get_result end }
       config = {
         copilot = { status = { enabled = true } },
@@ -232,6 +240,24 @@ describe('util.ai_guard', function()
       assert.is_true(refused())
       edit(plain)
       assert.equals('sent', cli.send())
+    end)
+
+    it('renders nothing that names a sensitive file', function()
+      edit(plain)
+      assert.same({ 'msg', rendered }, { cli.render('{buffers}') })
+      rendered = naming(secret)
+      local msg, text = cli.render('{buffers}')
+      assert.equals('', msg)
+      assert.is_nil(text)
+      assert.is_true(refused())
+    end)
+
+    it('sends no picked file that is sensitive', function()
+      edit(plain)
+      assert.is_nil(cli.send({ text = naming(secret) }))
+      assert.equals(0, #send_calls)
+      assert.is_true(refused())
+      assert.equals('sent', cli.send({ text = naming(plain) }))
     end)
 
     it('logs the prompt a buffer was sent with', function()
@@ -285,7 +311,7 @@ describe('util.ai_guard', function()
     end)
 
     it('sends nothing to a CLI of sidekick', function()
-      local cli = {}
+      local cli = { render = function() return 'msg', {} end }
       local calls
       cli.send, calls = fn('sent')
       package.loaded['sidekick.cli'] = cli
