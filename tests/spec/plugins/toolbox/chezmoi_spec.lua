@@ -107,10 +107,9 @@ describe('plugins.toolbox.chezmoi', function()
 
       picked.confirm({ close = function() closed = true end }, item)
       assert.is_true(closed)
-      assert.same(
-        { targets = { '/home/me/.zshrc' }, args = { '--watch' } },
-        edited
-      )
+      -- `--watch` would apply the target on every write
+      assert.same({ targets = { '/home/me/.zshrc' } }, edited)
+      assert.is_false(specs['xvzc/chezmoi.nvim'].opts.edit.watch)
     end)
 
     it("takes the dashboard's config entry over", function()

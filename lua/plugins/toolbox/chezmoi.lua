@@ -1,6 +1,7 @@
 local enabled = require('util.chezmoi').enabled()
 
---- Pick a chezmoi managed file and edit it through `chezmoi edit --watch`
+--- Pick a chezmoi managed file and edit its source. Writing it applies
+--- nothing: templates here `decrypt` secrets, so applying is asked for
 ---
 --- `chezmoi managed` walks the whole source tree, most of a second here, so
 --- its list streams into the picker rather than being waited for.
@@ -30,10 +31,7 @@ local function pick_chezmoi()
     end,
     confirm = function(picker, item)
       picker:close()
-      require('chezmoi.commands').edit({
-        targets = { item.text },
-        args = { '--watch' },
-      })
+      require('chezmoi.commands').edit({ targets = { item.text } })
     end,
   }
   Snacks.picker.pick(opts)
