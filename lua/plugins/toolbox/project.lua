@@ -56,6 +56,28 @@ return {
           target = '/test/%1.bats',
           context = 'test',
         },
+        -- A Neovim config or plugin with plenary specs mirroring `lua/`
+        {
+          pattern = '/lua/(.*)%.lua$',
+          target = '/tests/spec/%1_spec.lua',
+          context = 'test',
+        },
+        {
+          pattern = '/tests/spec/(.*)_spec%.lua$',
+          target = '/lua/%1.lua',
+          context = 'source',
+        },
+        -- Bash libraries with a bats file each, as the dotfiles have them
+        {
+          pattern = '/scripts/lib/(.*)%.sh$',
+          target = '/scripts/test/%1.bats',
+          context = 'test',
+        },
+        {
+          pattern = '/scripts/test/(.*)%.bats$',
+          target = '/scripts/lib/%1.sh',
+          context = 'source',
+        },
       },
     },
     keys = {

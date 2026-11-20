@@ -37,9 +37,43 @@ describe('plugins.toolbox.project', function()
     assert.are.equal('<leader>pa', other.keys[1][1])
     other.keys[1][2]()
     assert.is_true(opened)
-    -- A bats test sits next to the script it covers
-    local bats = other.opts.mappings[#other.opts.mappings]
-    assert.are.equal('/test/%1.bats', bats.target)
+  end)
+
+  it('pairs a source and its test both ways', function()
+    --- The files other.nvim offers for `path`, as it builds them: the part
+    --- a mapping's pattern matches, replaced by its target
+    ---@param path string
+    ---@return string[]
+    local function others(path)
+      local ret = {}
+      for _, mapping in ipairs(spec('rgroli/other.nvim').opts.mappings) do
+        if type(mapping) == 'table' and path:match(mapping.pattern) then
+          table.insert(ret, (path:gsub(mapping.pattern, mapping.target)))
+        end
+      end
+      return ret
+    end
+
+    local nvim = '/x/nvim'
+    assert.same(
+      { nvim .. '/tests/spec/tools/kube_spec.lua' },
+      others(nvim .. '/lua/tools/kube.lua')
+    )
+    assert.same(
+      { nvim .. '/lua/tools/kube.lua' },
+      others(nvim .. '/tests/spec/tools/kube_spec.lua')
+    )
+    local dots = '/x/Dotfiles'
+    assert.same(
+      { dots .. '/scripts/test/chezmoi_attrs.bats' },
+      others(dots .. '/scripts/lib/chezmoi_attrs.sh')
+    )
+    assert.same(
+      { dots .. '/scripts/lib/chezmoi_attrs.sh' },
+      others(dots .. '/scripts/test/chezmoi_attrs.bats')
+    )
+    -- A bats test next to the script it covers, elsewhere
+    assert.same({ '/x/p/test/run.bats' }, others('/x/p/src/run.sh'))
   end)
 
   it('reads devcontainer.json with the JSON parser', function()
