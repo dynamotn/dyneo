@@ -35,10 +35,31 @@ return {
     -- Open current word by other tools
     'ofirgall/open.nvim',
     opts = {
-      -- Issue keys open on the Jira of `$JIRA_URL` (up to `/browse/`), and
-      -- only there: `UTF-8` and `SHA-256` read as keys too, and are nobody
-      -- else's business
-      self_defined_openers = (vim.env.JIRA_URL or '') ~= '' and {
+      -- Its `github` opener asks api.github.com, without a timeout and from
+      -- the main loop, about any `a/b` under the cursor -- a path, or the
+      -- host and path of an internal URL -- before anything opens
+      disabled_openers = { 'github' },
+      self_defined_openers = vim.list_extend({
+        -- A quoted `'owner/repo'` lazy.nvim knows opens where it is cloned
+        -- from, answered from memory: a plugin spec's name, not a path
+        {
+          name = 'lazy',
+          open_fn = function(text)
+            local name = text:match([[^['"]([%w_%-%.]+/[%w_%-%.]+)['"]$]])
+            if not name or not package.loaded['lazy.core.config'] then
+              return nil
+            end
+            for _, plugin in pairs(require('lazy.core.config').plugins) do
+              if plugin[1] == name and plugin.url then
+                return { (plugin.url:gsub('%.git$', '')) }
+              end
+            end
+          end,
+        },
+      }, (vim.env.JIRA_URL or '') ~= '' and {
+        -- Issue keys open on the Jira of `$JIRA_URL` (up to `/browse/`), and
+        -- only there: `UTF-8` and `SHA-256` read as keys too, and are nobody
+        -- else's business
         {
           name = 'jira',
           open_fn = function(text)
@@ -50,7 +71,7 @@ return {
             return urls
           end,
         },
-      } or {},
+      } or {}),
     },
     keys = {
       -- The word under the cursor; open.nvim has nothing for a selection,

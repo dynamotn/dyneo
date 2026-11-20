@@ -16,21 +16,77 @@ describe('plugins.integration.browser: open.nvim', function()
     error('no open.nvim spec')
   end
 
+  --- The opener of `spec` named `name`
+  ---@param plugin table
+  ---@param name string
+  ---@return table?
+  local function opener(plugin, name)
+    for _, o in ipairs(plugin.opts.self_defined_openers) do
+      if o.name == name then return o end
+    end
+  end
+
   before_each(function() h.globals() end)
   after_each(function() restore() end)
 
   it(
     'opens no Jira without `$JIRA_URL`',
-    function() assert.same({}, spec(nil).opts.self_defined_openers) end
+    function() assert.is_nil(opener(spec(nil), 'jira')) end
   )
 
   it('opens issue keys on the Jira of `$JIRA_URL`', function()
-    local opener =
-      spec('https://jira.example.com/browse/').opts.self_defined_openers[1]
+    local jira = opener(spec('https://jira.example.com/browse/'), 'jira')
     assert.same(
       { 'https://jira.example.com/browse/OPS-12' },
-      opener.open_fn('see OPS-12 here')
+      jira.open_fn('see OPS-12 here')
     )
+  end)
+
+  it(
+    'asks no web service what an `a/b` word is',
+    function()
+      assert.is_true(
+        vim.list_contains(spec(nil).opts.disabled_openers, 'github')
+      )
+    end
+  )
+
+  describe('a quoted plugin name', function()
+    local lazy, restore_lazy
+
+    before_each(function()
+      lazy = opener(spec(nil), 'lazy')
+      restore_lazy = h.stub(package.loaded, 'lazy.core.config', {
+        plugins = {
+          ['open.nvim'] = {
+            'ofirgall/open.nvim',
+            url = 'https://github.com/ofirgall/open.nvim.git',
+          },
+          ['mine.nvim'] = {
+            'me/mine.nvim',
+            url = 'https://gitlab.com/me/mine.nvim.git',
+          },
+        },
+      })
+    end)
+    after_each(function() restore_lazy() end)
+
+    it('opens where lazy.nvim clones it from', function()
+      assert.same(
+        { 'https://github.com/ofirgall/open.nvim' },
+        lazy.open_fn("'ofirgall/open.nvim'")
+      )
+      assert.same(
+        { 'https://gitlab.com/me/mine.nvim' },
+        lazy.open_fn('"me/mine.nvim"')
+      )
+    end)
+
+    it('leaves a path, or a plugin it does not know, to the next', function()
+      assert.is_nil(lazy.open_fn('lua/util'))
+      assert.is_nil(lazy.open_fn("'lua/util.lua'"))
+      assert.is_nil(lazy.open_fn('ofirgall/open.nvim'))
+    end)
   end)
 
   it('maps `gx` in normal mode only', function()
